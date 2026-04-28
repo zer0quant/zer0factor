@@ -1,0 +1,13 @@
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.ruff_cache/
+config/settings.toml
+data/
+db/
+logs/
+*.egg-info/
+dist/
+.ipynb_checkpoints/
