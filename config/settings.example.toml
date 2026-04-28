@@ -1,0 +1,12 @@
+[zer0share]
+data_dir = "../zer0share/data"   # zer0share 的 Parquet 数据目录
+
+[paths]
+factor_dir = "data/factors"
+db_path    = "db/factor_meta.duckdb"
+log_path   = "logs/factor.log"
+
+[factor]
+universe   = "all"      # all / hs300 / zz500
+start_date = "20160101"
+end_date   = ""         # 空 = 最新交易日
