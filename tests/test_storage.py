@@ -1,6 +1,6 @@
 import pandas as pd
 
-from src.storage import FactorStorage
+from zer0factor.storage import FactorStorage
 
 
 def test_factor_storage_init(tmp_path):

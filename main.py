@@ -1,8 +1,8 @@
 import click
 from pathlib import Path
 
-from src.config import load_config
-from src.storage import FactorStorage
+from zer0factor.config import load_config
+from zer0factor.storage import FactorStorage
 
 
 @click.group()

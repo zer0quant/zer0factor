@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from src.config import Config, load_config
+from zer0factor.config import Config, load_config
 
 
 def test_load_config_returns_config(tmp_path):
