@@ -1,6 +1,8 @@
-import pytest
 from pathlib import Path
-from src.config import load_config, Config
+
+import pytest
+
+from src.config import Config, load_config
 
 
 def test_load_config_returns_config(tmp_path):

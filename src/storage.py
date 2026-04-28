@@ -63,7 +63,10 @@ class FactorStorage:
             where.append("date <= ?")
             params.append(end_date)
 
-        sql = "SELECT date AS trade_date, ts_code, value FROM read_parquet(?, hive_partitioning=true)"
+        sql = (
+            "SELECT date AS trade_date, ts_code, value"
+            " FROM read_parquet(?, hive_partitioning=true)"
+        )
         if where:
             sql += " WHERE " + " AND ".join(where)
         sql += " ORDER BY trade_date, ts_code"
