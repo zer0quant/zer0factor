@@ -1,0 +1,268 @@
+# Evolution Operator Prompts Configuration
+# All prompts for mutation and crossover operators
+# Language: English
+# ============================================================
+# MUTATION OPERATOR PROMPTS
+# Generate orthogonal strategies for exploration diversity
+# ============================================================
+
+mutation:
+  system: |
+    You are a quantitative finance strategy expert specializing in generating diversified factor mining strategies.
+
+    Your task is to generate a new, orthogonal strategy direction based on an existing parent strategy.
+
+    "Orthogonal" means the new strategy should:
+    1. Explore a completely different market hypothesis from the parent
+    2. Use different data dimensions or feature types
+    3. Be based on different investment logic or market perspectives
+    4. Avoid generating factors highly correlated with the parent strategy
+
+    You need to ensure the generated strategy has sufficient differentiation to expand the diversity of the exploration space.
+
+  user: |
+    Based on the following parent strategy, generate an orthogonal new strategy direction.
+
+    ## Parent Strategy Information
+
+    ### Hypothesis
+    {parent_hypothesis}
+
+    ### Factor Expressions
+    {parent_factors}
+
+    ### Backtest Metrics
+    {parent_metrics}
+
+    ### Evaluation Feedback
+    {parent_feedback}
+
+    ---
+
+    ## Requirements
+
+    Please generate a new strategy direction that is **orthogonal** to the parent strategy, including:
+
+    1. **New Hypothesis**: Propose a market hypothesis completely different from the parent
+    2. **Exploration Direction**: Describe the data dimensions and feature types the new strategy will explore
+    3. **Orthogonality Reasoning**: Explain why this new strategy is orthogonal to the parent
+    4. **Expected Characteristics**: Expected characteristics of factors from the new strategy
+
+    Please ensure:
+    - The new strategy has minimal correlation with the parent
+    - Explore market patterns not covered by the parent
+    - Maintain feasibility and reasonableness
+
+    Output in JSON format:
+    ```json
+    {{
+        "new_hypothesis": "Description of the new market hypothesis",
+        "exploration_direction": "Exploration direction description",
+        "orthogonality_reason": "Reasoning for orthogonality with parent",
+        "expected_characteristics": "Expected factor characteristics"
+    }}
+    ```
+
+  simple_user: |
+    Based on the following information, generate an orthogonal factor mining hypothesis:
+
+    Parent Hypothesis: {parent_hypothesis}
+
+    Parent Factors: {parent_factors}
+
+    Please propose a new hypothesis that is completely different from the above direction to explore new factor space. Output the new hypothesis text directly.
+
+  suffix_template: |
+    ---
+
+    ## Mutation Round Guidance
+
+    This is a mutation exploration round that requires generating an orthogonal new strategy based on the parent strategy.
+
+    ### Parent Strategy Summary
+    {parent_summary}
+
+    ### Mutation Direction Suggestions
+    - **New Hypothesis Direction**: {new_hypothesis}
+    - **Exploration Dimension**: {exploration_direction}
+    - **Orthogonality Reasoning**: {orthogonality_reason}
+
+    ### Important Notes
+    1. Your new hypothesis must be orthogonal to the parent strategy to avoid repeated exploration
+    2. Prioritize exploring data dimensions and market patterns not covered by the parent
+    3. Generated factors should have low correlation with parent factors
+
+    Please propose your new hypothesis based on the above mutation guidance.
+
+  # Fallback hypotheses when LLM fails
+  fallback_templates:
+    - "Explore mean reversion characteristics opposite to price momentum"
+    - "Study nonlinear relationships between volume and price"
+    - "Analyze trend transition signals across cycles"
+    - "Mine liquidity features in market microstructure"
+    - "Build factors based on volatility regime switching"
+    - "Explore the relationship between sector rotation and individual stock alpha"
+
+
+# ============================================================
+# CROSSOVER OPERATOR PROMPTS
+# Combine multiple parent strategies to leverage their strengths
+# ============================================================
+
+crossover:
+  system: |
+    You are a quantitative finance strategy fusion expert, specializing in combining the advantages of multiple strategies into a stronger hybrid strategy.
+
+    Your task is to analyze multiple parent strategies, identify their respective strengths and weaknesses, and generate a hybrid strategy that takes the best from each.
+
+    When fusing strategies, consider:
+    1. The core hypotheses and market views of each parent strategy
+    2. Factor types and features that performed well
+    3. Complementarity and potential synergies between strategies
+    4. Avoid inheriting common weaknesses from parent strategies
+
+    You need to generate a hybrid strategy that is both innovative and feasible.
+
+  user: |
+    Based on the following multiple parent strategies, generate a fused hybrid strategy.
+
+    ## Parent Strategy Information
+
+    {parent_summaries}
+
+    ---
+
+    ## Requirements
+
+    Please analyze the above parent strategies and generate a hybrid strategy that combines their strengths:
+
+    1. **Hybrid Hypothesis**: A new market hypothesis that fuses the advantages of all parents
+    2. **Fusion Logic**: Explain how to combine the strengths of each parent
+    3. **Innovation Points**: New characteristics brought by the hybrid strategy
+    4. **Expected Benefits**: Why the hybrid strategy may outperform individual parents
+
+    Please ensure:
+    - The hybrid strategy inherits the advantages of all parents
+    - Avoid common weaknesses of all parents
+    - Potential for synergistic effects
+
+    Output in JSON format:
+    ```json
+    {{
+        "hybrid_hypothesis": "Description of the fused market hypothesis",
+        "fusion_logic": "Fusion logic explanation",
+        "innovation_points": "Innovation points description",
+        "expected_benefits": "Expected benefits explanation"
+    }}
+    ```
+
+  simple_user: |
+    Please combine the advantages of the following strategies to generate a hybrid hypothesis:
+
+    {parent_summaries}
+
+    Output the fused new hypothesis text directly.
+
+  # Template for formatting parent trajectory summary
+  parent_template: |
+    ### Parent {idx}: {phase_name}
+    **Direction ID**: {direction_id}
+    **Hypothesis**: {hypothesis}
+    **Factors**:
+    {factors}
+    **Metrics**:
+    {metrics}
+    **Feedback**:
+    {feedback}
+    ---
+
+  # Prompt suffix template for hypothesis generator
+  suffix_template: |
+    ---
+
+    ## Crossover Round Guidance
+
+    This is a crossover fusion exploration round that requires generating a hybrid strategy by combining multiple parent strategies.
+
+    ### Parent Strategy Summaries
+    {parent_summaries}
+
+    ### Fusion Direction Suggestions
+    - **Hybrid Hypothesis Direction**: {hybrid_hypothesis}
+    - **Fusion Logic**: {fusion_logic}
+    - **Innovation Points**: {innovation_points}
+
+    ### Important Notes
+    1. Your new hypothesis should fuse the advantages of all parent strategies
+    2. Avoid inheriting common weaknesses of the parents
+    3. Look for synergistic effects between parent strategies
+    4. Generated factors should capture the comprehensive characteristics of the combined strategies
+
+    Please propose your fusion hypothesis based on the above crossover guidance.
+
+  # Phase name translations
+  phase_names:
+    original: "Original Round"
+    mutation: "Mutation Round"
+    crossover: "Crossover Round"
+
+
+# ============================================================
+# ORTHOGONALITY CHECK PROMPTS
+# Verify if generated strategies are sufficiently orthogonal
+# ============================================================
+
+orthogonality_check:
+  system: |
+    You are a quantitative strategy analyst responsible for evaluating the orthogonality (independence) between two strategies.
+
+  user: |
+    Please evaluate the orthogonality of the following two strategies:
+
+    ## Strategy A
+    {strategy_a}
+
+    ## Strategy B
+    {strategy_b}
+
+    Please evaluate their orthogonality from the following dimensions (1-10 score, 10 being completely orthogonal):
+    1. Data Dimension Orthogonality: Whether they use different data features
+    2. Logic Orthogonality: Whether they are based on different investment logic
+    3. Time Scale Orthogonality: Whether they focus on different time horizons
+    4. Market State Orthogonality: Whether they target different market conditions
+
+    Output in JSON format:
+    ```json
+    {{
+        "data_orthogonality": 8,
+        "logic_orthogonality": 7,
+        "time_orthogonality": 6,
+        "market_orthogonality": 9,
+        "overall_score": 7.5,
+        "analysis": "Analysis explanation"
+    }}
+    ```
+
+
+# ============================================================
+# TRAJECTORY SUMMARY PROMPTS
+# Format trajectory information for prompts
+# ============================================================
+
+trajectory_summary:
+  template: |
+    **Trajectory ID**: {trajectory_id}
+    **Phase**: {phase}
+    **Direction**: {direction_id}
+
+    **Hypothesis**:
+    {hypothesis}
+
+    **Factors** (top {max_factors}):
+    {factors}
+
+    **Backtest Metrics**:
+    {metrics}
+
+    **Feedback Summary**:
+    {feedback}
