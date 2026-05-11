@@ -12,7 +12,7 @@ AI-assisted factor research workspace for local A-share data.
 report / idea -> FactorSpec -> Python compute() -> Parquet factor values
 ```
 
-It is built to work with [zer0share](https://github.com/zer0coldai/zer0share):
+It is built to work with [zer0share](https://github.com/zer0quant/zer0share):
 
 - `zer0share`: local A-share data collection and query layer
 - `zer0factor`: factor specification, generation, computation, and storage layer

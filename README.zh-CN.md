@@ -12,7 +12,7 @@
 研报 / 想法 -> FactorSpec -> Python compute() -> Parquet 因子值
 ```
 
-它和 [zer0share](https://github.com/zer0coldai/zer0share) 是配套关系：
+它和 [zer0share](https://github.com/zer0quant/zer0share) 是配套关系：
 
 - `zer0share`：负责本地 A 股数据采集、同步和查询
 - `zer0factor`：负责因子规范、因子生成、因子计算和因子存储
