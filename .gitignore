@@ -8,6 +8,9 @@ config/settings.toml
 data/
 db/
 logs/
+reports/
+workspaces/*/inputs/reports/
+workspaces/*/report.txt
 *.egg-info/
 dist/
 .ipynb_checkpoints/
