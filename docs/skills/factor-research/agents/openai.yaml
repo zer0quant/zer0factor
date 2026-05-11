@@ -1,0 +1,3 @@
+display_name: Factor Research
+short_description: Build zer0factor research factors
+default_prompt: Extract factor candidates from this research input, standardize them as zer0factor FactorSpec records, and generate reviewable factor code.
