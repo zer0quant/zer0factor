@@ -4,46 +4,48 @@
 ![Status](https://img.shields.io/badge/status-early--stage-orange)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
-AI-assisted factor research workspace for local A-share data.
+简体中文 | [English](README.en.md)
 
-`zer0factor` turns research ideas and quant reports into reviewable, executable factor code:
+面向 A 股本地数据的 AI 因子研究工作台。
+
+`zer0factor` 负责把研报、投资逻辑、因子想法，整理成可以审核、可以运行、可以落盘的标准因子代码：
 
 ```text
-report / idea -> FactorSpec -> Python compute() -> Parquet factor values
+研报 / 想法 -> FactorSpec -> Python compute() -> Parquet 因子值
 ```
 
-It is built to work with [zer0share](https://github.com/zer0quant/zer0share):
+它和 [zer0share](https://github.com/zer0quant/zer0share) 是配套关系：
 
-- `zer0share`: local A-share data collection and query layer
-- `zer0factor`: factor specification, generation, computation, and storage layer
+- `zer0share`：负责本地 A 股数据采集、同步和查询
+- `zer0factor`：负责因子规范、因子生成、因子计算和因子存储
 
-The project is still early. Treat it as a research workbench, not a production factor platform.
+项目还在早期阶段，更适合作为研究工作台使用，不是成熟的生产级因子平台。
 
-## Features
+## 核心能力
 
-- Standard factor contract: `FactorSpec + FactorFrame + compute()`
-- `zer0share` provider that maps local market data into wide factor panels
-- Factor output schema: `trade_date, ts_code, value`
-- Parquet factor storage with a DuckDB registry
-- `factor-research` Codex skill for report-to-factor workflows
-- Example momentum-report run with generated factor modules
+- 标准因子接口：`FactorSpec + FactorFrame + compute()`
+- `zer0share` 数据适配：把本地行情转成标准宽表面板
+- 标准输出：`trade_date, ts_code, value`
+- 因子存储：Parquet 分区文件 + DuckDB 注册表
+- `factor-research` Codex skill：从研报提取、审核、生成和归档因子
+- 已包含一轮动量研报示例和生成出的因子代码
 
-## Layout
+## 目录结构
 
 ```text
 zer0factor/
 ├── zer0factor/
-│   ├── config.py              # config loader
-│   ├── storage.py             # Parquet + DuckDB factor storage
-│   └── factor/__init__.py     # factor contract and zer0share provider
+│   ├── config.py              # 配置读取
+│   ├── storage.py             # Parquet + DuckDB 因子存储
+│   └── factor/__init__.py     # 因子接口和 zer0share provider
 ├── docs/skills/factor-research/
-├── workspaces/                # research run artifacts
+├── workspaces/                # 每轮研究流程的产物
 ├── notebooks/
 ├── tests/
 └── config/settings.example.toml
 ```
 
-## Install
+## 安装
 
 ```bash
 git clone <your-repo-url>
@@ -51,7 +53,7 @@ cd zer0factor
 uv sync
 ```
 
-By default, `zer0factor` expects `zer0share` next to this repo:
+默认要求 `zer0share` 和本项目在同级目录：
 
 ```text
 work/
@@ -59,16 +61,16 @@ work/
 └── zer0share/
 ```
 
-This is configured in `pyproject.toml`:
+对应配置在 `pyproject.toml`：
 
 ```toml
 [tool.uv.sources]
 zer0share = { path = "../zer0share" }
 ```
 
-Change the path if your local `zer0share` checkout lives elsewhere.
+如果你的 `zer0share` 在别的位置，先改这个路径。
 
-## Configure
+## 配置
 
 ```bash
 cp config/settings.example.toml config/settings.toml
@@ -89,21 +91,21 @@ start_date = "20160101"
 end_date   = ""
 ```
 
-## Quick Start
+## 快速开始
 
-Run the focused test suite:
+跑核心测试：
 
 ```bash
 uv run pytest tests/test_config.py tests/test_storage.py tests/test_factor_standard.py tests/test_factor_research_skill_scripts.py
 ```
 
-Check factor storage status:
+查看因子库状态：
 
 ```bash
 uv run python main.py --config config/settings.toml status
 ```
 
-Lint the core runtime and skill files:
+检查核心代码和 skill：
 
 ```bash
 uv run ruff check zer0factor/factor/__init__.py docs/skills/factor-research tests/test_factor_standard.py tests/test_factor_research_skill_scripts.py
@@ -111,13 +113,13 @@ uv run ruff check zer0factor/factor/__init__.py docs/skills/factor-research test
 
 ## CLI
 
-| Command | Description |
+| 命令 | 说明 |
 |---|---|
-| `uv run python main.py status` | List computed factors in the configured storage |
+| `uv run python main.py status` | 查看当前存储里有哪些已计算因子 |
 
-More factor execution commands will be added as the runtime matures.
+后续会继续补充因子执行相关命令。
 
-## Factor Contract
+## 标准因子长什么样
 
 ```python
 import pandas as pd
@@ -140,26 +142,25 @@ class Ret20_0(Factor):
         return to_factor_output(value, self.spec.name)
 ```
 
-Factor code should only read data from `FactorFrame`. It should not read files, query DuckDB, or
-call `zer0share` directly.
+因子代码只应该访问 `FactorFrame`，不要自己读文件、查 DuckDB、或者直接调用 `zer0share`。
 
-## Standard Fields
+## 标准字段
 
-| zer0factor field | zer0share source | Notes |
+| zer0factor 字段 | zer0share 来源 | 说明 |
 |---|---|---|
-| `open` | `open` | adjusted by provider |
-| `high` | `high` | adjusted by provider |
-| `low` | `low` | adjusted by provider |
-| `close` | `close` | adjusted by provider |
-| `volume` | `vol` | renamed for factor code |
-| `amount` | `amount` | turnover amount |
-| `return_` | `pct_chg` or computed return | reserved word-safe name |
+| `open` | `open` | provider 负责复权 |
+| `high` | `high` | provider 负责复权 |
+| `low` | `low` | provider 负责复权 |
+| `close` | `close` | provider 负责复权 |
+| `volume` | `vol` | 统一改名，方便因子代码阅读 |
+| `amount` | `amount` | 成交额 |
+| `return_` | `pct_chg` 或计算收益率 | 避开 Python 关键字 `return` |
 
-Default adjustment is `hfq`.
+默认使用后复权：`hfq`。
 
-## Storage
+## 因子存储
 
-Factor values are written as date-partitioned Parquet:
+因子值按日期分区写入 Parquet：
 
 ```text
 data/factors/
@@ -171,7 +172,7 @@ db/
 └── factor_meta.duckdb
 ```
 
-Each factor dataframe must contain:
+因子结果必须是三列：
 
 ```text
 trade_date, ts_code, value
@@ -179,26 +180,26 @@ trade_date, ts_code, value
 
 ## factor-research Skill
 
-The Codex skill lives in:
+Codex skill 位置：
 
 ```text
 docs/skills/factor-research/
 ```
 
-Workflow:
+流程：
 
 ```text
-PDF report / research idea
-  -> candidate factors
-  -> human review
+PDF 研报 / 研究想法
+  -> 候选因子
+  -> 人工审核
   -> FactorSpec
-  -> quality gates
-  -> Python factor code
-  -> execution check
-  -> archive
+  -> 质量门检查
+  -> Python 因子代码
+  -> 执行检查
+  -> 归档
 ```
 
-Initialize a research workspace:
+初始化工作区：
 
 ```bash
 python docs/skills/factor-research/scripts/init_factor_research_workspace.py \
@@ -207,16 +208,16 @@ python docs/skills/factor-research/scripts/init_factor_research_workspace.py \
   --selection-mode top_representative
 ```
 
-Validate factor metadata:
+校验因子元数据：
 
 ```bash
 python docs/skills/factor-research/scripts/validate_factors_json.py \
   workspaces/my-factor-run/factors.json
 ```
 
-## Example Run
+## 示例流程
 
-`workspaces/factor-research-guosen-momentum/` contains one completed momentum-report run:
+`workspaces/factor-research-guosen-momentum/` 里有一轮完整的动量研报示例：
 
 - `factors.json`
 - `approved.json`
@@ -225,7 +226,7 @@ python docs/skills/factor-research/scripts/validate_factors_json.py \
 - `results/factor_library.json`
 - `feedback/round_feedback.md`
 
-Generated factors:
+生成出的因子：
 
 - `ret20_0`
 - `ret240_20_remove_up_limit`
@@ -233,26 +234,30 @@ Generated factors:
 - `smooth240_1`
 - `overnight_mom20`
 
-## Limitations
+## 当前限制
 
-- Built around local A-share data and `zer0share`.
-- `FactorFrame` does not yet expose ST flags, suspension flags, listed-days masks, or exact limit-up metadata.
-- Announcement-date factors and benchmark-relative factors need additional provider contracts.
-- APIs are experimental.
-- Third-party PDFs and extracted full report text are ignored and should not be committed.
+- 当前主要围绕本地 A 股数据和 `zer0share`。
+- `FactorFrame` 还没有暴露 ST、停牌、上市天数、精确涨停等字段。
+- 公告日因子、指数超额因子、风格回归因子还需要扩展 provider。
+- API 还处在实验阶段。
 
-## Contributing
 
-Contributions are welcome, especially around provider contracts, factor execution CLI, tests, and
-documentation.
+## 贡献
 
-See [CONTRIBUTING.md](CONTRIBUTING.md).
+欢迎提交 issue 和 PR。当前比较适合贡献的方向：
 
-## Disclaimer
+- 扩展 provider 字段契约
+- 补充因子执行 CLI
+- 增加 `FactorSpec`、`FactorFrame`、`FactorStorage` 的测试
+- 增加不包含第三方版权材料的示例
+- 改进文档
 
-This project is for research and engineering experiments only. It does not provide investment
-advice. Any factor, example, or generated result should be independently verified before use.
+详见 [CONTRIBUTING.md](CONTRIBUTING.md)。
+
+## 免责声明
+
+本项目仅用于研究和工程实验，不构成任何投资建议。仓库中的因子、示例和生成结果都需要自行验证后再使用。
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+MIT。详见 [LICENSE](LICENSE)。

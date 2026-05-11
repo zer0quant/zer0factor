@@ -4,6 +4,8 @@
 ![Status](https://img.shields.io/badge/status-early--stage-orange)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
+简体中文 | [English](README.en.md)
+
 面向 A 股本地数据的 AI 因子研究工作台。
 
 `zer0factor` 负责把研报、投资逻辑、因子想法，整理成可以审核、可以运行、可以落盘的标准因子代码：
