@@ -1,0 +1,39 @@
+{
+  "step": "archived_completed",
+  "config": {
+    "target_factor_count": 5,
+    "selection_mode": "top_representative",
+    "max_extract_rounds": 3,
+    "max_code_attempts": 3
+  },
+  "source_reports": [
+    "国信证券_金融工程专题研究：动量类因子全解析_【发现报告 fxbaogao.com】.pdf"
+  ],
+  "factors": {
+    "Ret20_0": {
+      "status": "code_verified",
+      "attempts": 1,
+      "module": "code/ret20_0.py"
+    },
+    "Ret240_20_RemoveUpLimit": {
+      "status": "code_verified",
+      "attempts": 1,
+      "module": "code/ret240_20_remove_up_limit.py"
+    },
+    "RankMom120_20": {
+      "status": "code_verified",
+      "attempts": 1,
+      "module": "code/rank_mom120_20.py"
+    },
+    "Smooth240_1": {
+      "status": "code_verified",
+      "attempts": 1,
+      "module": "code/smooth240_1.py"
+    },
+    "OverNightMom20": {
+      "status": "code_verified",
+      "attempts": 1,
+      "module": "code/overnight_mom20.py"
+    }
+  }
+}
