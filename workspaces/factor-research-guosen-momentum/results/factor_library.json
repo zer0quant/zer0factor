@@ -1,0 +1,197 @@
+[
+  {
+    "factor_id": "guosen_momentum_ret20_0",
+    "factor_name": "ret20_0",
+    "display_name": "Ret20_0",
+    "module": "code/ret20_0.py",
+    "factor_description": "Past 20-trading-day cumulative close-to-close return without skipping recent days.",
+    "factor_formulation": "Ret20_0 = Close_t / Close_{t-20} - 1",
+    "logic_expression": "close / delay(close, 20) - 1",
+    "spec": {
+      "name": "ret20_0",
+      "inputs": ["close"],
+      "min_window": 20,
+      "recommended_window": 60,
+      "frequency": "1d",
+      "adjust": "hfq",
+      "output_schema": ["trade_date", "ts_code", "value"]
+    },
+    "metadata": {
+      "source_pdf": "国信证券_金融工程专题研究：动量类因子全解析_【发现报告 fxbaogao.com】.pdf",
+      "source_pages": [5, 31],
+      "investment_logic": "As A-share institutional participation rises, recent price strength can persist instead of reversing in some stock universes and market states.",
+      "hypothesis": "Stocks with stronger cumulative returns over the most recent 20 trading days will have higher short-term future returns.",
+      "expected_relation": "higher_factor_predicts_higher_return",
+      "horizon": "short"
+    },
+    "quality_gate": {
+      "relevant": true,
+      "viable": true,
+      "consistency_ok": true,
+      "data_contract_ok": true,
+      "window_contract_ok": true,
+      "complexity_ok": true,
+      "code_verified": true
+    },
+    "feedback": {
+      "implementation": "Implemented directly with adjusted close and to_factor_output.",
+      "caveat": "The report treats this as a baseline; it may be less robust than path-aware momentum variants."
+    }
+  },
+  {
+    "factor_id": "guosen_momentum_ret240_20_remove_up_limit",
+    "factor_name": "ret240_20_remove_up_limit",
+    "display_name": "Ret240_20_RemoveUpLimit",
+    "module": "code/ret240_20_remove_up_limit.py",
+    "factor_description": "One-year momentum skipping the most recent 20 trading days, with daily limit-up observations excluded from the compounded return.",
+    "factor_formulation": "Ret240_20_RemoveUpLimit = cumulative return over [T0-260, T0-20] after excluding limit-up daily returns",
+    "logic_expression": "compound(return_ where return_ < limit_up_threshold over 240-day window ending 20 days ago)",
+    "spec": {
+      "name": "ret240_20_remove_up_limit",
+      "inputs": ["close"],
+      "min_window": 260,
+      "recommended_window": 300,
+      "frequency": "1d",
+      "adjust": "hfq",
+      "output_schema": ["trade_date", "ts_code", "value"]
+    },
+    "metadata": {
+      "source_pdf": "国信证券_金融工程专题研究：动量类因子全解析_【发现报告 fxbaogao.com】.pdf",
+      "source_pages": [12, 13, 38],
+      "investment_logic": "A-share limit-up episodes can reflect temporary overreaction; excluding limit-up days leaves a cleaner persistent momentum signal.",
+      "hypothesis": "Stocks with higher long-horizon cumulative returns after removing limit-up daily returns will have higher future returns.",
+      "expected_relation": "higher_factor_predicts_higher_return",
+      "horizon": "medium"
+    },
+    "quality_gate": {
+      "relevant": true,
+      "viable": true,
+      "consistency_ok": true,
+      "data_contract_ok": true,
+      "window_contract_ok": true,
+      "complexity_ok": true,
+      "code_verified": true
+    },
+    "feedback": {
+      "implementation": "Implemented as compounded shifted log returns over 240 days, skipping 20 days.",
+      "caveat": "Limit-up exclusion is approximated with a 9.5% daily close-return threshold because exact limit-up flags are not exposed in the current standard contract."
+    }
+  },
+  {
+    "factor_id": "guosen_momentum_rank_mom120_20",
+    "factor_name": "rank_mom120_20",
+    "display_name": "RankMom120_20",
+    "module": "code/rank_mom120_20.py",
+    "factor_description": "Path-aware momentum using the average cross-sectional rank of daily returns over a 120-day window, skipping the most recent 20 days.",
+    "factor_formulation": "RankMom120_20 = mean(WrightRank(rank_cs(R_i,d))) over [T0-140, T0-20]",
+    "logic_expression": "mean(wright_rank(rank_cs(return_)), 120, skip=20)",
+    "spec": {
+      "name": "rank_mom120_20",
+      "inputs": ["close"],
+      "min_window": 140,
+      "recommended_window": 180,
+      "frequency": "1d",
+      "adjust": "hfq",
+      "output_schema": ["trade_date", "ts_code", "value"]
+    },
+    "metadata": {
+      "source_pdf": "国信证券_金融工程专题研究：动量类因子全解析_【发现报告 fxbaogao.com】.pdf",
+      "source_pages": [15, 16, 38],
+      "investment_logic": "Persistent daily relative strength is more informative than a return caused by a few extreme days.",
+      "hypothesis": "Stocks with consistently higher daily return ranks over the formation window will have higher future returns.",
+      "expected_relation": "higher_factor_predicts_higher_return",
+      "horizon": "medium"
+    },
+    "quality_gate": {
+      "relevant": true,
+      "viable": true,
+      "consistency_ok": true,
+      "data_contract_ok": true,
+      "window_contract_ok": true,
+      "complexity_ok": true,
+      "code_verified": true
+    },
+    "feedback": {
+      "implementation": "Implemented with cross-sectional average ranks and Wright-style standardization.",
+      "caveat": "The report excludes new, ST, and suspended stocks during ranking; those filters are not yet represented in FactorFrame."
+    }
+  },
+  {
+    "factor_id": "guosen_momentum_smooth240_1",
+    "factor_name": "smooth240_1",
+    "display_name": "Smooth240_1",
+    "module": "code/smooth240_1.py",
+    "factor_description": "Path smoothness momentum measured by displacement-to-path ratio over 240 trading days, skipping the most recent day.",
+    "factor_formulation": "Smooth240_1 = cumulative return over [T0-241, T0-1] / sum(abs(daily returns)) over [T0-241, T0-1]",
+    "logic_expression": "(close.shift(1) / close.shift(241) - 1) / rolling_sum(abs(return_.shift(1)), 240)",
+    "spec": {
+      "name": "smooth240_1",
+      "inputs": ["close"],
+      "min_window": 241,
+      "recommended_window": 280,
+      "frequency": "1d",
+      "adjust": "hfq",
+      "output_schema": ["trade_date", "ts_code", "value"]
+    },
+    "metadata": {
+      "source_pdf": "国信证券_金融工程专题研究：动量类因子全解析_【发现报告 fxbaogao.com】.pdf",
+      "source_pages": [16, 17, 38],
+      "investment_logic": "For the same cumulative return, a smoother path contains less noise and better describes persistent price movement.",
+      "hypothesis": "Stocks whose price movement is smoother over the formation window will show different future return behavior than stocks whose movement is jumpy.",
+      "expected_relation": "lower_factor_predicts_higher_return",
+      "horizon": "medium"
+    },
+    "quality_gate": {
+      "relevant": true,
+      "viable": true,
+      "consistency_ok": true,
+      "data_contract_ok": true,
+      "window_contract_ok": true,
+      "complexity_ok": true,
+      "code_verified": true
+    },
+    "feedback": {
+      "implementation": "Implemented as displacement divided by the rolling absolute-return path length.",
+      "caveat": "The report observes reversal-like behavior for this raw smoothness measure, so downstream evaluation should respect the lower-is-better direction."
+    }
+  },
+  {
+    "factor_id": "guosen_momentum_overnight_mom20",
+    "factor_name": "overnight_mom20",
+    "display_name": "OverNightMom20",
+    "module": "code/overnight_mom20.py",
+    "factor_description": "Past 20-trading-day cumulative overnight log return.",
+    "factor_formulation": "OverNightMom20 = sum_{d=t-20}^{t} ln(Open_d / Close_{d-1})",
+    "logic_expression": "rolling_sum(log(open / delay(close, 1)), 20)",
+    "spec": {
+      "name": "overnight_mom20",
+      "inputs": ["open", "close"],
+      "min_window": 20,
+      "recommended_window": 60,
+      "frequency": "1d",
+      "adjust": "hfq",
+      "output_schema": ["trade_date", "ts_code", "value"]
+    },
+    "metadata": {
+      "source_pdf": "国信证券_金融工程专题研究：动量类因子全解析_【发现报告 fxbaogao.com】.pdf",
+      "source_pages": [21, 22, 38],
+      "investment_logic": "Overnight price moves can capture information incorporated outside continuous trading hours and may persist over short horizons.",
+      "hypothesis": "Stocks with stronger cumulative overnight returns over the past 20 trading days will have higher short-term future returns.",
+      "expected_relation": "higher_factor_predicts_higher_return",
+      "horizon": "short"
+    },
+    "quality_gate": {
+      "relevant": true,
+      "viable": true,
+      "consistency_ok": true,
+      "data_contract_ok": true,
+      "window_contract_ok": true,
+      "complexity_ok": true,
+      "code_verified": true
+    },
+    "feedback": {
+      "implementation": "Implemented as 20-day rolling sum of log(open / previous close).",
+      "caveat": "Uses adjusted open and close; verify provider adjustment consistency before production backtests."
+    }
+  }
+]

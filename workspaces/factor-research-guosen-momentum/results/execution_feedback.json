@@ -1,0 +1,36 @@
+{
+  "final_decision": true,
+  "checks": {
+    "ruff": true,
+    "dynamic_import": true,
+    "small_fixture_execution": true,
+    "output_schema": ["trade_date", "ts_code", "value"]
+  },
+  "factors": {
+    "ret20_0": {
+      "module": "code/ret20_0.py",
+      "fixture_rows": 1200
+    },
+    "ret240_20_remove_up_limit": {
+      "module": "code/ret240_20_remove_up_limit.py",
+      "fixture_rows": 244
+    },
+    "rank_mom120_20": {
+      "module": "code/rank_mom120_20.py",
+      "fixture_rows": 720
+    },
+    "smooth240_1": {
+      "module": "code/smooth240_1.py",
+      "fixture_rows": 316
+    },
+    "overnight_mom20": {
+      "module": "code/overnight_mom20.py",
+      "fixture_rows": 1200
+    }
+  },
+  "notes": [
+    "All factor modules use FactorSpec + FactorFrame + compute().",
+    "All factor modules return standard long output through to_factor_output().",
+    "Ret240_20_RemoveUpLimit approximates limit-up exclusion with a 9.5% daily close-return threshold because exact limit-up fields are not in the current standard contract."
+  ]
+}
