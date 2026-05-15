@@ -28,6 +28,9 @@ dev = [
 [tool.uv.sources]
 zer0share = { path = "../zer0share" }
 
+[tool.uv]
+index-url = "https://pypi.tuna.tsinghua.edu.cn/simple"
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
