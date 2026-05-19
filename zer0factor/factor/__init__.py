@@ -28,7 +28,6 @@ class FactorSpec:
     name: str
     inputs: Iterable[str]
     min_window: int
-    recommended_window: int | None = None
     frequency: str = "1d"
     adjust: str | None = "hfq"
     output_schema: tuple[str, str, str] = field(default=OUTPUT_SCHEMA, init=False)
@@ -47,17 +46,10 @@ class FactorSpec:
         if self.min_window < 1:
             raise ValueError("min_window must be >= 1")
 
-        recommended_window = self.recommended_window
-        if recommended_window is None:
-            recommended_window = self.min_window
-        if recommended_window < self.min_window:
-            raise ValueError("recommended_window must be >= min_window")
-
         if self.adjust not in {"hfq", "qfq", "none", None}:
             raise ValueError("adjust must be one of: hfq, qfq, none")
 
         object.__setattr__(self, "inputs", inputs)
-        object.__setattr__(self, "recommended_window", recommended_window)
 
 
 class FactorFrame:

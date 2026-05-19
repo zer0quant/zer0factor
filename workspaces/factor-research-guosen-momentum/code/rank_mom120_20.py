@@ -11,7 +11,6 @@ class RankMom120_20(Factor):
         name="rank_mom120_20",
         inputs=["close"],
         min_window=140,
-        recommended_window=180,
         frequency="1d",
         adjust="hfq",
     )

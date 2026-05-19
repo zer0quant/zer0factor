@@ -10,7 +10,6 @@ class Ret20_0(Factor):
         name="ret20_0",
         inputs=["close"],
         min_window=20,
-        recommended_window=60,
         frequency="1d",
         adjust="hfq",
     )

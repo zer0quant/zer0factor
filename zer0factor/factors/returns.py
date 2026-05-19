@@ -10,7 +10,6 @@ class DailyReturn(Factor):
         name="daily_return",
         inputs=["close"],
         min_window=1,
-        recommended_window=20,
         frequency="1d",
         adjust="hfq",
     )
@@ -25,7 +24,6 @@ class OpenReturn(Factor):
         name="open_return",
         inputs=["open"],
         min_window=1,
-        recommended_window=20,
         frequency="1d",
         adjust="hfq",
     )
@@ -40,7 +38,6 @@ class IntradayReturn(Factor):
         name="intraday_return",
         inputs=["open", "close"],
         min_window=1,
-        recommended_window=20,
         frequency="1d",
         adjust="hfq",
     )
@@ -55,7 +52,6 @@ class OvernightReturn(Factor):
         name="overnight_return",
         inputs=["open", "close"],
         min_window=1,
-        recommended_window=20,
         frequency="1d",
         adjust="hfq",
     )

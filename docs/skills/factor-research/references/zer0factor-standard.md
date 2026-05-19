@@ -25,7 +25,6 @@ FactorSpec(
     name="volume_adjusted_momentum_20d",
     inputs=["close", "volume"],
     min_window=20,
-    recommended_window=60,
     frequency="1d",
     adjust="hfq",
 )
@@ -37,7 +36,6 @@ Rules:
 - `inputs` must contain only the minimal fields the factor reads.
 - `min_window` must cover the longest rolling/shift/pct_change/correlation
   dependency.
-- `recommended_window` must be greater than or equal to `min_window`.
 - `output_schema` is always `trade_date, ts_code, value`.
 
 ## Data Separation

@@ -11,7 +11,6 @@ class OverNightMom20(Factor):
         name="overnight_mom20",
         inputs=["open", "close"],
         min_window=20,
-        recommended_window=60,
         frequency="1d",
         adjust="hfq",
     )

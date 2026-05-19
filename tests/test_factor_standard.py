@@ -17,7 +17,6 @@ class VolumeAdjustedMomentum20D(Factor):
         name="volume_adjusted_momentum_20d",
         inputs=["close", "volume"],
         min_window=20,
-        recommended_window=60,
         adjust="hfq",
     )
 
@@ -44,17 +43,12 @@ def test_factor_spec_requires_standard_inputs_and_windows():
         name="momentum_20d",
         inputs=["close"],
         min_window=20,
-        recommended_window=60,
         adjust="hfq",
     )
     assert spec.output_schema == ("trade_date", "ts_code", "value")
 
     with pytest.raises(ValueError, match="unknown input"):
         FactorSpec(name="bad", inputs=["st_status"], min_window=1)
-
-    with pytest.raises(ValueError, match="recommended_window"):
-        FactorSpec(name="bad_window", inputs=["close"], min_window=20, recommended_window=10)
-
 
 def test_factor_frame_exposes_only_declared_standard_fields():
     close = _wide_frame()

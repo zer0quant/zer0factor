@@ -41,9 +41,8 @@ The factor must be implemented against FactorFrame:
 Do not use Qlib variables such as $close or Qlib functions such as TS_MEAN in
 executable code. logic_expression is metadata only.
 
-Declare spec.name, spec.inputs, spec.min_window, spec.recommended_window,
-spec.frequency, spec.adjust, output_schema, implementation_plan, and
-window_reason.
+Declare spec.name, spec.inputs, spec.min_window, spec.frequency, spec.adjust,
+output_schema, implementation_plan, and window_reason.
 ```
 
 ## zer0factor Wrapper For Code Generation
@@ -62,4 +61,3 @@ Rules:
 - Use pandas vectorized operations.
 - Keep the code deterministic and side-effect free.
 ```
-

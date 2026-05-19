@@ -11,7 +11,6 @@
       "name": "ret20_0",
       "inputs": ["close"],
       "min_window": 20,
-      "recommended_window": 60,
       "frequency": "1d",
       "adjust": "hfq",
       "output_schema": ["trade_date", "ts_code", "value"]
@@ -50,7 +49,6 @@
       "name": "ret240_20_remove_up_limit",
       "inputs": ["close"],
       "min_window": 260,
-      "recommended_window": 300,
       "frequency": "1d",
       "adjust": "hfq",
       "output_schema": ["trade_date", "ts_code", "value"]
@@ -89,7 +87,6 @@
       "name": "rank_mom120_20",
       "inputs": ["close"],
       "min_window": 140,
-      "recommended_window": 180,
       "frequency": "1d",
       "adjust": "hfq",
       "output_schema": ["trade_date", "ts_code", "value"]
@@ -128,7 +125,6 @@
       "name": "smooth240_1",
       "inputs": ["close"],
       "min_window": 241,
-      "recommended_window": 280,
       "frequency": "1d",
       "adjust": "hfq",
       "output_schema": ["trade_date", "ts_code", "value"]
@@ -167,7 +163,6 @@
       "name": "overnight_mom20",
       "inputs": ["open", "close"],
       "min_window": 20,
-      "recommended_window": 60,
       "frequency": "1d",
       "adjust": "hfq",
       "output_schema": ["trade_date", "ts_code", "value"]

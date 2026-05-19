@@ -11,7 +11,6 @@ class Smooth240_1(Factor):
         name="smooth240_1",
         inputs=["close"],
         min_window=241,
-        recommended_window=280,
         frequency="1d",
         adjust="hfq",
     )

@@ -11,7 +11,6 @@ class Ret240_20_RemoveUpLimit(Factor):
         name="ret240_20_remove_up_limit",
         inputs=["close"],
         min_window=260,
-        recommended_window=300,
         frequency="1d",
         adjust="hfq",
     )

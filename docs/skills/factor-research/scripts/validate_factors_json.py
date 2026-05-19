@@ -36,11 +36,8 @@ def validate_factor(index: int, factor: dict) -> None:
         fail(f"{name}: unknown input field(s): {unknown}")
 
     min_window = spec.get("min_window")
-    recommended_window = spec.get("recommended_window", min_window)
     if not isinstance(min_window, int) or min_window < 1:
         fail(f"{name}: spec.min_window must be an integer >= 1")
-    if not isinstance(recommended_window, int) or recommended_window < min_window:
-        fail(f"{name}: spec.recommended_window must be >= min_window")
 
     if spec.get("frequency", "1d") != "1d":
         fail(f"{name}: only daily frequency '1d' is supported")
@@ -74,4 +71,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

@@ -116,7 +116,6 @@ Step 10: 因子库归档、状态持久化、反馈总结
       "name": "volume_adjusted_momentum_20d",
       "inputs": ["close", "volume"],
       "min_window": 20,
-      "recommended_window": 60,
       "frequency": "1d",
       "adjust": "hfq",
       "output_schema": ["trade_date", "ts_code", "value"]
@@ -218,7 +217,6 @@ FactorSpec(
     name="volume_adjusted_momentum_20d",
     inputs=["close", "volume"],
     min_window=20,
-    recommended_window=60,
     frequency="1d",
     adjust="hfq",
     output_schema=["trade_date", "ts_code", "value"],
@@ -232,7 +230,6 @@ FactorSpec(
 | `name` | 稳定、唯一、snake_case 因子名 |
 | `inputs` | 因子最小输入字段，不包含未使用字段 |
 | `min_window` | 计算该因子理论上至少需要的历史交易日数量 |
-| `recommended_window` | 推荐预热窗口，通常大于等于 `min_window` |
 | `frequency` | 默认 `1d` |
 | `adjust` | 默认 `hfq`，也可以是 `none` 或 `qfq` |
 | `output_schema` | 必须是 `trade_date, ts_code, value` |
@@ -247,7 +244,6 @@ class VolumeAdjustedMomentum20D(Factor):
         name="volume_adjusted_momentum_20d",
         inputs=["close", "volume"],
         min_window=20,
-        recommended_window=60,
         frequency="1d",
         adjust="hfq",
         output_schema=["trade_date", "ts_code", "value"],
@@ -637,7 +633,6 @@ Prompt：
       "name": "volume_adjusted_momentum_20d",
       "inputs": ["close", "volume"],
       "min_window": 20,
-      "recommended_window": 60,
       "frequency": "1d",
       "adjust": "hfq",
       "output_schema": ["trade_date", "ts_code", "value"]
@@ -676,7 +671,6 @@ You must declare:
 - spec.name
 - spec.inputs
 - spec.min_window
-- spec.recommended_window
 - spec.frequency
 - spec.adjust
 - spec.output_schema
@@ -755,7 +749,6 @@ variables
 1. spec.inputs 是否只使用标准字段
 2. compute 计划是否只引用 spec.inputs 中的字段
 3. min_window 是否覆盖所有 rolling/shift/pct_change/corr 等窗口
-4. recommended_window 是否 >= min_window
 5. output_schema 是否为 trade_date, ts_code, value
 6. 因子逻辑是否直接依赖 zer0share API 或 parquet 路径
 ```
@@ -767,7 +760,6 @@ variables
   "data_contract_ok": true,
   "window_contract_ok": true,
   "min_window": 20,
-  "recommended_window": 60,
   "contract_reason": "Uses close and volume only; longest rolling window is 20."
 }
 ```
@@ -911,7 +903,6 @@ class VolumeAdjustedMomentum20D(Factor):
         name="volume_adjusted_momentum_20d",
         inputs=["close", "volume"],
         min_window=20,
-        recommended_window=60,
         frequency="1d",
         adjust="hfq",
         output_schema=["trade_date", "ts_code", "value"],
@@ -1027,7 +1018,6 @@ Prompt：
   "spec": {
     "inputs": ["close", "volume"],
     "min_window": 20,
-    "recommended_window": 60
   },
   "factor_implementation_code": "...",
   "factor_description": "...",

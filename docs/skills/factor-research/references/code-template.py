@@ -8,7 +8,6 @@ class VolumeAdjustedMomentum20D(Factor):
         name="volume_adjusted_momentum_20d",
         inputs=["close", "volume"],
         min_window=20,
-        recommended_window=60,
         frequency="1d",
         adjust="hfq",
     )
