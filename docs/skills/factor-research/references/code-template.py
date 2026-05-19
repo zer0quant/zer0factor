@@ -1,6 +1,6 @@
 import pandas as pd
 
-from zer0factor.factor import Factor, FactorFrame, FactorSpec, to_factor_output
+from zer0factor.core import Factor, FactorFrame, FactorSpec, to_factor_output
 
 
 class VolumeAdjustedMomentum20D(Factor):

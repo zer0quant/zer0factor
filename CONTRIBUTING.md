@@ -15,7 +15,7 @@ This project is still early. The most useful contributions right now are:
 ```bash
 uv sync
 uv run pytest tests/test_config.py tests/test_storage.py tests/test_factor_standard.py tests/test_factor_research_skill_scripts.py
-uv run ruff check zer0factor/factor/__init__.py docs/skills/factor-research tests/test_factor_standard.py tests/test_factor_research_skill_scripts.py
+uv run ruff check zer0factor/core/__init__.py docs/skills/factor-research tests/test_factor_standard.py tests/test_factor_research_skill_scripts.py
 ```
 
 ## Pull Requests

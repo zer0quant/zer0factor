@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from zer0factor.factor import FactorFrame, run_factor
+from zer0factor.core import FactorFrame, run_factor
 from zer0factor.factors import (
     DailyReturn,
     IntradayReturn,

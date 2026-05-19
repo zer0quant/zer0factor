@@ -108,7 +108,7 @@ uv run python main.py --config config/settings.toml status
 Lint the core runtime and skill files:
 
 ```bash
-uv run ruff check zer0factor/factor/__init__.py docs/skills/factor-research tests/test_factor_standard.py tests/test_factor_research_skill_scripts.py
+uv run ruff check zer0factor/core/__init__.py docs/skills/factor-research tests/test_factor_standard.py tests/test_factor_research_skill_scripts.py
 ```
 
 ## CLI
@@ -124,7 +124,7 @@ More factor execution commands will be added as the runtime matures.
 ```python
 import pandas as pd
 
-from zer0factor.factor import Factor, FactorFrame, FactorSpec, to_factor_output
+from zer0factor.core import Factor, FactorFrame, FactorSpec, to_factor_output
 
 
 class Ret20_0(Factor):

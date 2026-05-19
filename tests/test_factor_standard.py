@@ -1,7 +1,7 @@
 import pandas as pd
 import pytest
 
-from zer0factor.factor import (
+from zer0factor.core import (
     Factor,
     FactorFrame,
     FactorSpec,
