@@ -119,8 +119,7 @@ uv run ruff check zer0factor/core/__init__.py docs/skills/factor-research tests/
 | 命令 | 说明 |
 |---|---|
 | `uv run python main.py status` | 查看当前存储里有哪些已计算因子 |
-
-后续会继续补充因子执行相关命令。
+| `uv run python main.py compute-returns` | 计算内置收益率因子并写入本地存储 |
 
 ## 标准因子长什么样
 

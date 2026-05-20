@@ -88,25 +88,35 @@ def test_run_factor_computes_and_writes_storage(tmp_path):
 
 
 class FakeLocalPro:
+    def __init__(self):
+        self.pro_bar_calls = 0
+
     def stock_basic(self, list_status="L", fields=None):
         return pd.DataFrame({"ts_code": ["000001.SZ", "000002.SZ"]})
 
     def pro_bar(self, ts_code, start_date, end_date, adj):
+        self.pro_bar_calls += 1
+        assert ts_code == "000001.SZ,000002.SZ"
         assert adj == "hfq"
         dates = pd.date_range("2024-01-01", periods=2, freq="D").strftime("%Y%m%d")
-        base = 1 if ts_code == "000001.SZ" else 10
-        return pd.DataFrame(
-            {
-                "ts_code": [ts_code, ts_code],
-                "trade_date": dates,
-                "close": [base, base + 1],
-                "vol": [base * 100, (base + 1) * 100],
-            }
-        )
+        frames = []
+        for code, base in [("000001.SZ", 1), ("000002.SZ", 10)]:
+            frames.append(
+                pd.DataFrame(
+                    {
+                        "ts_code": [code, code],
+                        "trade_date": dates,
+                        "close": [base, base + 1],
+                        "vol": [base * 100, (base + 1) * 100],
+                    }
+                )
+            )
+        return pd.concat(frames, ignore_index=True)
 
 
 def test_zer0share_provider_maps_local_api_to_factor_frame():
-    provider = Zer0ShareDataProvider(FakeLocalPro())
+    pro = FakeLocalPro()
+    provider = Zer0ShareDataProvider(pro)
 
     frame = provider.history(
         fields=["close", "volume"],
@@ -116,6 +126,7 @@ def test_zer0share_provider_maps_local_api_to_factor_frame():
         adjust="hfq",
     )
 
+    assert pro.pro_bar_calls == 1
     assert list(frame.close.columns) == ["000001.SZ", "000002.SZ"]
     assert frame.close.loc[pd.Timestamp("2024-01-01"), "000002.SZ"] == 10
     assert frame.volume.loc[pd.Timestamp("2024-01-02"), "000001.SZ"] == 200

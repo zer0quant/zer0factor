@@ -116,8 +116,7 @@ uv run ruff check zer0factor/core/__init__.py docs/skills/factor-research tests/
 | Command | Description |
 |---|---|
 | `uv run python main.py status` | List computed factors in the configured storage |
-
-More factor execution commands will be added as the runtime matures.
+| `uv run python main.py compute-returns` | Compute built-in return factors and write them to local storage |
 
 ## Factor Contract
 

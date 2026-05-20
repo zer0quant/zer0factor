@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Iterable
 
@@ -152,9 +153,10 @@ class Zer0ShareDataProvider:
         self,
         fields: Iterable[str],
         start_date: str,
-        end_date: str,
+        end_date: str | None,
         universe: str | Iterable[str] = "all",
         adjust: str | None = "hfq",
+        progress: Callable[[int, int, str], None] | None = None,
     ) -> FactorFrame:
         requested = tuple(fields)
         unknown = sorted(set(requested) - STANDARD_FIELDS)
@@ -162,19 +164,18 @@ class Zer0ShareDataProvider:
             raise ValueError(f"unknown input field(s): {unknown}")
 
         codes = self._resolve_universe(universe)
-        frames = []
-        for code in codes:
-            frame = self._pro.pro_bar(
-                ts_code=code,
+        total = len(codes)
+        if progress is not None:
+            progress(0, total, "")
+        if codes:
+            raw = self._pro.pro_bar(
+                ts_code=",".join(codes),
                 start_date=start_date,
                 end_date=end_date,
                 adj=None if adjust == "none" else adjust,
             )
-            if frame is not None and not frame.empty:
-                frames.append(frame)
-
-        if frames:
-            raw = pd.concat(frames, ignore_index=True)
+            if progress is not None:
+                progress(total, total, codes[-1])
         else:
             raw = pd.DataFrame(columns=["trade_date", "ts_code"])
 
