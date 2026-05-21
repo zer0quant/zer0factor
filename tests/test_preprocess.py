@@ -1,4 +1,5 @@
 import pandas as pd
+import pytest
 
 from zer0factor.preprocess import winsorize
 
@@ -7,7 +8,9 @@ def _panel(values: list[list[float]]) -> pd.DataFrame:
     return pd.DataFrame(
         values,
         index=pd.date_range("2024-01-01", periods=len(values), freq="D"),
-        columns=["000001.SZ", "000002.SZ", "000003.SZ", "000004.SZ"],
+        columns=["000001.SZ", "000002.SZ", "000003.SZ", "000004.SZ"][
+            : len(values[0])
+        ],
     )
 
 
@@ -16,7 +19,7 @@ def test_mad_winsorization_clips_extreme_cross_sectional_value():
 
     result = winsorize(factor, method="mad", n=2.0)
 
-    assert result.loc[pd.Timestamp("2024-01-01"), "000004.SZ"] == 5.5
+    assert result.loc[pd.Timestamp("2024-01-01"), "000004.SZ"] == 4.5
     assert result.loc[pd.Timestamp("2024-01-01"), "000001.SZ"] == 1.0
 
 
@@ -35,3 +38,38 @@ def test_mad_winsorization_skips_zero_mad_rows():
     result = winsorize(factor, method="mad", n=5.0)
 
     pd.testing.assert_frame_equal(result, factor)
+
+
+def test_winsorization_none_returns_copy():
+    factor = _panel([[1.0, 2.0, 3.0]])
+
+    result = winsorize(factor, method="none")
+
+    assert result is not factor
+    pd.testing.assert_frame_equal(result, factor)
+
+
+def test_winsorization_rejects_non_positive_mad_multiplier():
+    factor = _panel([[1.0, 2.0, 3.0]])
+
+    with pytest.raises(ValueError, match="n must be positive"):
+        winsorize(factor, method="mad", n=0.0)
+
+
+def test_winsorization_rejects_invalid_quantile_bounds():
+    factor = _panel([[1.0, 2.0, 3.0]])
+
+    with pytest.raises(ValueError, match="0 <= lower < upper <= 1"):
+        winsorize(
+            factor,
+            method="quantile",
+            lower_quantile=0.9,
+            upper_quantile=0.1,
+        )
+
+
+def test_winsorization_rejects_unknown_method():
+    factor = _panel([[1.0, 2.0, 3.0]])
+
+    with pytest.raises(ValueError, match="unknown winsorization method"):
+        winsorize(factor, method="unsupported")

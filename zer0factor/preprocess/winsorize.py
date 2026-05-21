@@ -27,17 +27,10 @@ def winsorize(
 
 def _winsorize_mad_row(row: pd.Series, n: float) -> pd.Series:
     median = row.median(skipna=True)
-    mad = _upper_median((row - median).abs())
+    mad = (row - median).abs().median(skipna=True)
     if pd.isna(median) or pd.isna(mad) or mad == 0:
         return row
     return row.clip(lower=median - n * mad, upper=median + n * mad)
-
-
-def _upper_median(row: pd.Series) -> float:
-    values = row.dropna().sort_values()
-    if values.empty:
-        return float("nan")
-    return values.iloc[len(values) // 2]
 
 
 def _winsorize_quantile_row(

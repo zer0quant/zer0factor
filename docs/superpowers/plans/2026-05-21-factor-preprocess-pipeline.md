@@ -54,7 +54,7 @@ def test_mad_winsorization_clips_extreme_cross_sectional_value():
 
     result = winsorize(factor, method="mad", n=2.0)
 
-    assert result.loc[pd.Timestamp("2024-01-01"), "000004.SZ"] == 5.5
+    assert result.loc[pd.Timestamp("2024-01-01"), "000004.SZ"] == 4.5
     assert result.loc[pd.Timestamp("2024-01-01"), "000001.SZ"] == 1.0
 
 
