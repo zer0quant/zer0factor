@@ -7,7 +7,15 @@ from loguru import logger
 
 from zer0factor.config import load_config
 from zer0factor.core import Factor, Zer0ShareDataProvider, run_factor
-from zer0factor.factors import DailyReturn, IntradayReturn, OpenReturn, OvernightReturn
+from zer0factor.factors import (
+    DailyReturn,
+    IntradayReturn,
+    LogCirculatingMarketCap,
+    LogTotalMarketCap,
+    OpenReturn,
+    OvernightReturn,
+)
+from zer0factor.preprocess import FactorPreprocessPipeline, PreprocessConfig
 from zer0factor.storage import FactorStorage
 
 RETURN_FACTORS = (
@@ -15,6 +23,17 @@ RETURN_FACTORS = (
     OpenReturn(),
     IntradayReturn(),
     OvernightReturn(),
+)
+MARKET_CAP_FACTORS = (
+    LogTotalMarketCap(),
+    LogCirculatingMarketCap(),
+)
+MARKET_CAP_PREPROCESS_CONFIG = PreprocessConfig(
+    winsorize_method="mad",
+    winsorize_n=5.0,
+    impute_method="cross_section_median",
+    standardize_method="zscore",
+    neutralize_method=None,
 )
 LOG_FORMAT = "{time:YYYY-MM-DD HH:mm:ss.SSS} | {level:<8} | {message}"
 
@@ -93,6 +112,52 @@ def compute_and_store_factors(
         row_counts[factor.spec.name] = len(result)
         if log_info is not None:
             log_info(f"factor_write_finished factor={factor.spec.name} rows={len(result)}")
+    return row_counts
+
+
+def compute_and_store_market_cap_factors(
+    factors: tuple[Factor, ...],
+    provider: Zer0ShareDataProvider,
+    storage: FactorStorage,
+    start_date: str,
+    end_date: str | None,
+    universe: str,
+    progress: Callable[[int, int, str], None] | None = None,
+    log_info: Callable[[str], None] | None = None,
+) -> dict[str, int]:
+    fields = sorted({field for factor in factors for field in factor.spec.inputs})
+
+    if log_info is not None:
+        log_info(f"market_cap_data_load_started fields={','.join(fields)}")
+    data = provider.history(
+        fields=fields,
+        start_date=start_date,
+        end_date=end_date,
+        universe=universe,
+        adjust=None,
+        progress=progress,
+    )
+    if log_info is not None:
+        log_info("market_cap_data_load_finished")
+
+    pipeline = FactorPreprocessPipeline(MARKET_CAP_PREPROCESS_CONFIG)
+    row_counts = {}
+    for factor in factors:
+        if log_info is not None:
+            log_info(f"market_cap_factor_write_started factor={factor.spec.name}")
+        raw = run_factor(factor, data, storage=storage)
+        row_counts[factor.spec.name] = len(raw)
+
+        z_name = f"z_{factor.spec.name}"
+        z_scored = pipeline.transform(raw)
+        storage.write(z_name, z_scored)
+        row_counts[z_name] = len(z_scored)
+        if log_info is not None:
+            log_info(
+                "market_cap_factor_write_finished "
+                f"factor={factor.spec.name} rows={len(raw)} "
+                f"z_factor={z_name} z_rows={len(z_scored)}"
+            )
     return row_counts
 
 
