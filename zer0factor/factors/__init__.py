@@ -1,3 +1,7 @@
+from zer0factor.factors.market_cap import (
+    LogCirculatingMarketCap,
+    LogTotalMarketCap,
+)
 from zer0factor.factors.returns import (
     DailyReturn,
     IntradayReturn,
@@ -8,6 +12,8 @@ from zer0factor.factors.returns import (
 __all__ = [
     "DailyReturn",
     "IntradayReturn",
+    "LogCirculatingMarketCap",
+    "LogTotalMarketCap",
     "OpenReturn",
     "OvernightReturn",
 ]
