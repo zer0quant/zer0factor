@@ -196,3 +196,19 @@ def test_neutralization_none_returns_copy():
 
     assert result is not factor
     pd.testing.assert_frame_equal(result, factor)
+
+
+def test_neutralization_default_returns_copy():
+    factor = _panel([[1.0, 2.0, 3.0]])
+
+    result = neutralize(factor)
+
+    assert result is not factor
+    pd.testing.assert_frame_equal(result, factor)
+
+
+def test_neutralization_rejects_unknown_method():
+    factor = _panel([[1.0, 2.0, 3.0]])
+
+    with pytest.raises(ValueError, match="unknown neutralization method"):
+        neutralize(factor, method="unsupported")
