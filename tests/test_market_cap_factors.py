@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
+import pytest
 
 from zer0factor.core import FactorFrame, run_factor
 from zer0factor.factors import LogCirculatingMarketCap, LogTotalMarketCap
@@ -24,8 +25,16 @@ def test_log_total_market_cap_computes_natural_log_and_drops_non_positive_values
     result = run_factor(LogTotalMarketCap(), _market_cap_frame())
 
     assert result.to_dict("records") == [
-        {"trade_date": "20240101", "ts_code": "000001.SZ", "value": np.log(100.0)},
-        {"trade_date": "20240101", "ts_code": "000002.SZ", "value": 2.0},
+        {
+            "trade_date": "20240101",
+            "ts_code": "000001.SZ",
+            "value": pytest.approx(np.log(100.0)),
+        },
+        {
+            "trade_date": "20240101",
+            "ts_code": "000002.SZ",
+            "value": pytest.approx(2.0),
+        },
     ]
 
 
@@ -33,7 +42,19 @@ def test_log_circulating_market_cap_computes_natural_log_and_drops_non_positive_
     result = run_factor(LogCirculatingMarketCap(), _market_cap_frame())
 
     assert result.to_dict("records") == [
-        {"trade_date": "20240101", "ts_code": "000001.SZ", "value": 1.0},
-        {"trade_date": "20240102", "ts_code": "000001.SZ", "value": np.log(50.0)},
-        {"trade_date": "20240102", "ts_code": "000002.SZ", "value": 3.0},
+        {
+            "trade_date": "20240101",
+            "ts_code": "000001.SZ",
+            "value": pytest.approx(1.0),
+        },
+        {
+            "trade_date": "20240102",
+            "ts_code": "000001.SZ",
+            "value": pytest.approx(np.log(50.0)),
+        },
+        {
+            "trade_date": "20240102",
+            "ts_code": "000002.SZ",
+            "value": pytest.approx(3.0),
+        },
     ]
