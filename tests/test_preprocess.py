@@ -2,7 +2,14 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from zer0factor.preprocess import impute_missing, neutralize, standardize, winsorize
+from zer0factor.preprocess import (
+    FactorPreprocessPipeline,
+    PreprocessConfig,
+    impute_missing,
+    neutralize,
+    standardize,
+    winsorize,
+)
 
 
 def _panel(values: list[list[float]]) -> pd.DataFrame:
@@ -212,3 +219,82 @@ def test_neutralization_rejects_unknown_method():
 
     with pytest.raises(ValueError, match="unknown neutralization method"):
         neutralize(factor, method="unsupported")
+
+
+def test_pipeline_applies_winsorize_impute_standardize_in_fixed_order():
+    factor = _panel([[1.0, 2.0, np.nan, 100.0]])
+    pipeline = FactorPreprocessPipeline(
+        PreprocessConfig(
+            winsorize_method="mad",
+            winsorize_n=2.0,
+            impute_method="cross_section_median",
+            standardize_method="zscore",
+            neutralize_method=None,
+        )
+    )
+
+    result = pipeline.transform(factor)
+
+    row = result.loc[pd.Timestamp("2024-01-01")]
+    assert not row.isna().any()
+    assert row.mean() == pytest.approx(0.0)
+    assert row.std() == pytest.approx(1.0)
+
+
+def test_pipeline_long_input_returns_standard_long_output():
+    factor = pd.DataFrame(
+        {
+            "trade_date": ["20240101", "20240101", "20240101"],
+            "ts_code": ["000002.SZ", "000001.SZ", "000003.SZ"],
+            "value": [2.0, 1.0, 3.0],
+        }
+    )
+    pipeline = FactorPreprocessPipeline(
+        PreprocessConfig(
+            winsorize_method="none",
+            impute_method="none",
+            standardize_method="rank_pct",
+            neutralize_method=None,
+        )
+    )
+
+    result = pipeline.transform(factor)
+
+    assert list(result.columns) == ["trade_date", "ts_code", "value"]
+    assert result.iloc[0].to_dict() == {
+        "trade_date": "20240101",
+        "ts_code": "000001.SZ",
+        "value": pytest.approx(1 / 3),
+    }
+    assert result.iloc[1].to_dict() == {
+        "trade_date": "20240101",
+        "ts_code": "000002.SZ",
+        "value": pytest.approx(2 / 3),
+    }
+    assert result.iloc[2].to_dict() == {
+        "trade_date": "20240101",
+        "ts_code": "000003.SZ",
+        "value": pytest.approx(1.0),
+    }
+
+
+def test_pipeline_rejects_long_input_missing_required_columns():
+    factor = pd.DataFrame(
+        {
+            "trade_date": ["20240101"],
+            "value": [1.0],
+        }
+    )
+    pipeline = FactorPreprocessPipeline()
+
+    with pytest.raises(ValueError, match="long factor input must contain columns"):
+        pipeline.transform(factor)
+
+
+def test_preprocess_config_rejects_invalid_quantile_bounds():
+    with pytest.raises(ValueError, match="quantile bounds must satisfy"):
+        PreprocessConfig(
+            winsorize_method="quantile",
+            winsorize_lower_quantile=0.9,
+            winsorize_upper_quantile=0.1,
+        )
