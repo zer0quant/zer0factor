@@ -139,6 +139,35 @@ def test_zscore_standardization_returns_nan_for_zero_std_rows():
     assert result.loc[pd.Timestamp("2024-01-01")].isna().all()
 
 
+def test_zscore_standardization_preserves_missing_and_ignores_infinite_values():
+    factor = _panel([[1.0, np.nan, np.inf, 3.0]])
+
+    result = standardize(factor, method="zscore")
+
+    row = result.loc[pd.Timestamp("2024-01-01")]
+    assert row["000001.SZ"] == pytest.approx(-0.7071067811865475)
+    assert pd.isna(row["000002.SZ"])
+    assert pd.isna(row["000003.SZ"])
+    assert row["000004.SZ"] == pytest.approx(0.7071067811865475)
+
+
+def test_standardization_none_returns_cleaned_copy():
+    factor = _panel([[1.0, np.inf, 3.0]])
+
+    result = standardize(factor, method="none")
+
+    assert result is not factor
+    assert result.loc[pd.Timestamp("2024-01-01"), "000001.SZ"] == 1.0
+    assert pd.isna(result.loc[pd.Timestamp("2024-01-01"), "000002.SZ"])
+
+
+def test_standardization_rejects_unknown_method():
+    factor = _panel([[1.0, 2.0, 3.0]])
+
+    with pytest.raises(ValueError, match="unknown standardization method"):
+        standardize(factor, method="unsupported")
+
+
 def test_rank_standardization_outputs_percentile_ranks():
     factor = _panel([[10.0, 30.0, 20.0]])
 

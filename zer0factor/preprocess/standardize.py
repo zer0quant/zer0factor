@@ -1,3 +1,4 @@
+import numpy as np
 import pandas as pd
 
 
@@ -6,12 +7,13 @@ def standardize(
     *,
     method: str = "zscore",
 ) -> pd.DataFrame:
+    cleaned = factor.replace([np.inf, -np.inf], np.nan)
     if method == "none":
-        return factor.copy()
+        return cleaned.copy()
     if method == "zscore":
-        return factor.apply(_zscore_row, axis=1)
+        return cleaned.apply(_zscore_row, axis=1)
     if method == "rank_pct":
-        return factor.rank(axis=1, pct=True)
+        return cleaned.rank(axis=1, pct=True)
     raise ValueError(f"unknown standardization method: {method}")
 
 
