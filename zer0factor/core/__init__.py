@@ -17,6 +17,8 @@ STANDARD_FIELDS = frozenset(
         "volume",
         "amount",
         "return_",
+        "total_mv",
+        "circ_mv",
     }
 )
 OUTPUT_SCHEMA = ("trade_date", "ts_code", "value")
@@ -136,7 +138,7 @@ def run_factor(
 class Zer0ShareDataProvider:
     """Adapter from zer0share LocalPro into the decoupled FactorFrame contract."""
 
-    _SOURCE_COLUMNS = {
+    _BAR_SOURCE_COLUMNS = {
         "open": "open",
         "high": "high",
         "low": "low",
@@ -144,6 +146,10 @@ class Zer0ShareDataProvider:
         "volume": "vol",
         "amount": "amount",
         "return_": "pct_chg",
+    }
+    _DAILY_BASIC_SOURCE_COLUMNS = {
+        "total_mv": "total_mv",
+        "circ_mv": "circ_mv",
     }
 
     def __init__(self, pro):
@@ -168,21 +174,50 @@ class Zer0ShareDataProvider:
         if progress is not None:
             progress(0, total, "")
         if codes:
-            raw = self._pro.pro_bar(
-                ts_code=",".join(codes),
+            ts_code = ",".join(codes)
+        else:
+            ts_code = ""
+
+        bar_fields = [
+            field for field in requested if field in self._BAR_SOURCE_COLUMNS
+        ]
+        daily_basic_fields = [
+            field for field in requested if field in self._DAILY_BASIC_SOURCE_COLUMNS
+        ]
+
+        bar_raw = pd.DataFrame(columns=["trade_date", "ts_code"])
+        if bar_fields and codes:
+            bar_raw = self._pro.pro_bar(
+                ts_code=ts_code,
                 start_date=start_date,
                 end_date=end_date,
                 adj=None if adjust == "none" else adjust,
             )
             if progress is not None:
                 progress(total, total, codes[-1])
-        else:
-            raw = pd.DataFrame(columns=["trade_date", "ts_code"])
 
-        panels = {
-            field: self._pivot_field(raw, self._SOURCE_COLUMNS[field])
-            for field in requested
-        }
+        daily_basic_raw = pd.DataFrame(columns=["trade_date", "ts_code"])
+        if daily_basic_fields and codes:
+            daily_basic_source_fields = [
+                self._DAILY_BASIC_SOURCE_COLUMNS[field] for field in daily_basic_fields
+            ]
+            daily_basic_raw = self._pro.daily_basic(
+                ts_code=ts_code,
+                start_date=start_date,
+                end_date=end_date,
+                fields=",".join(["ts_code", "trade_date", *daily_basic_source_fields]),
+            )
+
+        panels = {}
+        for field in requested:
+            if field in self._BAR_SOURCE_COLUMNS:
+                panels[field] = self._pivot_field(
+                    bar_raw, self._BAR_SOURCE_COLUMNS[field]
+                )
+            else:
+                panels[field] = self._pivot_field(
+                    daily_basic_raw, self._DAILY_BASIC_SOURCE_COLUMNS[field]
+                )
         return FactorFrame(panels)
 
     def _resolve_universe(self, universe: str | Iterable[str]) -> list[str]:

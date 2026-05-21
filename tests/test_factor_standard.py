@@ -50,6 +50,18 @@ def test_factor_spec_requires_standard_inputs_and_windows():
     with pytest.raises(ValueError, match="unknown input"):
         FactorSpec(name="bad", inputs=["st_status"], min_window=1)
 
+
+def test_factor_spec_accepts_market_cap_fields():
+    spec = FactorSpec(
+        name="log_total_market_cap",
+        inputs=["total_mv", "circ_mv"],
+        min_window=1,
+        adjust=None,
+    )
+
+    assert spec.inputs == ("total_mv", "circ_mv")
+
+
 def test_factor_frame_exposes_only_declared_standard_fields():
     close = _wide_frame()
     volume = _wide_frame() * 100
@@ -59,6 +71,15 @@ def test_factor_frame_exposes_only_declared_standard_fields():
     assert frame.volume.equals(volume)
     with pytest.raises(AttributeError):
         _ = frame.open
+
+
+def test_factor_frame_exposes_market_cap_fields():
+    total_mv = _wide_frame()
+    circ_mv = _wide_frame() * 10
+    frame = FactorFrame({"total_mv": total_mv, "circ_mv": circ_mv})
+
+    assert frame.total_mv.equals(total_mv)
+    assert frame.circ_mv.equals(circ_mv)
 
 
 def test_to_factor_output_converts_wide_panel_to_storage_schema():
@@ -90,6 +111,8 @@ def test_run_factor_computes_and_writes_storage(tmp_path):
 class FakeLocalPro:
     def __init__(self):
         self.pro_bar_calls = 0
+        self.daily_basic_calls = 0
+        self.expected_daily_basic_fields = "ts_code,trade_date,total_mv,circ_mv"
 
     def stock_basic(self, list_status="L", fields=None):
         return pd.DataFrame({"ts_code": ["000001.SZ", "000002.SZ"]})
@@ -97,6 +120,8 @@ class FakeLocalPro:
     def pro_bar(self, ts_code, start_date, end_date, adj):
         self.pro_bar_calls += 1
         assert ts_code == "000001.SZ,000002.SZ"
+        assert start_date == "20240101"
+        assert end_date == "20240102"
         assert adj == "hfq"
         dates = pd.date_range("2024-01-01", periods=2, freq="D").strftime("%Y%m%d")
         frames = []
@@ -108,6 +133,30 @@ class FakeLocalPro:
                         "trade_date": dates,
                         "close": [base, base + 1],
                         "vol": [base * 100, (base + 1) * 100],
+                    }
+                )
+            )
+        return pd.concat(frames, ignore_index=True)
+
+    def daily_basic(self, ts_code=None, start_date=None, end_date=None, fields=None):
+        self.daily_basic_calls += 1
+        assert ts_code == "000001.SZ,000002.SZ"
+        assert start_date == "20240101"
+        assert end_date == "20240102"
+        assert fields == self.expected_daily_basic_fields
+        dates = pd.date_range("2024-01-01", periods=2, freq="D").strftime("%Y%m%d")
+        frames = []
+        for code, total_base, circ_base in [
+            ("000001.SZ", 1000, 500),
+            ("000002.SZ", 2000, 1000),
+        ]:
+            frames.append(
+                pd.DataFrame(
+                    {
+                        "ts_code": [code, code],
+                        "trade_date": dates,
+                        "total_mv": [total_base, total_base + 100],
+                        "circ_mv": [circ_base, circ_base + 50],
                     }
                 )
             )
@@ -130,3 +179,40 @@ def test_zer0share_provider_maps_local_api_to_factor_frame():
     assert list(frame.close.columns) == ["000001.SZ", "000002.SZ"]
     assert frame.close.loc[pd.Timestamp("2024-01-01"), "000002.SZ"] == 10
     assert frame.volume.loc[pd.Timestamp("2024-01-02"), "000001.SZ"] == 200
+
+
+def test_zer0share_provider_loads_market_cap_fields_from_daily_basic():
+    pro = FakeLocalPro()
+    provider = Zer0ShareDataProvider(pro)
+
+    frame = provider.history(
+        fields=["total_mv", "circ_mv"],
+        start_date="20240101",
+        end_date="20240102",
+        universe="all",
+        adjust="hfq",
+    )
+
+    assert pro.pro_bar_calls == 0
+    assert pro.daily_basic_calls == 1
+    assert frame.total_mv.loc[pd.Timestamp("2024-01-01"), "000001.SZ"] == 1000
+    assert frame.circ_mv.loc[pd.Timestamp("2024-01-02"), "000002.SZ"] == 1050
+
+
+def test_zer0share_provider_combines_price_and_market_cap_fields():
+    pro = FakeLocalPro()
+    pro.expected_daily_basic_fields = "ts_code,trade_date,total_mv"
+    provider = Zer0ShareDataProvider(pro)
+
+    frame = provider.history(
+        fields=["close", "total_mv"],
+        start_date="20240101",
+        end_date="20240102",
+        universe="all",
+        adjust="hfq",
+    )
+
+    assert pro.pro_bar_calls == 1
+    assert pro.daily_basic_calls == 1
+    assert frame.close.loc[pd.Timestamp("2024-01-02"), "000001.SZ"] == 2
+    assert frame.total_mv.loc[pd.Timestamp("2024-01-02"), "000002.SZ"] == 2100
