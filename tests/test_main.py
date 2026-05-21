@@ -1,8 +1,10 @@
 import pandas as pd
+from click.testing import CliRunner
 
 from main import (
     MARKET_CAP_FACTORS,
     RETURN_FACTORS,
+    cli,
     compute_and_store_factors,
     compute_and_store_market_cap_factors,
 )
@@ -101,3 +103,12 @@ def test_compute_and_store_market_cap_factors_writes_raw_and_zscored(tmp_path):
     z_total = storage.read("z_log_total_market_cap")
     assert sorted(z_total["trade_date"].astype(str).unique()) == ["20240101", "20240102"]
     assert z_total.groupby("trade_date")["value"].mean().abs().max() < 1e-12
+
+
+def test_compute_market_cap_command_is_registered():
+    runner = CliRunner()
+
+    result = runner.invoke(cli, ["compute-market-cap", "--help"])
+
+    assert result.exit_code == 0
+    assert "Compute built-in market cap factors" in result.output

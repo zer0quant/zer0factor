@@ -201,5 +201,50 @@ def compute_returns(ctx):
     logger.info("return_factor_job_finished factors={}", len(row_counts))
 
 
+@cli.command("compute-market-cap")
+@click.pass_context
+def compute_market_cap(ctx):
+    """Compute built-in market cap factors and store raw plus z-scored values."""
+    from zer0share.api import LocalPro
+
+    cfg = load_config(ctx.obj["config_path"])
+    configure_logging(cfg.log_path)
+    end_date = cfg.end_date or None
+    logger.info(
+        "market_cap_factor_job_started universe={} start_date={} end_date={} fields={}",
+        cfg.universe,
+        cfg.start_date,
+        end_date or "latest",
+        "circ_mv,total_mv",
+    )
+
+    def show_progress(index: int, total: int, code: str) -> None:
+        if index == 0:
+            logger.info("universe_resolved stocks={}", total)
+        elif index == total or index % 100 == 0:
+            logger.info(
+                "market_cap_data_load_progress loaded={} total={} code={}",
+                index,
+                total,
+                code,
+            )
+
+    provider = Zer0ShareDataProvider(LocalPro(cfg.zer0share_data_dir))
+    storage = FactorStorage(cfg.factor_dir, cfg.db_path)
+    row_counts = compute_and_store_market_cap_factors(
+        factors=MARKET_CAP_FACTORS,
+        provider=provider,
+        storage=storage,
+        start_date=cfg.start_date,
+        end_date=end_date,
+        universe=cfg.universe,
+        progress=show_progress,
+        log_info=logger.info,
+    )
+    for factor_name, row_count in row_counts.items():
+        logger.info("market_cap_factor_rows factor={} rows={}", factor_name, row_count)
+    logger.info("market_cap_factor_job_finished factors={}", len(row_counts))
+
+
 if __name__ == "__main__":
     cli()
