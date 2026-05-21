@@ -151,6 +151,7 @@ class Zer0ShareDataProvider:
         "total_mv": "total_mv",
         "circ_mv": "circ_mv",
     }
+    _DAILY_BASIC_FIELD_ORDER = ("total_mv", "circ_mv")
 
     def __init__(self, pro):
         self._pro = pro
@@ -185,7 +186,9 @@ class Zer0ShareDataProvider:
             field for field in requested if field in self._DAILY_BASIC_SOURCE_COLUMNS
         ]
 
-        bar_raw = pd.DataFrame(columns=["trade_date", "ts_code"])
+        bar_raw = pd.DataFrame(
+            columns=["trade_date", "ts_code", *self._BAR_SOURCE_COLUMNS.values()]
+        )
         if bar_fields and codes:
             bar_raw = self._pro.pro_bar(
                 ts_code=ts_code,
@@ -193,13 +196,15 @@ class Zer0ShareDataProvider:
                 end_date=end_date,
                 adj=None if adjust == "none" else adjust,
             )
-            if progress is not None:
-                progress(total, total, codes[-1])
 
-        daily_basic_raw = pd.DataFrame(columns=["trade_date", "ts_code"])
+        daily_basic_raw = pd.DataFrame(
+            columns=["trade_date", "ts_code", *self._DAILY_BASIC_SOURCE_COLUMNS.values()]
+        )
         if daily_basic_fields and codes:
             daily_basic_source_fields = [
-                self._DAILY_BASIC_SOURCE_COLUMNS[field] for field in daily_basic_fields
+                self._DAILY_BASIC_SOURCE_COLUMNS[field]
+                for field in self._DAILY_BASIC_FIELD_ORDER
+                if field in daily_basic_fields
             ]
             daily_basic_raw = self._pro.daily_basic(
                 ts_code=ts_code,
@@ -207,16 +212,18 @@ class Zer0ShareDataProvider:
                 end_date=end_date,
                 fields=",".join(["ts_code", "trade_date", *daily_basic_source_fields]),
             )
+        if progress is not None:
+            progress(total, total, codes[-1] if codes else "")
 
         panels = {}
-        for field in requested:
-            if field in self._BAR_SOURCE_COLUMNS:
-                panels[field] = self._pivot_field(
-                    bar_raw, self._BAR_SOURCE_COLUMNS[field]
+        for field_name in requested:
+            if field_name in self._BAR_SOURCE_COLUMNS:
+                panels[field_name] = self._pivot_field(
+                    bar_raw, self._BAR_SOURCE_COLUMNS[field_name]
                 )
             else:
-                panels[field] = self._pivot_field(
-                    daily_basic_raw, self._DAILY_BASIC_SOURCE_COLUMNS[field]
+                panels[field_name] = self._pivot_field(
+                    daily_basic_raw, self._DAILY_BASIC_SOURCE_COLUMNS[field_name]
                 )
         return FactorFrame(panels)
 

@@ -216,3 +216,50 @@ def test_zer0share_provider_combines_price_and_market_cap_fields():
     assert pro.daily_basic_calls == 1
     assert frame.close.loc[pd.Timestamp("2024-01-02"), "000001.SZ"] == 2
     assert frame.total_mv.loc[pd.Timestamp("2024-01-02"), "000002.SZ"] == 2100
+
+
+def test_zer0share_provider_uses_stable_daily_basic_field_order():
+    pro = FakeLocalPro()
+    provider = Zer0ShareDataProvider(pro)
+
+    frame = provider.history(
+        fields=["circ_mv", "total_mv"],
+        start_date="20240101",
+        end_date="20240102",
+        universe="all",
+        adjust="hfq",
+    )
+
+    assert pro.daily_basic_calls == 1
+    assert frame.circ_mv.loc[pd.Timestamp("2024-01-01"), "000001.SZ"] == 500
+    assert frame.total_mv.loc[pd.Timestamp("2024-01-01"), "000002.SZ"] == 2000
+
+
+class EmptyUniverseLocalPro(FakeLocalPro):
+    def stock_basic(self, list_status="L", fields=None):
+        return pd.DataFrame({"ts_code": []})
+
+    def pro_bar(self, ts_code, start_date, end_date, adj):
+        raise AssertionError("pro_bar should not be called for an empty universe")
+
+    def daily_basic(self, ts_code=None, start_date=None, end_date=None, fields=None):
+        raise AssertionError("daily_basic should not be called for an empty universe")
+
+
+def test_zer0share_provider_returns_empty_panels_for_empty_universe():
+    pro = EmptyUniverseLocalPro()
+    provider = Zer0ShareDataProvider(pro)
+    progress_calls = []
+
+    frame = provider.history(
+        fields=["close", "total_mv"],
+        start_date="20240101",
+        end_date="20240102",
+        universe="all",
+        adjust="hfq",
+        progress=lambda index, total, code: progress_calls.append((index, total, code)),
+    )
+
+    assert frame.close.empty
+    assert frame.total_mv.empty
+    assert progress_calls == [(0, 0, ""), (0, 0, "")]
