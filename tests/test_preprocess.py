@@ -93,6 +93,19 @@ def test_imputation_treats_infinite_values_as_missing():
     assert result.loc[pd.Timestamp("2024-01-01"), "000002.SZ"] == 2.0
 
 
+def test_imputation_handles_duplicate_index_labels_by_row_position():
+    factor = pd.DataFrame(
+        [[1.0, np.nan, 3.0], [np.nan, 10.0, 14.0]],
+        index=pd.to_datetime(["2024-01-01", "2024-01-01"]),
+        columns=["000001.SZ", "000002.SZ", "000003.SZ"],
+    )
+
+    result = impute_missing(factor, method="cross_section_median")
+
+    assert result.iloc[0]["000002.SZ"] == 2.0
+    assert result.iloc[1]["000001.SZ"] == 12.0
+
+
 def test_entirely_missing_rows_remain_missing_after_imputation():
     factor = _panel([[np.nan, np.nan, np.nan]])
 

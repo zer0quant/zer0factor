@@ -14,8 +14,7 @@ def impute_missing(
         return cleaned.copy()
 
     if method == "cross_section_median":
-        row_medians = cleaned.median(axis=1)
-        return cleaned.T.fillna(row_medians).T
+        return cleaned.apply(lambda row: row.fillna(row.median()), axis=1)
 
     if method == "industry_median":
         if industry is None:
