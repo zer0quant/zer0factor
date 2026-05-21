@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from zer0factor.preprocess import impute_missing, standardize, winsorize
+from zer0factor.preprocess import impute_missing, neutralize, standardize, winsorize
 
 
 def _panel(values: list[list[float]]) -> pd.DataFrame:
@@ -177,3 +177,22 @@ def test_rank_standardization_outputs_percentile_ranks():
     assert row["000001.SZ"] == pytest.approx(1 / 3)
     assert row["000003.SZ"] == pytest.approx(2 / 3)
     assert row["000002.SZ"] == pytest.approx(1.0)
+
+
+def test_size_industry_neutralization_raises_clear_not_implemented_error():
+    factor = _panel([[1.0, 2.0, 3.0]])
+
+    with pytest.raises(
+        ValueError,
+        match="neutralization requires implemented exposure regression support",
+    ):
+        neutralize(factor, method="size_industry")
+
+
+def test_neutralization_none_returns_copy():
+    factor = _panel([[1.0, 2.0, 3.0]])
+
+    result = neutralize(factor, method="none")
+
+    assert result is not factor
+    pd.testing.assert_frame_equal(result, factor)
