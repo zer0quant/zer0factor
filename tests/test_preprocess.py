@@ -278,6 +278,42 @@ def test_pipeline_long_input_returns_standard_long_output():
     }
 
 
+def test_pipeline_long_input_parses_numeric_yyyymmdd_dates():
+    factor = pd.DataFrame(
+        {
+            "trade_date": [20240101, 20240101, 20240101],
+            "ts_code": ["000002.SZ", "000001.SZ", "000003.SZ"],
+            "value": [2.0, 1.0, 3.0],
+        }
+    )
+    pipeline = FactorPreprocessPipeline(
+        PreprocessConfig(
+            winsorize_method="none",
+            impute_method="none",
+            standardize_method="rank_pct",
+            neutralize_method=None,
+        )
+    )
+
+    result = pipeline.transform(factor)
+
+    assert result["trade_date"].unique().tolist() == ["20240101"]
+
+
+def test_pipeline_rejects_duplicate_long_factor_keys():
+    factor = pd.DataFrame(
+        {
+            "trade_date": ["20240101", "20240101"],
+            "ts_code": ["000001.SZ", "000001.SZ"],
+            "value": [1.0, 2.0],
+        }
+    )
+    pipeline = FactorPreprocessPipeline()
+
+    with pytest.raises(ValueError, match="duplicate trade_date/ts_code"):
+        pipeline.transform(factor)
+
+
 def test_pipeline_rejects_long_input_missing_required_columns():
     factor = pd.DataFrame(
         {

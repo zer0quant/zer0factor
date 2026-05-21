@@ -11,7 +11,6 @@ from zer0factor.preprocess.neutralize import neutralize
 from zer0factor.preprocess.standardize import standardize
 from zer0factor.preprocess.winsorize import winsorize
 
-
 WinsorizeMethod = Literal["mad", "quantile", "none"]
 ImputeMethod = Literal["cross_section_median", "industry_median", "none"]
 StandardizeMethod = Literal["zscore", "rank_pct", "none"]
@@ -105,19 +104,30 @@ def _to_wide(factor: pd.DataFrame) -> tuple[pd.DataFrame, bool]:
     if not isinstance(factor, pd.DataFrame):
         raise TypeError("factor input must be a pandas DataFrame")
 
-    if _LONG_COLUMNS.intersection(factor.columns):
-        if not _LONG_COLUMNS.issubset(factor.columns):
-            raise ValueError(
-                "long factor input must contain columns: trade_date, ts_code, value"
-            )
+    present_long_columns = _LONG_COLUMNS.intersection(factor.columns)
+    if present_long_columns and not _LONG_COLUMNS.issubset(factor.columns):
+        raise ValueError(
+            "long factor input must contain columns: trade_date, ts_code, value"
+        )
+
+    if _LONG_COLUMNS.issubset(factor.columns):
         long = factor.loc[:, ["trade_date", "ts_code", "value"]].copy()
-        long["trade_date"] = pd.to_datetime(long["trade_date"])
+        long["trade_date"] = _parse_trade_dates(long["trade_date"])
+        duplicates = long.duplicated(["trade_date", "ts_code"])
+        if duplicates.any():
+            raise ValueError("long factor input contains duplicate trade_date/ts_code")
         wide = long.pivot(index="trade_date", columns="ts_code", values="value")
         return wide.sort_index().sort_index(axis=1), True
 
     wide = factor.copy()
-    wide.index = pd.to_datetime(wide.index)
+    wide.index = _parse_trade_dates(pd.Series(wide.index, index=wide.index)).to_numpy()
     return wide.sort_index().sort_index(axis=1), False
+
+
+def _parse_trade_dates(values: pd.Series) -> pd.Series:
+    if pd.api.types.is_numeric_dtype(values):
+        return pd.to_datetime(values.astype("Int64").astype(str), format="%Y%m%d")
+    return pd.to_datetime(values)
 
 
 def _validate_choice(value: str, allowed: set[str], field_name: str) -> None:
