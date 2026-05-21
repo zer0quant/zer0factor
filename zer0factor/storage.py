@@ -28,8 +28,10 @@ class FactorStorage:
         if not required.issubset(df.columns):
             raise ValueError(f"DataFrame must have columns: {required}")
 
+        factor_path = self._factor_dir / factor_name
+        factor_path.mkdir(parents=True, exist_ok=True)
         for date, group in df.groupby("trade_date"):
-            partition = self._factor_dir / factor_name / f"date={date}"
+            partition = factor_path / f"date={date}"
             partition.mkdir(parents=True, exist_ok=True)
             table = pa.Table.from_pandas(
                 group[["ts_code", "value"]].reset_index(drop=True),
@@ -54,6 +56,8 @@ class FactorStorage:
             raise FileNotFoundError(f"Factor '{factor_name}' not found")
 
         pattern = str(factor_path / "date=*" / "data.parquet")
+        if not list(factor_path.glob("date=*/data.parquet")):
+            return pd.DataFrame(columns=["trade_date", "ts_code", "value"])
         where = []
         params: list = [pattern]
         if start_date:

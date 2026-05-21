@@ -28,6 +28,21 @@ def test_write_and_read_factor(tmp_path):
     assert set(result.columns) == {"trade_date", "ts_code", "value"}
 
 
+def test_write_and_read_empty_factor(tmp_path):
+    storage = FactorStorage(
+        factor_dir=tmp_path / "factors",
+        db_path=tmp_path / "meta.duckdb",
+    )
+    df = pd.DataFrame(columns=["trade_date", "ts_code", "value"])
+
+    storage.write("empty_factor", df)
+
+    result = storage.read("empty_factor")
+    assert list(result.columns) == ["trade_date", "ts_code", "value"]
+    assert result.empty
+    assert storage.list_factors() == ["empty_factor"]
+
+
 def test_list_factors_empty(tmp_path):
     storage = FactorStorage(
         factor_dir=tmp_path / "factors",
