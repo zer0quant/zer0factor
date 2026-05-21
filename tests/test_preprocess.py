@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from zer0factor.preprocess import impute_missing, winsorize
+from zer0factor.preprocess import impute_missing, standardize, winsorize
 
 
 def _panel(values: list[list[float]]) -> pd.DataFrame:
@@ -119,3 +119,32 @@ def test_industry_median_imputation_without_industry_data_raises():
 
     with pytest.raises(ValueError, match="industry_median imputation requires industry data"):
         impute_missing(factor, method="industry_median")
+
+
+def test_zscore_standardization_has_cross_sectional_mean_zero_and_std_one():
+    factor = _panel([[1.0, 2.0, 3.0]])
+
+    result = standardize(factor, method="zscore")
+
+    row = result.loc[pd.Timestamp("2024-01-01")]
+    assert row.mean() == pytest.approx(0.0)
+    assert row.std() == pytest.approx(1.0)
+
+
+def test_zscore_standardization_returns_nan_for_zero_std_rows():
+    factor = _panel([[1.0, 1.0, 1.0]])
+
+    result = standardize(factor, method="zscore")
+
+    assert result.loc[pd.Timestamp("2024-01-01")].isna().all()
+
+
+def test_rank_standardization_outputs_percentile_ranks():
+    factor = _panel([[10.0, 30.0, 20.0]])
+
+    result = standardize(factor, method="rank_pct")
+
+    row = result.loc[pd.Timestamp("2024-01-01")]
+    assert row["000001.SZ"] == pytest.approx(1 / 3)
+    assert row["000003.SZ"] == pytest.approx(2 / 3)
+    assert row["000002.SZ"] == pytest.approx(1.0)
