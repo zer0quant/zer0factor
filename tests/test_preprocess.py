@@ -1,7 +1,8 @@
+import numpy as np
 import pandas as pd
 import pytest
 
-from zer0factor.preprocess import winsorize
+from zer0factor.preprocess import impute_missing, winsorize
 
 
 def _panel(values: list[list[float]]) -> pd.DataFrame:
@@ -73,3 +74,35 @@ def test_winsorization_rejects_unknown_method():
 
     with pytest.raises(ValueError, match="unknown winsorization method"):
         winsorize(factor, method="unsupported")
+
+
+def test_cross_section_median_imputation_fills_per_date():
+    factor = _panel([[1.0, np.nan, 3.0], [np.nan, 10.0, 14.0]])
+
+    result = impute_missing(factor, method="cross_section_median")
+
+    assert result.loc[pd.Timestamp("2024-01-01"), "000002.SZ"] == 2.0
+    assert result.loc[pd.Timestamp("2024-01-02"), "000001.SZ"] == 12.0
+
+
+def test_imputation_treats_infinite_values_as_missing():
+    factor = _panel([[1.0, np.inf, 3.0]])
+
+    result = impute_missing(factor, method="cross_section_median")
+
+    assert result.loc[pd.Timestamp("2024-01-01"), "000002.SZ"] == 2.0
+
+
+def test_entirely_missing_rows_remain_missing_after_imputation():
+    factor = _panel([[np.nan, np.nan, np.nan]])
+
+    result = impute_missing(factor, method="cross_section_median")
+
+    assert result.loc[pd.Timestamp("2024-01-01")].isna().all()
+
+
+def test_industry_median_imputation_without_industry_data_raises():
+    factor = _panel([[1.0, np.nan, 3.0]])
+
+    with pytest.raises(ValueError, match="industry_median imputation requires industry data"):
+        impute_missing(factor, method="industry_median")
