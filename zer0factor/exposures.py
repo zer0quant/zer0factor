@@ -13,7 +13,7 @@ def build_sw_l1_industry_panel(
     dates: Iterable[pd.Timestamp | str],
     ts_codes: Iterable[str],
 ) -> pd.DataFrame:
-    date_index = pd.DatetimeIndex(pd.to_datetime(list(dates))).sort_values()
+    date_index = pd.DatetimeIndex(pd.to_datetime(list(dates)))
     columns = [str(code) for code in ts_codes]
     members = pro.index_member_all(fields=SW_L1_INDUSTRY_FIELDS)
     panel = pd.DataFrame(index=date_index, columns=columns, dtype="object")

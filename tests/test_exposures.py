@@ -36,3 +36,15 @@ def test_build_sw_l1_industry_panel_applies_membership_dates_and_latest_overlap(
     assert result.loc[pd.Timestamp("2024-01-01"), "000003.SZ"] == "801030.SI"
     assert result.loc[pd.Timestamp("2024-01-02"), "000003.SZ"] == "801040.SI"
     assert pd.isna(result.loc[pd.Timestamp("2024-01-03"), "000004.SZ"])
+
+
+def test_build_sw_l1_industry_panel_preserves_requested_date_order():
+    dates = pd.to_datetime(["2024-01-03", "2024-01-01"])
+
+    result = build_sw_l1_industry_panel(
+        FakeIndustryPro(),
+        dates=dates,
+        ts_codes=["000001.SZ"],
+    )
+
+    assert list(result.index) == list(dates)
