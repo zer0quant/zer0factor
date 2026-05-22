@@ -37,6 +37,7 @@ MARKET_CAP_PREPROCESS_CONFIG = PreprocessConfig(
     standardize_method="zscore",
     neutralize_method=None,
 )
+STANDARD_PREPROCESS_CONFIG = MARKET_CAP_PREPROCESS_CONFIG
 NEUTRALIZATION_SIZE_FACTOR = "z_log_circulating_market_cap"
 LOG_FORMAT = "{time:YYYY-MM-DD HH:mm:ss.SSS} | {level:<8} | {message}"
 
@@ -201,6 +202,22 @@ def neutralize_stored_factor(
     return len(output)
 
 
+def preprocess_stored_factor(
+    *,
+    factor_name: str,
+    output_name: str,
+    storage: FactorStorage,
+    start_date: str | None = None,
+    end_date: str | None = None,
+    config: PreprocessConfig = STANDARD_PREPROCESS_CONFIG,
+) -> int:
+    source = storage.read(factor_name, start_date=start_date, end_date=end_date)
+    pipeline = FactorPreprocessPipeline(config)
+    output = pipeline.transform(source)
+    storage.write(output_name, output)
+    return len(output)
+
+
 def _factor_long_to_wide(df: pd.DataFrame) -> pd.DataFrame:
     frame = df.loc[:, ["trade_date", "ts_code", "value"]].copy()
     frame["trade_date"] = _parse_trade_dates(frame["trade_date"])
@@ -311,6 +328,42 @@ def compute_market_cap(ctx):
     for factor_name, row_count in row_counts.items():
         logger.info("market_cap_factor_rows factor={} rows={}", factor_name, row_count)
     logger.info("market_cap_factor_job_finished factors={}", len(row_counts))
+
+
+@cli.command("preprocess-factor")
+@click.argument("factor_name")
+@click.option("--output-name", default=None)
+@click.option("--start-date", default=None)
+@click.option("--end-date", default=None)
+@click.pass_context
+def preprocess_factor(ctx, factor_name, output_name, start_date, end_date):
+    """Preprocess a stored factor with winsorization, imputation, and z-score."""
+    cfg = load_config(ctx.obj["config_path"])
+    configure_logging(cfg.log_path)
+    resolved_start = start_date or cfg.start_date
+    resolved_end = end_date if end_date is not None else (cfg.end_date or None)
+    resolved_output = output_name or f"z_{factor_name}"
+    logger.info(
+        "preprocess_factor_job_started factor={} output={} start_date={} end_date={}",
+        factor_name,
+        resolved_output,
+        resolved_start,
+        resolved_end or "latest",
+    )
+    storage = FactorStorage(cfg.factor_dir, cfg.db_path)
+    rows = preprocess_stored_factor(
+        factor_name=factor_name,
+        output_name=resolved_output,
+        storage=storage,
+        start_date=resolved_start,
+        end_date=resolved_end,
+    )
+    logger.info(
+        "preprocess_factor_job_finished factor={} output={} rows={}",
+        factor_name,
+        resolved_output,
+        rows,
+    )
 
 
 @cli.command("neutralize-factor")

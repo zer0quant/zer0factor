@@ -1,4 +1,5 @@
 import pandas as pd
+import pytest
 from click.testing import CliRunner
 
 from main import (
@@ -8,6 +9,7 @@ from main import (
     compute_and_store_factors,
     compute_and_store_market_cap_factors,
     neutralize_stored_factor,
+    preprocess_stored_factor,
 )
 from zer0factor.core import FactorFrame
 from zer0factor.storage import FactorStorage
@@ -123,6 +125,48 @@ def test_neutralize_factor_command_is_registered():
     assert result.exit_code == 0
     assert "Neutralize a stored z-scored factor" in result.output
     assert "--size-factor-name" in result.output
+
+
+def test_preprocess_factor_command_is_registered():
+    runner = CliRunner()
+
+    result = runner.invoke(cli, ["preprocess-factor", "--help"])
+
+    assert result.exit_code == 0
+    assert "Preprocess a stored factor" in result.output
+    assert "--output-name" in result.output
+
+
+def test_preprocess_stored_factor_writes_z_factor(tmp_path):
+    storage = FactorStorage(tmp_path / "factors", tmp_path / "factor.duckdb")
+    source = pd.DataFrame(
+        {
+            "trade_date": ["20240101"] * 4,
+            "ts_code": ["000001.SZ", "000002.SZ", "000003.SZ", "000004.SZ"],
+            "value": [1.0, 2.0, None, 100.0],
+        }
+    )
+    storage.write("daily_return", source)
+
+    rows = preprocess_stored_factor(
+        factor_name="daily_return",
+        output_name="z_daily_return",
+        storage=storage,
+        start_date="20240101",
+        end_date="20240101",
+    )
+
+    result = storage.read("z_daily_return")
+    assert rows == 4
+    assert len(result) == 4
+    assert list(result.columns) == ["trade_date", "ts_code", "value"]
+    assert result["trade_date"].astype(str).unique().tolist() == ["20240101"]
+    assert "z_daily_return" in storage.list_factors()
+
+    row = result.sort_values("ts_code")["value"]
+    assert row.isna().sum() == 0
+    assert row.mean() == pytest.approx(0.0)
+    assert row.std() == pytest.approx(1.0)
 
 
 class FakeIndustryNeutralizationPro:
