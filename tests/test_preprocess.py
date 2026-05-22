@@ -264,6 +264,65 @@ def test_size_industry_neutralization_returns_nan_when_rows_are_insufficient():
     assert result.loc[pd.Timestamp("2024-01-01")].isna().all()
 
 
+def test_size_industry_neutralization_preserves_factor_axes():
+    factor = _panel([[1.0, 2.0, 3.0, 4.0]])
+    size = pd.DataFrame(
+        [[1.0, 2.0, 3.0, 4.0, 5.0], [1.0, 2.0, 3.0, 4.0, 5.0]],
+        index=pd.to_datetime(["2024-01-01", "2024-01-02"]),
+        columns=["000001.SZ", "000002.SZ", "000003.SZ", "000004.SZ", "999999.SZ"],
+    )
+    industry = pd.DataFrame(
+        [["bank", "bank", "tech", "tech", "other"], ["bank", "bank", "tech", "tech", "other"]],
+        index=size.index,
+        columns=size.columns,
+    )
+
+    result = neutralize(
+        factor,
+        method="size_industry",
+        exposures={"size": size, "industry": industry},
+    )
+
+    assert list(result.index) == list(factor.index)
+    assert list(result.columns) == list(factor.columns)
+
+
+def test_size_industry_neutralization_rejects_duplicate_axes():
+    factor = pd.DataFrame(
+        [[1.0, 2.0], [3.0, 4.0]],
+        index=pd.to_datetime(["2024-01-01", "2024-01-01"]),
+        columns=["000001.SZ", "000002.SZ"],
+    )
+    size = factor.copy()
+    industry = pd.DataFrame(
+        [["bank", "tech"], ["bank", "tech"]],
+        index=factor.index,
+        columns=factor.columns,
+    )
+
+    with pytest.raises(ValueError, match="duplicate index labels"):
+        neutralize(
+            factor,
+            method="size_industry",
+            exposures={"size": size, "industry": industry},
+        )
+
+    factor = pd.DataFrame(
+        [[1.0, 2.0]],
+        index=pd.to_datetime(["2024-01-01"]),
+        columns=["000001.SZ", "000001.SZ"],
+    )
+    size = factor.copy()
+    industry = pd.DataFrame([["bank", "tech"]], index=factor.index, columns=factor.columns)
+
+    with pytest.raises(ValueError, match="duplicate column labels"):
+        neutralize(
+            factor,
+            method="size_industry",
+            exposures={"size": size, "industry": industry},
+        )
+
+
 def test_neutralization_none_returns_copy():
     factor = _panel([[1.0, 2.0, 3.0]])
 

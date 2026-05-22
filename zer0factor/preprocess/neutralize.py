@@ -31,18 +31,16 @@ def _neutralize_size_industry(
     size: pd.DataFrame,
     industry: pd.DataFrame,
 ) -> pd.DataFrame:
-    index = factor.index.union(size.index, sort=False).union(industry.index, sort=False)
-    columns = factor.columns.union(size.columns, sort=False).union(
-        industry.columns,
-        sort=False,
-    )
-    aligned_factor = factor.reindex(index=index, columns=columns)
-    aligned_size = size.reindex(index=index, columns=columns)
-    aligned_industry = industry.reindex(index=index, columns=columns)
-    result = pd.DataFrame(np.nan, index=index, columns=columns, dtype="float64")
+    _validate_unique_axes(factor, "factor")
+    _validate_unique_axes(size, "size")
+    _validate_unique_axes(industry, "industry")
 
-    for date in index:
-        y = pd.to_numeric(aligned_factor.loc[date], errors="coerce").replace(
+    aligned_size = size.reindex(index=factor.index, columns=factor.columns)
+    aligned_industry = industry.reindex(index=factor.index, columns=factor.columns)
+    result = pd.DataFrame(np.nan, index=factor.index, columns=factor.columns, dtype="float64")
+
+    for date in factor.index:
+        y = pd.to_numeric(factor.loc[date], errors="coerce").replace(
             [np.inf, -np.inf],
             np.nan,
         )
@@ -80,6 +78,13 @@ def _neutralize_size_industry(
         result.loc[date, valid_index] = y_values - x_values @ beta
 
     return result
+
+
+def _validate_unique_axes(frame: pd.DataFrame, name: str) -> None:
+    if frame.index.has_duplicates:
+        raise ValueError(f"{name} exposure has duplicate index labels")
+    if frame.columns.has_duplicates:
+        raise ValueError(f"{name} exposure has duplicate column labels")
 
 
 def _is_finite_or_label(value: object) -> bool:
