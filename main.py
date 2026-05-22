@@ -334,7 +334,8 @@ def neutralize_factor(ctx, factor_name, output_name, size_factor_name, start_dat
     resolved_end = end_date if end_date is not None else (cfg.end_date or None)
     resolved_output = output_name or f"neu_{factor_name}"
     logger.info(
-        "neutralize_factor_job_started factor={} output={} size_factor={} start_date={} end_date={}",
+        "neutralize_factor_job_started "
+        "factor={} output={} size_factor={} start_date={} end_date={}",
         factor_name,
         resolved_output,
         size_factor_name,
