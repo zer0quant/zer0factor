@@ -186,14 +186,82 @@ def test_rank_standardization_outputs_percentile_ranks():
     assert row["000002.SZ"] == pytest.approx(1.0)
 
 
-def test_size_industry_neutralization_raises_clear_not_implemented_error():
+def test_size_industry_neutralization_removes_size_and_industry_exposure():
+    factor = pd.DataFrame(
+        [[11.0, 13.0, 17.0, 19.0, 23.0, 29.0]],
+        index=pd.to_datetime(["2024-01-01"]),
+        columns=[
+            "000001.SZ",
+            "000002.SZ",
+            "000003.SZ",
+            "000004.SZ",
+            "000005.SZ",
+            "000006.SZ",
+        ],
+    )
+    size = pd.DataFrame(
+        [[1.0, 2.0, 3.0, 4.0, 5.0, 6.0]],
+        index=factor.index,
+        columns=factor.columns,
+    )
+    industry = pd.DataFrame(
+        [["bank", "bank", "tech", "tech", "energy", "energy"]],
+        index=factor.index,
+        columns=factor.columns,
+    )
+
+    result = neutralize(
+        factor,
+        method="size_industry",
+        exposures={"size": size, "industry": industry},
+    )
+
+    valid = result.loc[pd.Timestamp("2024-01-01")].dropna()
+    design = pd.DataFrame(
+        {
+            "intercept": 1.0,
+            "size": size.loc[pd.Timestamp("2024-01-01"), valid.index],
+        },
+        index=valid.index,
+    )
+    dummies = pd.get_dummies(
+        industry.loc[pd.Timestamp("2024-01-01"), valid.index],
+        drop_first=True,
+        dtype=float,
+    )
+    design = pd.concat([design, dummies], axis=1)
+
+    assert abs(valid.sum()) < 1e-10
+    assert np.abs(design.T.to_numpy() @ valid.to_numpy()).max() < 1e-10
+
+
+def test_size_industry_neutralization_requires_exposures():
     factor = _panel([[1.0, 2.0, 3.0]])
+    size = _panel([[1.0, 2.0, 3.0]])
 
     with pytest.raises(
         ValueError,
-        match="neutralization requires implemented exposure regression support",
+        match="size_industry neutralization requires size and industry",
     ):
-        neutralize(factor, method="size_industry")
+        neutralize(factor, method="size_industry", exposures={"size": size})
+
+
+def test_size_industry_neutralization_returns_nan_when_rows_are_insufficient():
+    factor = _panel([[1.0, 2.0, 3.0]])
+    size = _panel([[1.0, 2.0, 3.0]])
+    industry = pd.DataFrame(
+        [["bank", "tech", "energy"]],
+        index=factor.index,
+        columns=factor.columns,
+    )
+
+    result = neutralize(
+        factor,
+        method="size_industry",
+        exposures={"size": size, "industry": industry},
+    )
+
+    assert result.loc[pd.Timestamp("2024-01-01")].isna().all()
 
 
 def test_neutralization_none_returns_copy():
@@ -276,6 +344,51 @@ def test_pipeline_long_input_returns_standard_long_output():
         "ts_code": "000003.SZ",
         "value": pytest.approx(1.0),
     }
+
+
+def test_pipeline_size_industry_neutralization_preserves_long_output():
+    stocks = [
+        "000001.SZ",
+        "000002.SZ",
+        "000003.SZ",
+        "000004.SZ",
+        "000005.SZ",
+        "000006.SZ",
+    ]
+    factor = pd.DataFrame(
+        {
+            "trade_date": ["20240101"] * 6,
+            "ts_code": stocks,
+            "value": [11.0, 13.0, 17.0, 19.0, 23.0, 29.0],
+        }
+    )
+    size = pd.DataFrame(
+        [[1.0, 2.0, 3.0, 4.0, 5.0, 6.0]],
+        index=pd.to_datetime(["2024-01-01"]),
+        columns=stocks,
+    )
+    industry = pd.DataFrame(
+        [["bank", "bank", "tech", "tech", "energy", "energy"]],
+        index=size.index,
+        columns=stocks,
+    )
+    pipeline = FactorPreprocessPipeline(
+        PreprocessConfig(
+            winsorize_method="none",
+            impute_method="none",
+            standardize_method="none",
+            neutralize_method="size_industry",
+        )
+    )
+
+    result = pipeline.transform(
+        factor,
+        exposures={"size": size, "industry": industry},
+    )
+
+    assert list(result.columns) == ["trade_date", "ts_code", "value"]
+    assert result["trade_date"].unique().tolist() == ["20240101"]
+    assert len(result) == 6
 
 
 def test_pipeline_long_input_parses_numeric_yyyymmdd_dates():
