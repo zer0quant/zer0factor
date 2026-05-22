@@ -313,5 +313,51 @@ def compute_market_cap(ctx):
     logger.info("market_cap_factor_job_finished factors={}", len(row_counts))
 
 
+@cli.command("neutralize-factor")
+@click.argument("factor_name")
+@click.option("--output-name", default=None)
+@click.option(
+    "--size-factor-name",
+    default=NEUTRALIZATION_SIZE_FACTOR,
+    show_default=True,
+)
+@click.option("--start-date", default=None)
+@click.option("--end-date", default=None)
+@click.pass_context
+def neutralize_factor(ctx, factor_name, output_name, size_factor_name, start_date, end_date):
+    """Neutralize a stored z-scored factor against size and SW L1 industry."""
+    from zer0share.api import LocalPro
+
+    cfg = load_config(ctx.obj["config_path"])
+    configure_logging(cfg.log_path)
+    resolved_start = start_date or cfg.start_date
+    resolved_end = end_date if end_date is not None else (cfg.end_date or None)
+    resolved_output = output_name or f"neu_{factor_name}"
+    logger.info(
+        "neutralize_factor_job_started factor={} output={} size_factor={} start_date={} end_date={}",
+        factor_name,
+        resolved_output,
+        size_factor_name,
+        resolved_start,
+        resolved_end or "latest",
+    )
+    storage = FactorStorage(cfg.factor_dir, cfg.db_path)
+    rows = neutralize_stored_factor(
+        factor_name=factor_name,
+        output_name=resolved_output,
+        storage=storage,
+        pro=LocalPro(cfg.zer0share_data_dir),
+        start_date=resolved_start,
+        end_date=resolved_end,
+        size_factor_name=size_factor_name,
+    )
+    logger.info(
+        "neutralize_factor_job_finished factor={} output={} rows={}",
+        factor_name,
+        resolved_output,
+        rows,
+    )
+
+
 if __name__ == "__main__":
     cli()

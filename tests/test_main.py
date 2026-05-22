@@ -115,6 +115,16 @@ def test_compute_market_cap_command_is_registered():
     assert "Compute built-in market cap factors" in result.output
 
 
+def test_neutralize_factor_command_is_registered():
+    runner = CliRunner()
+
+    result = runner.invoke(cli, ["neutralize-factor", "--help"])
+
+    assert result.exit_code == 0
+    assert "Neutralize a stored z-scored factor" in result.output
+    assert "--size-factor-name" in result.output
+
+
 class FakeIndustryNeutralizationPro:
     def index_member_all(self, fields=None):
         assert fields == "l1_code,l1_name,ts_code,in_date,out_date,is_new"
