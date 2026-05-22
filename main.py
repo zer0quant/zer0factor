@@ -3,10 +3,12 @@ from collections.abc import Callable
 from pathlib import Path
 
 import click
+import pandas as pd
 from loguru import logger
 
 from zer0factor.config import load_config
 from zer0factor.core import Factor, Zer0ShareDataProvider, run_factor
+from zer0factor.exposures import build_sw_l1_industry_panel
 from zer0factor.factors import (
     DailyReturn,
     IntradayReturn,
@@ -35,6 +37,7 @@ MARKET_CAP_PREPROCESS_CONFIG = PreprocessConfig(
     standardize_method="zscore",
     neutralize_method=None,
 )
+NEUTRALIZATION_SIZE_FACTOR = "z_log_circulating_market_cap"
 LOG_FORMAT = "{time:YYYY-MM-DD HH:mm:ss.SSS} | {level:<8} | {message}"
 
 
@@ -159,6 +162,70 @@ def compute_and_store_market_cap_factors(
                 f"z_factor={z_name} z_rows={len(z_scored)}"
             )
     return row_counts
+
+
+def neutralize_stored_factor(
+    *,
+    factor_name: str,
+    output_name: str,
+    storage: FactorStorage,
+    pro,
+    start_date: str | None = None,
+    end_date: str | None = None,
+    size_factor_name: str = NEUTRALIZATION_SIZE_FACTOR,
+) -> int:
+    source = storage.read(factor_name, start_date=start_date, end_date=end_date)
+    size = storage.read(size_factor_name, start_date=start_date, end_date=end_date)
+    source_panel = _factor_long_to_wide(source)
+    size_panel = _factor_long_to_wide(size)
+    dates = source_panel.index.intersection(size_panel.index)
+    ts_codes = source_panel.columns.intersection(size_panel.columns)
+    source_panel = source_panel.reindex(index=dates, columns=ts_codes)
+    size_panel = size_panel.reindex(index=dates, columns=ts_codes)
+    industry_panel = build_sw_l1_industry_panel(pro, dates=dates, ts_codes=ts_codes)
+
+    pipeline = FactorPreprocessPipeline(
+        PreprocessConfig(
+            winsorize_method="none",
+            impute_method="none",
+            standardize_method="none",
+            neutralize_method="size_industry",
+        )
+    )
+    result = pipeline.transform(
+        source_panel,
+        exposures={"size": size_panel, "industry": industry_panel},
+    )
+    output = _factor_wide_to_long(result)
+    storage.write(output_name, output)
+    return len(output)
+
+
+def _factor_long_to_wide(df: pd.DataFrame) -> pd.DataFrame:
+    frame = df.loc[:, ["trade_date", "ts_code", "value"]].copy()
+    frame["trade_date"] = _parse_trade_dates(frame["trade_date"])
+    if frame.duplicated(["trade_date", "ts_code"]).any():
+        raise ValueError("factor data contains duplicate trade_date/ts_code")
+    return (
+        frame.pivot(index="trade_date", columns="ts_code", values="value")
+        .sort_index()
+        .sort_index(axis=1)
+    )
+
+
+def _parse_trade_dates(values: pd.Series) -> pd.Series:
+    if pd.api.types.is_numeric_dtype(values):
+        return pd.to_datetime(values.astype("Int64").astype(str), format="%Y%m%d")
+    return pd.to_datetime(values)
+
+
+def _factor_wide_to_long(df: pd.DataFrame) -> pd.DataFrame:
+    result = df.copy()
+    result.index = pd.to_datetime(result.index)
+    long = result.stack(future_stack=True).dropna().rename("value").reset_index()
+    long.columns = ["trade_date", "ts_code", "value"]
+    long["trade_date"] = pd.to_datetime(long["trade_date"]).dt.strftime("%Y%m%d")
+    return long.sort_values(["trade_date", "ts_code"]).reset_index(drop=True)
 
 
 @cli.command("compute-returns")

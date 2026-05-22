@@ -7,6 +7,7 @@ from main import (
     cli,
     compute_and_store_factors,
     compute_and_store_market_cap_factors,
+    neutralize_stored_factor,
 )
 from zer0factor.core import FactorFrame
 from zer0factor.storage import FactorStorage
@@ -112,3 +113,80 @@ def test_compute_market_cap_command_is_registered():
 
     assert result.exit_code == 0
     assert "Compute built-in market cap factors" in result.output
+
+
+class FakeIndustryNeutralizationPro:
+    def index_member_all(self, fields=None):
+        assert fields == "l1_code,l1_name,ts_code,in_date,out_date,is_new"
+        return pd.DataFrame(
+            {
+                "l1_code": [
+                    "801010.SI",
+                    "801010.SI",
+                    "801020.SI",
+                    "801020.SI",
+                    "801030.SI",
+                    "801030.SI",
+                ],
+                "l1_name": ["a", "a", "b", "b", "c", "c"],
+                "ts_code": [
+                    "000001.SZ",
+                    "000002.SZ",
+                    "000003.SZ",
+                    "000004.SZ",
+                    "000005.SZ",
+                    "000006.SZ",
+                ],
+                "in_date": ["2020-01-01"] * 6,
+                "out_date": [None] * 6,
+                "is_new": ["Y"] * 6,
+            }
+        )
+
+
+def test_neutralize_stored_factor_writes_neu_factor(tmp_path):
+    storage = FactorStorage(tmp_path / "factors", tmp_path / "factor.duckdb")
+    source = pd.DataFrame(
+        {
+            "trade_date": ["20240101"] * 6,
+            "ts_code": [
+                "000001.SZ",
+                "000002.SZ",
+                "000003.SZ",
+                "000004.SZ",
+                "000005.SZ",
+                "000006.SZ",
+            ],
+            "value": [11.0, 13.0, 17.0, 19.0, 23.0, 29.0],
+        }
+    )
+    size = pd.DataFrame(
+        {
+            "trade_date": ["20240101"] * 6,
+            "ts_code": [
+                "000001.SZ",
+                "000002.SZ",
+                "000003.SZ",
+                "000004.SZ",
+                "000005.SZ",
+                "000006.SZ",
+            ],
+            "value": [1.0, 2.0, 3.0, 4.0, 5.0, 6.0],
+        }
+    )
+    storage.write("z_demo_factor", source)
+    storage.write("z_log_circulating_market_cap", size)
+
+    rows = neutralize_stored_factor(
+        factor_name="z_demo_factor",
+        output_name="neu_z_demo_factor",
+        storage=storage,
+        pro=FakeIndustryNeutralizationPro(),
+        start_date="20240101",
+        end_date="20240101",
+    )
+
+    result = storage.read("neu_z_demo_factor")
+    assert rows == 6
+    assert len(result) == 6
+    assert "neu_z_demo_factor" in storage.list_factors()
