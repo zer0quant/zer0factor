@@ -264,6 +264,44 @@ def test_size_industry_neutralization_returns_nan_when_rows_are_insufficient():
     assert result.loc[pd.Timestamp("2024-01-01")].isna().all()
 
 
+def test_size_industry_neutralization_excludes_missing_and_non_finite_rows():
+    factor = pd.DataFrame(
+        [[11.0, np.nan, 17.0, 19.0, 23.0, 29.0, np.inf, 31.0, 37.0]],
+        index=pd.to_datetime(["2024-01-01"]),
+        columns=[
+            "000001.SZ",
+            "000002.SZ",
+            "000003.SZ",
+            "000004.SZ",
+            "000005.SZ",
+            "000006.SZ",
+            "000007.SZ",
+            "000008.SZ",
+            "000009.SZ",
+        ],
+    )
+    size = pd.DataFrame(
+        [[1.0, 2.0, np.inf, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0]],
+        index=factor.index,
+        columns=factor.columns,
+    )
+    industry = pd.DataFrame(
+        [["bank", "bank", "tech", pd.NA, "energy", "energy", "retail", "bank", "tech"]],
+        index=factor.index,
+        columns=factor.columns,
+    )
+
+    result = neutralize(
+        factor,
+        method="size_industry",
+        exposures={"size": size, "industry": industry},
+    )
+
+    row = result.loc[pd.Timestamp("2024-01-01")]
+    assert row[["000002.SZ", "000003.SZ", "000004.SZ", "000007.SZ"]].isna().all()
+    assert row[["000001.SZ", "000005.SZ", "000006.SZ", "000008.SZ", "000009.SZ"]].notna().all()
+
+
 def test_size_industry_neutralization_preserves_factor_axes():
     factor = _panel([[1.0, 2.0, 3.0, 4.0]])
     size = pd.DataFrame(
@@ -314,6 +352,35 @@ def test_size_industry_neutralization_rejects_duplicate_axes():
     )
     size = factor.copy()
     industry = pd.DataFrame([["bank", "tech"]], index=factor.index, columns=factor.columns)
+
+    with pytest.raises(ValueError, match="duplicate column labels"):
+        neutralize(
+            factor,
+            method="size_industry",
+            exposures={"size": size, "industry": industry},
+        )
+
+    factor = _panel([[1.0, 2.0]])
+    size = pd.DataFrame(
+        [[1.0, 2.0], [3.0, 4.0]],
+        index=pd.to_datetime(["2024-01-01", "2024-01-01"]),
+        columns=factor.columns,
+    )
+    industry = pd.DataFrame([["bank", "tech"]], index=factor.index, columns=factor.columns)
+
+    with pytest.raises(ValueError, match="duplicate index labels"):
+        neutralize(
+            factor,
+            method="size_industry",
+            exposures={"size": size, "industry": industry},
+        )
+
+    size = factor.copy()
+    industry = pd.DataFrame(
+        [["bank", "tech"]],
+        index=factor.index,
+        columns=["000001.SZ", "000001.SZ"],
+    )
 
     with pytest.raises(ValueError, match="duplicate column labels"):
         neutralize(
