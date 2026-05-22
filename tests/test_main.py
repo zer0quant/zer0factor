@@ -224,4 +224,4 @@ def test_neutralize_stored_factor_writes_neu_factor(tmp_path):
         axis=1,
     )
     assert abs(residuals.sum()) < 1e-10
-    assert (design.T.to_numpy() @ residuals.to_numpy()).max() < 1e-10
+    assert abs(design.T.to_numpy() @ residuals.to_numpy()).max() < 1e-10
