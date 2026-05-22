@@ -10,6 +10,7 @@ from main import (
     compute_and_store_market_cap_factors,
     neutralize_stored_factor,
     preprocess_stored_factor,
+    standardize_stored_factor,
 )
 from zer0factor.core import FactorFrame
 from zer0factor.storage import FactorStorage
@@ -123,21 +124,21 @@ def test_neutralize_factor_command_is_registered():
     result = runner.invoke(cli, ["neutralize-factor", "--help"])
 
     assert result.exit_code == 0
-    assert "Neutralize a stored z-scored factor" in result.output
+    assert "Neutralize a standardized factor and standardize the residual" in result.output
     assert "--size-factor-name" in result.output
 
 
-def test_preprocess_factor_command_is_registered():
+def test_standardize_factor_command_is_registered():
     runner = CliRunner()
 
-    result = runner.invoke(cli, ["preprocess-factor", "--help"])
+    result = runner.invoke(cli, ["standardize-factor", "--help"])
 
     assert result.exit_code == 0
-    assert "Preprocess a stored factor" in result.output
+    assert "Standardize a stored factor" in result.output
     assert "--output-name" in result.output
 
 
-def test_preprocess_stored_factor_writes_z_factor(tmp_path):
+def test_standardize_stored_factor_writes_z_factor(tmp_path):
     storage = FactorStorage(tmp_path / "factors", tmp_path / "factor.duckdb")
     source = pd.DataFrame(
         {
@@ -148,7 +149,7 @@ def test_preprocess_stored_factor_writes_z_factor(tmp_path):
     )
     storage.write("daily_return", source)
 
-    rows = preprocess_stored_factor(
+    rows = standardize_stored_factor(
         factor_name="daily_return",
         output_name="z_daily_return",
         storage=storage,
@@ -167,6 +168,29 @@ def test_preprocess_stored_factor_writes_z_factor(tmp_path):
     assert row.isna().sum() == 0
     assert row.mean() == pytest.approx(0.0)
     assert row.std() == pytest.approx(1.0)
+
+
+def test_preprocess_stored_factor_alias_matches_standardize_stored_factor(tmp_path):
+    storage = FactorStorage(tmp_path / "factors", tmp_path / "factor.duckdb")
+    storage.write(
+        "daily_return",
+        pd.DataFrame(
+            {
+                "trade_date": ["20240101"] * 3,
+                "ts_code": ["000001.SZ", "000002.SZ", "000003.SZ"],
+                "value": [1.0, 2.0, 3.0],
+            }
+        ),
+    )
+
+    rows = preprocess_stored_factor(
+        factor_name="daily_return",
+        output_name="z_daily_return",
+        storage=storage,
+    )
+
+    assert rows == 3
+    assert "z_daily_return" in storage.list_factors()
 
 
 class FakeIndustryNeutralizationPro:
@@ -198,7 +222,7 @@ class FakeIndustryNeutralizationPro:
         )
 
 
-def test_neutralize_stored_factor_writes_neu_factor(tmp_path):
+def test_neutralize_stored_factor_reads_z_factor_and_writes_standardized_neutral_factor(tmp_path):
     storage = FactorStorage(tmp_path / "factors", tmp_path / "factor.duckdb")
     source = pd.DataFrame(
         {
@@ -232,20 +256,20 @@ def test_neutralize_stored_factor_writes_neu_factor(tmp_path):
     storage.write("z_log_circulating_market_cap", size)
 
     rows = neutralize_stored_factor(
-        factor_name="z_demo_factor",
-        output_name="neu_z_demo_factor",
+        factor_name="demo_factor",
+        output_name="z_neu_demo_factor",
         storage=storage,
         pro=FakeIndustryNeutralizationPro(),
         start_date="20240101",
         end_date="20240101",
     )
 
-    result = storage.read("neu_z_demo_factor")
+    result = storage.read("z_neu_demo_factor")
     assert rows == 6
     assert len(result) == 6
     assert list(result.columns) == ["trade_date", "ts_code", "value"]
     assert result["trade_date"].astype(str).unique().tolist() == ["20240101"]
-    assert "neu_z_demo_factor" in storage.list_factors()
+    assert "z_neu_demo_factor" in storage.list_factors()
 
     residuals = result.set_index("ts_code")["value"].sort_index()
     industry = pd.Series(
@@ -269,3 +293,5 @@ def test_neutralize_stored_factor_writes_neu_factor(tmp_path):
     )
     assert abs(residuals.sum()) < 1e-10
     assert abs(design.T.to_numpy() @ residuals.to_numpy()).max() < 1e-10
+    assert residuals.mean() == pytest.approx(0.0)
+    assert residuals.std() == pytest.approx(1.0)

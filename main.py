@@ -175,7 +175,8 @@ def neutralize_stored_factor(
     end_date: str | None = None,
     size_factor_name: str = NEUTRALIZATION_SIZE_FACTOR,
 ) -> int:
-    source = storage.read(factor_name, start_date=start_date, end_date=end_date)
+    source_name = _standardized_factor_name(factor_name)
+    source = storage.read(source_name, start_date=start_date, end_date=end_date)
     size = storage.read(size_factor_name, start_date=start_date, end_date=end_date)
     source_panel = _factor_long_to_wide(source)
     size_panel = _factor_long_to_wide(size)
@@ -197,12 +198,13 @@ def neutralize_stored_factor(
         source_panel,
         exposures={"size": size_panel, "industry": industry_panel},
     )
-    output = _factor_wide_to_long(result)
+    standardized = standardize_stored_panel(result)
+    output = _factor_wide_to_long(standardized)
     storage.write(output_name, output)
     return len(output)
 
 
-def preprocess_stored_factor(
+def standardize_stored_factor(
     *,
     factor_name: str,
     output_name: str,
@@ -216,6 +218,28 @@ def preprocess_stored_factor(
     output = pipeline.transform(source)
     storage.write(output_name, output)
     return len(output)
+
+
+def preprocess_stored_factor(**kwargs) -> int:
+    return standardize_stored_factor(**kwargs)
+
+
+def standardize_stored_panel(panel: pd.DataFrame) -> pd.DataFrame:
+    pipeline = FactorPreprocessPipeline(
+        PreprocessConfig(
+            winsorize_method="none",
+            impute_method="none",
+            standardize_method="zscore",
+            neutralize_method=None,
+        )
+    )
+    return pipeline.transform(panel)
+
+
+def _standardized_factor_name(factor_name: str) -> str:
+    if factor_name.startswith("z_"):
+        return factor_name
+    return f"z_{factor_name}"
 
 
 def _factor_long_to_wide(df: pd.DataFrame) -> pd.DataFrame:
@@ -330,28 +354,28 @@ def compute_market_cap(ctx):
     logger.info("market_cap_factor_job_finished factors={}", len(row_counts))
 
 
-@cli.command("preprocess-factor")
+@cli.command("standardize-factor")
 @click.argument("factor_name")
 @click.option("--output-name", default=None)
 @click.option("--start-date", default=None)
 @click.option("--end-date", default=None)
 @click.pass_context
-def preprocess_factor(ctx, factor_name, output_name, start_date, end_date):
-    """Preprocess a stored factor with winsorization, imputation, and z-score."""
+def standardize_factor(ctx, factor_name, output_name, start_date, end_date):
+    """Standardize a stored factor with winsorization, imputation, and z-score."""
     cfg = load_config(ctx.obj["config_path"])
     configure_logging(cfg.log_path)
     resolved_start = start_date or cfg.start_date
     resolved_end = end_date if end_date is not None else (cfg.end_date or None)
     resolved_output = output_name or f"z_{factor_name}"
     logger.info(
-        "preprocess_factor_job_started factor={} output={} start_date={} end_date={}",
+        "standardize_factor_job_started factor={} output={} start_date={} end_date={}",
         factor_name,
         resolved_output,
         resolved_start,
         resolved_end or "latest",
     )
     storage = FactorStorage(cfg.factor_dir, cfg.db_path)
-    rows = preprocess_stored_factor(
+    rows = standardize_stored_factor(
         factor_name=factor_name,
         output_name=resolved_output,
         storage=storage,
@@ -359,7 +383,7 @@ def preprocess_factor(ctx, factor_name, output_name, start_date, end_date):
         end_date=resolved_end,
     )
     logger.info(
-        "preprocess_factor_job_finished factor={} output={} rows={}",
+        "standardize_factor_job_finished factor={} output={} rows={}",
         factor_name,
         resolved_output,
         rows,
@@ -378,18 +402,20 @@ def preprocess_factor(ctx, factor_name, output_name, start_date, end_date):
 @click.option("--end-date", default=None)
 @click.pass_context
 def neutralize_factor(ctx, factor_name, output_name, size_factor_name, start_date, end_date):
-    """Neutralize a stored z-scored factor against size and SW L1 industry."""
+    """Neutralize a standardized factor and standardize the residual."""
     from zer0share.api import LocalPro
 
     cfg = load_config(ctx.obj["config_path"])
     configure_logging(cfg.log_path)
     resolved_start = start_date or cfg.start_date
     resolved_end = end_date if end_date is not None else (cfg.end_date or None)
-    resolved_output = output_name or f"neu_{factor_name}"
+    raw_factor_name = factor_name[2:] if factor_name.startswith("z_") else factor_name
+    resolved_output = output_name or f"z_neu_{raw_factor_name}"
     logger.info(
         "neutralize_factor_job_started "
-        "factor={} output={} size_factor={} start_date={} end_date={}",
+        "factor={} source={} output={} size_factor={} start_date={} end_date={}",
         factor_name,
+        _standardized_factor_name(factor_name),
         resolved_output,
         size_factor_name,
         resolved_start,
