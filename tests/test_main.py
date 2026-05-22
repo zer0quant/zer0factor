@@ -199,4 +199,29 @@ def test_neutralize_stored_factor_writes_neu_factor(tmp_path):
     result = storage.read("neu_z_demo_factor")
     assert rows == 6
     assert len(result) == 6
+    assert list(result.columns) == ["trade_date", "ts_code", "value"]
+    assert result["trade_date"].astype(str).unique().tolist() == ["20240101"]
     assert "neu_z_demo_factor" in storage.list_factors()
+
+    residuals = result.set_index("ts_code")["value"].sort_index()
+    industry = pd.Series(
+        {
+            "000001.SZ": "801010.SI",
+            "000002.SZ": "801010.SI",
+            "000003.SZ": "801020.SI",
+            "000004.SZ": "801020.SI",
+            "000005.SZ": "801030.SI",
+            "000006.SZ": "801030.SI",
+        }
+    ).loc[residuals.index]
+    size_values = size.set_index("ts_code")["value"].loc[residuals.index]
+    design = pd.DataFrame(
+        {"intercept": 1.0, "size": size_values},
+        index=residuals.index,
+    )
+    design = pd.concat(
+        [design, pd.get_dummies(industry, drop_first=True, dtype=float)],
+        axis=1,
+    )
+    assert abs(residuals.sum()) < 1e-10
+    assert (design.T.to_numpy() @ residuals.to_numpy()).max() < 1e-10
