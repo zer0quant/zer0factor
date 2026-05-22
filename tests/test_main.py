@@ -10,6 +10,7 @@ from main import (
     compute_and_store_market_cap_factors,
     neutralize_stored_factor,
     preprocess_stored_factor,
+    read_universe_panel,
     standardize_stored_factor,
 )
 from zer0factor.core import FactorFrame
@@ -51,6 +52,19 @@ class FakeMarketCapProvider:
             index=index,
         )
         return FactorFrame({"total_mv": total_mv, "circ_mv": circ_mv})
+
+
+class FakeUniversePro:
+    def universe(self, universe=None, start_date=None, end_date=None, fields=None):
+        assert universe == "univ_trade_base"
+        assert fields == "trade_date,universe,ts_code"
+        return pd.DataFrame(
+            {
+                "trade_date": ["20240101", "20240101", "20240102"],
+                "universe": ["univ_trade_base"] * 3,
+                "ts_code": ["000001.SZ", "000003.SZ", "000002.SZ"],
+            }
+        )
 
 
 def test_compute_and_store_return_factors(tmp_path):
@@ -168,6 +182,38 @@ def test_standardize_stored_factor_writes_z_factor(tmp_path):
     assert row.isna().sum() == 0
     assert row.mean() == pytest.approx(0.0)
     assert row.std() == pytest.approx(1.0)
+
+
+def test_standardize_stored_factor_filters_by_process_universe(tmp_path):
+    storage = FactorStorage(tmp_path / "factors", tmp_path / "factor.duckdb")
+    source = pd.DataFrame(
+        {
+            "trade_date": ["20240101"] * 4,
+            "ts_code": ["000001.SZ", "000002.SZ", "000003.SZ", "000004.SZ"],
+            "value": [1.0, 2.0, 3.0, 100.0],
+        }
+    )
+    storage.write("daily_return", source)
+
+    rows = standardize_stored_factor(
+        factor_name="daily_return",
+        output_name="z_daily_return",
+        storage=storage,
+        start_date="20240101",
+        end_date="20240101",
+        universe=read_universe_panel(
+            FakeUniversePro(),
+            universe_name="univ_trade_base",
+            start_date="20240101",
+            end_date="20240101",
+        ),
+    )
+
+    result = storage.read("z_daily_return")
+    assert rows == 2
+    assert result["ts_code"].tolist() == ["000001.SZ", "000003.SZ"]
+    assert result["value"].mean() == pytest.approx(0.0)
+    assert result["value"].std() == pytest.approx(1.0)
 
 
 def test_preprocess_stored_factor_alias_matches_standardize_stored_factor(tmp_path):
@@ -295,3 +341,60 @@ def test_neutralize_stored_factor_reads_z_factor_and_writes_standardized_neutral
     assert abs(design.T.to_numpy() @ residuals.to_numpy()).max() < 1e-10
     assert residuals.mean() == pytest.approx(0.0)
     assert residuals.std() == pytest.approx(1.0)
+
+
+def test_neutralize_stored_factor_filters_by_process_universe(tmp_path):
+    storage = FactorStorage(tmp_path / "factors", tmp_path / "factor.duckdb")
+    source = pd.DataFrame(
+        {
+            "trade_date": ["20240101"] * 6,
+            "ts_code": [
+                "000001.SZ",
+                "000002.SZ",
+                "000003.SZ",
+                "000004.SZ",
+                "000005.SZ",
+                "000006.SZ",
+            ],
+            "value": [11.0, 13.0, 17.0, 19.0, 23.0, 29.0],
+        }
+    )
+    size = pd.DataFrame(
+        {
+            "trade_date": ["20240101"] * 6,
+            "ts_code": [
+                "000001.SZ",
+                "000002.SZ",
+                "000003.SZ",
+                "000004.SZ",
+                "000005.SZ",
+                "000006.SZ",
+            ],
+            "value": [1.0, 2.0, 3.0, 4.0, 5.0, 6.0],
+        }
+    )
+    storage.write("z_demo_factor", source)
+    storage.write("z_log_circulating_market_cap", size)
+
+    rows = neutralize_stored_factor(
+        factor_name="demo_factor",
+        output_name="z_neu_demo_factor",
+        storage=storage,
+        pro=FakeIndustryNeutralizationPro(),
+        start_date="20240101",
+        end_date="20240101",
+        universe=pd.DataFrame(
+            True,
+            index=pd.to_datetime(["2024-01-01"]),
+            columns=["000001.SZ", "000002.SZ", "000003.SZ", "000004.SZ"],
+        ),
+    )
+
+    result = storage.read("z_neu_demo_factor")
+    assert rows == 4
+    assert result["ts_code"].tolist() == [
+        "000001.SZ",
+        "000002.SZ",
+        "000003.SZ",
+        "000004.SZ",
+    ]

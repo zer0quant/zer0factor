@@ -174,6 +174,7 @@ def neutralize_stored_factor(
     start_date: str | None = None,
     end_date: str | None = None,
     size_factor_name: str = NEUTRALIZATION_SIZE_FACTOR,
+    universe: pd.DataFrame | None = None,
 ) -> int:
     source_name = _standardized_factor_name(factor_name)
     source = storage.read(source_name, start_date=start_date, end_date=end_date)
@@ -184,7 +185,10 @@ def neutralize_stored_factor(
     ts_codes = source_panel.columns.intersection(size_panel.columns)
     source_panel = source_panel.reindex(index=dates, columns=ts_codes)
     size_panel = size_panel.reindex(index=dates, columns=ts_codes)
+    source_panel = _filter_panel_by_universe(source_panel, universe)
+    size_panel = size_panel.reindex(index=source_panel.index, columns=source_panel.columns)
     industry_panel = build_sw_l1_industry_panel(pro, dates=dates, ts_codes=ts_codes)
+    industry_panel = industry_panel.reindex(index=source_panel.index, columns=source_panel.columns)
 
     pipeline = FactorPreprocessPipeline(
         PreprocessConfig(
@@ -212,8 +216,10 @@ def standardize_stored_factor(
     start_date: str | None = None,
     end_date: str | None = None,
     config: PreprocessConfig = STANDARD_PREPROCESS_CONFIG,
+    universe: pd.DataFrame | None = None,
 ) -> int:
     source = storage.read(factor_name, start_date=start_date, end_date=end_date)
+    source = _filter_long_by_universe(source, universe)
     pipeline = FactorPreprocessPipeline(config)
     output = pipeline.transform(source)
     storage.write(output_name, output)
@@ -240,6 +246,56 @@ def _standardized_factor_name(factor_name: str) -> str:
     if factor_name.startswith("z_"):
         return factor_name
     return f"z_{factor_name}"
+
+
+def read_universe_panel(
+    pro,
+    *,
+    universe_name: str,
+    start_date: str | None = None,
+    end_date: str | None = None,
+) -> pd.DataFrame:
+    rows = pro.universe(
+        universe=universe_name,
+        start_date=start_date,
+        end_date=end_date,
+        fields="trade_date,universe,ts_code",
+    )
+    if rows.empty:
+        return pd.DataFrame(dtype=bool)
+
+    frame = rows.loc[:, ["trade_date", "ts_code"]].copy()
+    frame["trade_date"] = _parse_trade_dates(frame["trade_date"])
+    frame["in_universe"] = True
+    return (
+        frame.drop_duplicates(["trade_date", "ts_code"])
+        .pivot(index="trade_date", columns="ts_code", values="in_universe")
+        .pipe(lambda df: df.where(df.notna(), False))
+        .astype(bool)
+        .sort_index()
+        .sort_index(axis=1)
+    )
+
+
+def _filter_long_by_universe(
+    factor: pd.DataFrame,
+    universe: pd.DataFrame | None,
+) -> pd.DataFrame:
+    if universe is None:
+        return factor
+    panel = _factor_long_to_wide(factor)
+    return _factor_wide_to_long(_filter_panel_by_universe(panel, universe))
+
+
+def _filter_panel_by_universe(
+    panel: pd.DataFrame,
+    universe: pd.DataFrame | None,
+) -> pd.DataFrame:
+    if universe is None:
+        return panel
+    aligned = universe.reindex(index=panel.index, columns=panel.columns, fill_value=False)
+    aligned = aligned.astype(bool)
+    return panel.where(aligned).dropna(axis=1, how="all")
 
 
 def _factor_long_to_wide(df: pd.DataFrame) -> pd.DataFrame:
@@ -362,6 +418,8 @@ def compute_market_cap(ctx):
 @click.pass_context
 def standardize_factor(ctx, factor_name, output_name, start_date, end_date):
     """Standardize a stored factor with winsorization, imputation, and z-score."""
+    from zer0share.api import LocalPro
+
     cfg = load_config(ctx.obj["config_path"])
     configure_logging(cfg.log_path)
     resolved_start = start_date or cfg.start_date
@@ -375,12 +433,20 @@ def standardize_factor(ctx, factor_name, output_name, start_date, end_date):
         resolved_end or "latest",
     )
     storage = FactorStorage(cfg.factor_dir, cfg.db_path)
+    pro = LocalPro(cfg.zer0share_data_dir)
+    universe = read_universe_panel(
+        pro,
+        universe_name=cfg.process_universe,
+        start_date=resolved_start,
+        end_date=resolved_end,
+    )
     rows = standardize_stored_factor(
         factor_name=factor_name,
         output_name=resolved_output,
         storage=storage,
         start_date=resolved_start,
         end_date=resolved_end,
+        universe=universe,
     )
     logger.info(
         "standardize_factor_job_finished factor={} output={} rows={}",
@@ -422,14 +488,22 @@ def neutralize_factor(ctx, factor_name, output_name, size_factor_name, start_dat
         resolved_end or "latest",
     )
     storage = FactorStorage(cfg.factor_dir, cfg.db_path)
+    pro = LocalPro(cfg.zer0share_data_dir)
+    universe = read_universe_panel(
+        pro,
+        universe_name=cfg.process_universe,
+        start_date=resolved_start,
+        end_date=resolved_end,
+    )
     rows = neutralize_stored_factor(
         factor_name=factor_name,
         output_name=resolved_output,
         storage=storage,
-        pro=LocalPro(cfg.zer0share_data_dir),
+        pro=pro,
         start_date=resolved_start,
         end_date=resolved_end,
         size_factor_name=size_factor_name,
+        universe=universe,
     )
     logger.info(
         "neutralize_factor_job_finished factor={} output={} rows={}",

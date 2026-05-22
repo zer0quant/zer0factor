@@ -10,6 +10,7 @@ class Config:
     db_path: Path
     log_path: Path
     universe: str
+    process_universe: str
     start_date: str
     end_date: str
 
@@ -29,6 +30,7 @@ def load_config(path: Path = Path("config/settings.toml")) -> Config:
             db_path=Path(raw["paths"]["db_path"]),
             log_path=Path(raw["paths"]["log_path"]),
             universe=raw["factor"]["universe"],
+            process_universe=raw["factor"].get("process_universe", "univ_trade_base"),
             start_date=raw["factor"]["start_date"],
             end_date=raw["factor"]["end_date"],
         )

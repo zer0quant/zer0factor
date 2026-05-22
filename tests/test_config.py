@@ -18,6 +18,7 @@ log_path = "logs/factor.log"
 
 [factor]
 universe = "all"
+process_universe = "univ_trade_base"
 start_date = "20160101"
 end_date = ""
 """)
@@ -26,6 +27,7 @@ end_date = ""
     assert cfg.zer0share_data_dir == Path("../zer0share/data")
     assert cfg.factor_dir == Path("data/factors")
     assert cfg.universe == "all"
+    assert cfg.process_universe == "univ_trade_base"
     assert cfg.start_date == "20160101"
     assert cfg.end_date == ""
 
