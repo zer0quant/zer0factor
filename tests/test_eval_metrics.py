@@ -1,3 +1,5 @@
+import math
+
 import pandas as pd
 import pytest
 
@@ -46,11 +48,39 @@ def test_build_summary_has_one_row_per_period_and_required_fields():
         quantile_returns=quantile_returns,
     )
 
+    expected_columns = {
+        "factor_name",
+        "return_type",
+        "period",
+        "sample_count",
+        "start_date",
+        "end_date",
+        "quantiles",
+        "IC Mean",
+        "IC Std",
+        "ICIR",
+        "t-stat",
+        "IC>0 %",
+        "mean_return_q1",
+        "mean_return_qN",
+        "long_short_spread",
+        "long_short_spread_bps",
+    }
+    expected_ic_std = pd.Series([0.1, 0.2, -0.1, 0.0]).std()
+    expected_icir = 0.05 / expected_ic_std
+
+    assert expected_columns.issubset(result.columns)
     assert result["period"].tolist() == ["1D", "5D"]
     assert result.loc[0, "factor_name"] == "factor_a"
     assert result.loc[0, "return_type"] == "open_t1"
     assert result.loc[0, "sample_count"] == 100
+    assert result.loc[0, "start_date"] == "20240101"
+    assert result.loc[0, "end_date"] == "20240131"
+    assert result.loc[0, "quantiles"] == 10
     assert result.loc[0, "IC Mean"] == pytest.approx(0.05)
+    assert result.loc[0, "IC Std"] == pytest.approx(expected_ic_std)
+    assert result.loc[0, "ICIR"] == pytest.approx(expected_icir)
+    assert result.loc[0, "t-stat"] == pytest.approx(expected_icir * math.sqrt(4))
     assert result.loc[0, "IC>0 %"] == pytest.approx(50.0)
     assert result.loc[0, "mean_return_q1"] == pytest.approx(0.001)
     assert result.loc[0, "mean_return_qN"] == pytest.approx(0.004)
