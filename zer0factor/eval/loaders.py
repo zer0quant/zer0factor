@@ -14,7 +14,7 @@ def load_price_data(
 ) -> pd.DataFrame:
     extended_end = _extend_end_date(end_date or start_date, max(periods) * 3 + 10)
     return pro.pro_bar(
-        ts_code="",
+        ts_code=None,
         start_date=start_date,
         end_date=extended_end,
         adj=None,

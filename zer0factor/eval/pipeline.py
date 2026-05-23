@@ -65,10 +65,11 @@ def evaluate_factor(
         raise ValueError(f"{factor_name}: no factor data after universe filtering")
 
     if price_data is None:
+        price_end_date = config.end_date or _max_factor_trade_date(factor_data)
         price_data = load_price_data(
             pro,
             start_date=config.start_date,
-            end_date=config.end_date,
+            end_date=price_end_date,
             periods=config.periods,
         )
     prices = build_price_matrix(price_data, config.return_type)
@@ -146,10 +147,15 @@ def evaluate_factors(
         rolling_ic_window=config.rolling_ic_window,
     )
     run_id, run_dir = create_run_directory(resolved_config, run_id=run_id)
+    price_end_date = resolved_config.end_date or _max_stored_factor_trade_date(
+        storage,
+        resolved_config.factor_names,
+        start_date=resolved_config.start_date,
+    )
     price_data = load_price_data(
         pro,
         start_date=resolved_config.start_date,
-        end_date=resolved_config.end_date,
+        end_date=price_end_date,
         periods=resolved_config.periods,
     )
     universe_panel = load_universe_panel(
@@ -189,6 +195,32 @@ def evaluate_factors(
         summary=summary,
         metadata_path=run_paths["metadata"],
     )
+
+
+def _max_stored_factor_trade_date(
+    storage,
+    factor_names: tuple[str, ...],
+    *,
+    start_date: str,
+) -> str:
+    max_dates = []
+    for factor_name in factor_names:
+        factor_data = load_stored_factor(
+            storage,
+            factor_name,
+            start_date=start_date,
+            end_date=None,
+        )
+        if not factor_data.empty:
+            max_dates.append(_max_factor_trade_date(factor_data))
+    if not max_dates:
+        return start_date
+    return max(max_dates)
+
+
+def _max_factor_trade_date(factor_data: pd.DataFrame) -> str:
+    dates = pd.to_datetime(factor_data["trade_date"].astype(str), format="%Y%m%d")
+    return dates.max().strftime("%Y%m%d")
 
 
 def _write_factor_figures(

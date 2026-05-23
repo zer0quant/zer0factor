@@ -7,7 +7,8 @@ from zer0factor.storage import FactorStorage
 
 
 class FakePro:
-    def pro_bar(self, ts_code="", start_date=None, end_date=None, adj=None):
+    def pro_bar(self, ts_code=None, start_date=None, end_date=None, adj=None):
+        assert ts_code is None
         assert start_date == "20240101"
         assert end_date is not None
         return pd.DataFrame(
@@ -23,8 +24,10 @@ class FakePro:
 class RecordingPricePro(FakePro):
     def __init__(self):
         self.end_date = None
+        self.ts_code = "not-called"
 
-    def pro_bar(self, ts_code="", start_date=None, end_date=None, adj=None):
+    def pro_bar(self, ts_code=None, start_date=None, end_date=None, adj=None):
+        self.ts_code = ts_code
         self.end_date = end_date
         return super().pro_bar(
             ts_code=ts_code,
@@ -312,7 +315,37 @@ def test_load_price_data_extends_end_date_with_conservative_buffer():
         periods=(5,),
     )
 
+    assert pro.ts_code is None
     assert pro.end_date == "20240127"
+
+
+def test_evaluate_factors_open_ended_price_window_uses_factor_max_date(
+    tmp_path, monkeypatch
+):
+    storage = FactorStorage(tmp_path / "factors", tmp_path / "factor.duckdb")
+    storage.write(
+        "factor_a",
+        pd.DataFrame(
+            {
+                "trade_date": ["20240101", "20240220"],
+                "ts_code": ["000001.SZ", "000001.SZ"],
+                "value": [1.0, 2.0],
+            }
+        ),
+    )
+    patch_clean_factor_data(monkeypatch)
+    pro = RecordingPricePro()
+    config = make_config(tmp_path, end_date=None)
+
+    evaluate_factors(
+        factor_names=("factor_a",),
+        storage=storage,
+        pro=pro,
+        config=config,
+        run_id="run_001",
+    )
+
+    assert pro.end_date == "20240304"
 
 
 def test_load_universe_panel_rejects_missing_required_columns():
