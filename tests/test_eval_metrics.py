@@ -5,6 +5,25 @@ import pytest
 
 from zer0factor.eval.metrics import build_summary, calculate_long_short_spread
 
+EXPECTED_SUMMARY_COLUMNS = [
+    "factor_name",
+    "return_type",
+    "period",
+    "sample_count",
+    "start_date",
+    "end_date",
+    "quantiles",
+    "IC Mean",
+    "IC Std",
+    "ICIR",
+    "t-stat",
+    "IC>0 %",
+    "mean_return_q1",
+    "mean_return_qN",
+    "long_short_spread",
+    "long_short_spread_bps",
+]
+
 
 def test_calculate_long_short_spread_uses_highest_minus_lowest_quantile():
     quantile_returns = pd.DataFrame(
@@ -48,28 +67,10 @@ def test_build_summary_has_one_row_per_period_and_required_fields():
         quantile_returns=quantile_returns,
     )
 
-    expected_columns = {
-        "factor_name",
-        "return_type",
-        "period",
-        "sample_count",
-        "start_date",
-        "end_date",
-        "quantiles",
-        "IC Mean",
-        "IC Std",
-        "ICIR",
-        "t-stat",
-        "IC>0 %",
-        "mean_return_q1",
-        "mean_return_qN",
-        "long_short_spread",
-        "long_short_spread_bps",
-    }
     expected_ic_std = pd.Series([0.1, 0.2, -0.1, 0.0]).std()
     expected_icir = 0.05 / expected_ic_std
 
-    assert expected_columns.issubset(result.columns)
+    assert result.columns.tolist() == EXPECTED_SUMMARY_COLUMNS
     assert result["period"].tolist() == ["1D", "5D"]
     assert result.loc[0, "factor_name"] == "factor_a"
     assert result.loc[0, "return_type"] == "open_t1"
@@ -86,3 +87,55 @@ def test_build_summary_has_one_row_per_period_and_required_fields():
     assert result.loc[0, "mean_return_qN"] == pytest.approx(0.004)
     assert result.loc[0, "long_short_spread"] == pytest.approx(0.003)
     assert result.loc[0, "long_short_spread_bps"] == pytest.approx(30.0)
+
+
+def test_build_summary_treats_effectively_zero_ic_std_as_undefined():
+    daily_ic = pd.DataFrame(
+        {"1D": [0.1, 0.1, 0.1]},
+        index=pd.date_range("2024-01-01", periods=3),
+    )
+    quantile_returns = pd.DataFrame(
+        {"1D": [0.001, 0.004]},
+        index=pd.Index([1, 10], name="factor_quantile"),
+    )
+
+    result = build_summary(
+        factor_name="factor_a",
+        return_type="open_t1",
+        clean_factor_data_sample_count=3,
+        clean_factor_data_start=pd.Timestamp("2024-01-01"),
+        clean_factor_data_end=pd.Timestamp("2024-01-03"),
+        quantiles=10,
+        daily_ic=daily_ic,
+        quantile_returns=quantile_returns,
+    )
+
+    assert result.loc[0, "IC Std"] == pytest.approx(0.0, abs=1e-15)
+    assert pd.isna(result.loc[0, "ICIR"])
+    assert pd.isna(result.loc[0, "t-stat"])
+
+
+def test_build_summary_treats_single_valid_ic_stat_ratios_as_undefined():
+    daily_ic = pd.DataFrame(
+        {"1D": [0.1, None, None]},
+        index=pd.date_range("2024-01-01", periods=3),
+    )
+    quantile_returns = pd.DataFrame(
+        {"1D": [0.001, 0.004]},
+        index=pd.Index([1, 10], name="factor_quantile"),
+    )
+
+    result = build_summary(
+        factor_name="factor_a",
+        return_type="open_t1",
+        clean_factor_data_sample_count=3,
+        clean_factor_data_start=pd.Timestamp("2024-01-01"),
+        clean_factor_data_end=pd.Timestamp("2024-01-03"),
+        quantiles=10,
+        daily_ic=daily_ic,
+        quantile_returns=quantile_returns,
+    )
+
+    assert pd.isna(result.loc[0, "IC Std"])
+    assert pd.isna(result.loc[0, "ICIR"])
+    assert pd.isna(result.loc[0, "t-stat"])

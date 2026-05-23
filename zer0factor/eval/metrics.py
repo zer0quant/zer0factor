@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Hashable
 
+import numpy as np
 import pandas as pd
 from alphalens.performance import (
     factor_information_coefficient,
@@ -81,7 +82,7 @@ def _build_period_summary(
     icir = _safe_ratio(ic_mean, ic_std)
     t_stat = (
         _safe_ratio(ic_mean, ic_std / valid_count**0.5)
-        if valid_count and not pd.isna(ic_std) and ic_std != 0
+        if valid_count and not _is_null_or_effectively_zero(ic_std)
         else pd.NA
     )
     spread = long_short_spread[period]
@@ -107,6 +108,10 @@ def _build_period_summary(
 
 
 def _safe_ratio(numerator: object, denominator: object) -> object:
-    if pd.isna(numerator) or pd.isna(denominator) or denominator == 0:
+    if pd.isna(numerator) or _is_null_or_effectively_zero(denominator):
         return pd.NA
     return numerator / denominator
+
+
+def _is_null_or_effectively_zero(value: object) -> bool:
+    return bool(pd.isna(value) or np.isclose(value, 0.0))
