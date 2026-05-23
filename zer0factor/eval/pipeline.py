@@ -47,14 +47,22 @@ def evaluate_factor(
     price_data: pd.DataFrame | None = None,
     universe_panel: pd.DataFrame | None = None,
 ) -> FactorEvaluationResult:
+    if factor_name not in config.factor_names:
+        raise ValueError("factor_name must be included in config.factor_names")
+
     factor_data = load_stored_factor(
         storage,
         factor_name,
         start_date=config.start_date,
         end_date=config.end_date,
     )
+    if factor_data.empty:
+        raise ValueError(f"{factor_name}: no factor data")
+
     factor = factor_long_to_alphalens_series(factor_data)
     factor = filter_factor_by_universe(factor, universe_panel)
+    if factor.empty:
+        raise ValueError(f"{factor_name}: no factor data after universe filtering")
 
     if price_data is None:
         price_data = load_price_data(
@@ -72,8 +80,14 @@ def evaluate_factor(
         periods=config.periods,
         max_loss=config.max_loss,
     )
+    if clean_factor_data.empty:
+        raise ValueError(f"{factor_name}: no clean factor data")
+
     daily_ic = calculate_daily_ic(clean_factor_data)
     quantile_returns = calculate_quantile_returns(clean_factor_data)
+    if quantile_returns.empty or len(quantile_returns.columns) == 0:
+        raise ValueError(f"{factor_name}: no quantile return periods")
+
     summary = build_summary(
         factor_name=factor_name,
         return_type=config.return_type,
@@ -93,6 +107,7 @@ def evaluate_factor(
         quantile_returns=quantile_returns,
     )
     figure_paths = _write_factor_figures(
+        factor_name=factor_name,
         factor_dir=factor_dir,
         daily_ic=daily_ic,
         quantile_returns=quantile_returns,
@@ -178,19 +193,25 @@ def evaluate_factors(
 
 def _write_factor_figures(
     *,
+    factor_name: str,
     factor_dir: Path,
     daily_ic: pd.DataFrame,
     quantile_returns: pd.DataFrame,
     rolling_ic_window: int,
 ) -> tuple[Path, ...]:
+    if quantile_returns.empty or len(quantile_returns.columns) == 0:
+        raise ValueError(f"{factor_name}: no quantile return periods")
+
     figures_dir = factor_dir / "figures"
-    first_period = str(quantile_returns.columns[0])
-    return (
+    quantile_return_paths = tuple(
         plot_quantile_returns(
             quantile_returns,
-            period=first_period,
-            output_path=figures_dir / f"quantile_returns_{first_period}.png",
-        ),
+            period=str(period),
+            output_path=figures_dir / f"quantile_returns_{period}.png",
+        )
+        for period in quantile_returns.columns
+    )
+    return quantile_return_paths + (
         plot_cumulative_ic(
             daily_ic,
             output_path=figures_dir / "cumulative_ic.png",

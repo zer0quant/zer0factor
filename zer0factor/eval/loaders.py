@@ -12,7 +12,7 @@ def load_stored_factor(storage, factor_name: str, *, start_date: str, end_date: 
 def load_price_data(
     pro, *, start_date: str, end_date: str | None, periods: tuple[int, ...]
 ) -> pd.DataFrame:
-    extended_end = _extend_end_date(end_date or start_date, max(periods) + 10)
+    extended_end = _extend_end_date(end_date or start_date, max(periods) * 3 + 10)
     return pro.pro_bar(
         ts_code="",
         start_date=start_date,
@@ -33,6 +33,14 @@ def load_universe_panel(
         end_date=end_date,
         fields="trade_date,universe,ts_code",
     )
+    if universe.empty:
+        return pd.DataFrame(dtype=bool)
+    missing_columns = {"trade_date", "ts_code"}.difference(universe.columns)
+    if missing_columns:
+        missing = ", ".join(sorted(missing_columns))
+        raise ValueError(f"universe data must contain columns: {missing}")
+
+    universe = universe.dropna(subset=["trade_date", "ts_code"])
     if universe.empty:
         return pd.DataFrame(dtype=bool)
 
