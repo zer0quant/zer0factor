@@ -38,6 +38,20 @@ def test_factor_long_to_alphalens_series_parses_float_like_numeric_dates():
     assert result.loc[(pd.Timestamp("2024-01-02"), "000001.SZ")] == 1.5
 
 
+def test_factor_long_to_alphalens_series_parses_float_like_string_dates():
+    factor = pd.DataFrame(
+        {
+            "trade_date": ["20240102.0"],
+            "ts_code": ["000001.SZ"],
+            "value": [1.5],
+        }
+    )
+
+    result = factor_long_to_alphalens_series(factor)
+
+    assert result.loc[(pd.Timestamp("2024-01-02"), "000001.SZ")] == 1.5
+
+
 def test_factor_long_to_alphalens_series_rejects_duplicates():
     factor = pd.DataFrame(
         {

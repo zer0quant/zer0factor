@@ -348,6 +348,64 @@ def test_evaluate_factors_open_ended_price_window_uses_factor_max_date(
     assert pro.end_date == "20240304"
 
 
+def test_evaluate_factors_open_ended_price_window_accepts_float_trade_dates(
+    tmp_path, monkeypatch
+):
+    storage = FactorStorage(tmp_path / "factors", tmp_path / "factor.duckdb")
+    storage.write(
+        "factor_a",
+        pd.DataFrame(
+            {
+                "trade_date": [20240101.0, 20240220.0],
+                "ts_code": ["000001.SZ", "000001.SZ"],
+                "value": [1.0, 2.0],
+            }
+        ),
+    )
+    patch_clean_factor_data(monkeypatch)
+    pro = RecordingPricePro()
+    config = make_config(tmp_path, end_date=None)
+
+    evaluate_factors(
+        factor_names=("factor_a",),
+        storage=storage,
+        pro=pro,
+        config=config,
+        run_id="run_001",
+    )
+
+    assert pro.end_date == "20240304"
+
+
+def test_evaluate_factor_open_ended_price_window_uses_factor_max_date(
+    tmp_path, monkeypatch
+):
+    storage = FactorStorage(tmp_path / "factors", tmp_path / "factor.duckdb")
+    storage.write(
+        "factor_a",
+        pd.DataFrame(
+            {
+                "trade_date": ["20240101", "20240220"],
+                "ts_code": ["000001.SZ", "000001.SZ"],
+                "value": [1.0, 2.0],
+            }
+        ),
+    )
+    patch_clean_factor_data(monkeypatch)
+    pro = RecordingPricePro()
+    config = make_config(tmp_path, end_date=None)
+
+    evaluate_factor(
+        factor_name="factor_a",
+        storage=storage,
+        pro=pro,
+        config=config,
+        run_dir=tmp_path / "evaluations" / "run_001",
+    )
+
+    assert pro.end_date == "20240304"
+
+
 def test_load_universe_panel_rejects_missing_required_columns():
     pro = UniversePro([{"trade_date": "20240101", "symbol": "000001.SZ"}])
 

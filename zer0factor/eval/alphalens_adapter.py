@@ -18,7 +18,7 @@ def _parse_trade_date(values: pd.Series) -> pd.Series:
 
 
 def _normalize_trade_date(value: object) -> object:
-    if isinstance(value, str) or pd.isna(value):
+    if pd.isna(value):
         return value
     try:
         numeric_value = float(value)

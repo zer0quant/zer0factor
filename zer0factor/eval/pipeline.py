@@ -219,7 +219,16 @@ def _max_stored_factor_trade_date(
 
 
 def _max_factor_trade_date(factor_data: pd.DataFrame) -> str:
-    dates = pd.to_datetime(factor_data["trade_date"].astype(str), format="%Y%m%d")
+    raw_dates = factor_data["trade_date"]
+    if pd.api.types.is_numeric_dtype(raw_dates):
+        normalized = raw_dates.astype("Int64").astype(str)
+    else:
+        numeric_dates = pd.to_numeric(raw_dates, errors="coerce")
+        if numeric_dates.notna().all():
+            normalized = numeric_dates.astype("Int64").astype(str)
+        else:
+            normalized = raw_dates.astype(str)
+    dates = pd.to_datetime(normalized, format="%Y%m%d")
     return dates.max().strftime("%Y%m%d")
 
 
