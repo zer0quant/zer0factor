@@ -24,6 +24,20 @@ def test_factor_long_to_alphalens_series_uses_date_asset_index():
     assert result.name == "factor"
 
 
+def test_factor_long_to_alphalens_series_parses_float_like_numeric_dates():
+    factor = pd.DataFrame(
+        {
+            "trade_date": [20240102.0],
+            "ts_code": ["000001.SZ"],
+            "value": [1.5],
+        }
+    )
+
+    result = factor_long_to_alphalens_series(factor)
+
+    assert result.loc[(pd.Timestamp("2024-01-02"), "000001.SZ")] == 1.5
+
+
 def test_factor_long_to_alphalens_series_rejects_duplicates():
     factor = pd.DataFrame(
         {
@@ -70,6 +84,20 @@ def test_build_price_matrix_close_t0_does_not_shift_close_prices():
     assert result.loc[pd.Timestamp("2024-01-02"), "000001.SZ"] == 11.5
 
 
+def test_build_price_matrix_rejects_duplicate_date_asset_rows():
+    raw = pd.DataFrame(
+        {
+            "trade_date": ["20240101", "20240101"],
+            "ts_code": ["000001.SZ", "000001.SZ"],
+            "open": [10.0, 11.0],
+            "close": [10.5, 11.5],
+        }
+    )
+
+    with pytest.raises(ValueError, match="duplicate date/asset"):
+        build_price_matrix(raw, return_type="close_t0")
+
+
 def test_filter_factor_by_universe_keeps_only_members():
     factor = pd.Series(
         [1.0, 2.0, 3.0],
@@ -94,3 +122,22 @@ def test_filter_factor_by_universe_keeps_only_members():
     result = filter_factor_by_universe(factor, universe)
 
     assert list(result.index) == [(pd.Timestamp("2024-01-01"), "000001.SZ")]
+
+
+def test_filter_factor_by_universe_treats_nan_as_not_member():
+    factor = pd.Series(
+        [1.0],
+        index=pd.MultiIndex.from_tuples(
+            [(pd.Timestamp("2024-01-01"), "000001.SZ")],
+            names=["date", "asset"],
+        ),
+        name="factor",
+    )
+    universe = pd.DataFrame(
+        {"000001.SZ": [float("nan")]},
+        index=pd.to_datetime(["2024-01-01"]),
+    )
+
+    result = filter_factor_by_universe(factor, universe)
+
+    assert result.empty

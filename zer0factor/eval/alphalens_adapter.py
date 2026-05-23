@@ -13,7 +13,20 @@ def _require_columns(data: pd.DataFrame, columns: set[str]) -> None:
 
 
 def _parse_trade_date(values: pd.Series) -> pd.Series:
-    return pd.to_datetime(values.astype(str), format="%Y%m%d", errors="raise")
+    normalized = values.map(_normalize_trade_date)
+    return pd.to_datetime(normalized, format="%Y%m%d", errors="raise")
+
+
+def _normalize_trade_date(value: object) -> object:
+    if isinstance(value, str) or pd.isna(value):
+        return value
+    try:
+        numeric_value = float(value)
+    except (TypeError, ValueError):
+        return str(value)
+    if numeric_value.is_integer():
+        return str(int(numeric_value))
+    return str(value)
 
 
 def factor_long_to_alphalens_series(factor: pd.DataFrame) -> pd.Series:
@@ -52,6 +65,9 @@ def build_price_matrix(price_data: pd.DataFrame, return_type: ReturnType) -> pd.
             "price": price_data[value_column],
         }
     )
+    if normalized.duplicated(subset=["date", "asset"]).any():
+        raise ValueError("duplicate date/asset rows in price data")
+
     matrix = normalized.pivot(index="date", columns="asset", values="price")
     matrix = matrix.sort_index().sort_index(axis=1)
     if shift_periods:
@@ -66,7 +82,11 @@ def filter_factor_by_universe(
         return factor
 
     membership = pd.Series(
-        (bool(universe.at[date, asset]) if date in universe.index and asset in universe.columns else False)
+        (
+            pd.notna(universe.at[date, asset]) and bool(universe.at[date, asset])
+            if date in universe.index and asset in universe.columns
+            else False
+        )
         for date, asset in factor.index
     )
     return factor[membership.to_numpy()]
