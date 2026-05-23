@@ -142,6 +142,28 @@ def test_neutralize_factor_command_is_registered():
     assert "--size-factor-name" in result.output
 
 
+def test_evaluate_factor_command_is_registered():
+    runner = CliRunner()
+
+    result = runner.invoke(cli, ["evaluate-factor", "--help"])
+
+    assert result.exit_code == 0
+    assert "Evaluate one stored factor" in result.output
+    assert "--periods" in result.output
+    assert "--return-type" in result.output
+
+
+def test_evaluate_factors_command_is_registered():
+    runner = CliRunner()
+
+    result = runner.invoke(cli, ["evaluate-factors", "--help"])
+
+    assert result.exit_code == 0
+    assert "Evaluate one or more stored factors" in result.output
+    assert "--universe" in result.output
+    assert "--output-dir" in result.output
+
+
 def test_standardize_factor_command_is_registered():
     runner = CliRunner()
 

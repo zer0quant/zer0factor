@@ -8,6 +8,7 @@ from loguru import logger
 
 from zer0factor.config import load_config
 from zer0factor.core import Factor, Zer0ShareDataProvider, run_factor
+from zer0factor.eval import EvaluationConfig, evaluate_factors
 from zer0factor.exposures import build_sw_l1_industry_panel
 from zer0factor.factors import (
     DailyReturn,
@@ -77,6 +78,17 @@ def configure_logging(log_path: Path) -> None:
         retention=10,
         enqueue=True,
     )
+
+
+def _parse_periods(value: str) -> tuple[int, ...]:
+    try:
+        periods = tuple(int(part.strip()) for part in value.split(","))
+    except ValueError as exc:
+        raise click.BadParameter("must be comma-separated positive integers") from exc
+
+    if not periods or any(period <= 0 for period in periods):
+        raise click.BadParameter("must be comma-separated positive integers")
+    return periods
 
 
 def compute_and_store_factors(
@@ -510,6 +522,138 @@ def neutralize_factor(ctx, factor_name, output_name, size_factor_name, start_dat
         factor_name,
         resolved_output,
         rows,
+    )
+
+
+def _run_evaluation_command(
+    ctx,
+    *,
+    factor_names: tuple[str, ...],
+    start_date: str | None,
+    end_date: str | None,
+    periods: str,
+    quantiles: int,
+    return_type: str,
+    universe: str | None,
+    max_loss: float,
+    output_dir: str,
+) -> None:
+    from zer0share.api import LocalPro
+
+    cfg = load_config(ctx.obj["config_path"])
+    configure_logging(cfg.log_path)
+    resolved_start = start_date or cfg.start_date
+    resolved_end = end_date if end_date is not None else (cfg.end_date or None)
+    config = EvaluationConfig(
+        factor_names=factor_names,
+        start_date=resolved_start,
+        end_date=resolved_end,
+        periods=_parse_periods(periods),
+        quantiles=quantiles,
+        return_type=return_type,
+        max_loss=max_loss,
+        universe=universe,
+        output_dir=Path(output_dir),
+    )
+    storage = FactorStorage(cfg.factor_dir, cfg.db_path)
+    result = evaluate_factors(
+        factor_names=factor_names,
+        storage=storage,
+        pro=LocalPro(cfg.zer0share_data_dir),
+        config=config,
+    )
+    logger.info(
+        "factor_evaluation_job_finished run_id={} output_dir={} factors={}",
+        result.run_id,
+        result.output_dir,
+        len(result.factor_results),
+    )
+    click.echo(f"Evaluation run {result.run_id} written to {result.output_dir}")
+
+
+@cli.command("evaluate-factor")
+@click.argument("factor_name")
+@click.option("--start-date", default=None)
+@click.option("--end-date", default=None)
+@click.option("--periods", default="1,5,10", show_default=True)
+@click.option("--quantiles", default=10, show_default=True)
+@click.option(
+    "--return-type",
+    type=click.Choice(["open_t1", "close_t0"]),
+    default="open_t1",
+    show_default=True,
+)
+@click.option("--universe", default=None)
+@click.option("--max-loss", default=0.35, show_default=True)
+@click.option("--output-dir", default="data/evaluations", show_default=True)
+@click.pass_context
+def evaluate_factor_command(
+    ctx,
+    factor_name,
+    start_date,
+    end_date,
+    periods,
+    quantiles,
+    return_type,
+    universe,
+    max_loss,
+    output_dir,
+):
+    """Evaluate one stored factor."""
+    _run_evaluation_command(
+        ctx,
+        factor_names=(factor_name,),
+        start_date=start_date,
+        end_date=end_date,
+        periods=periods,
+        quantiles=quantiles,
+        return_type=return_type,
+        universe=universe,
+        max_loss=max_loss,
+        output_dir=output_dir,
+    )
+
+
+@cli.command("evaluate-factors")
+@click.argument("factor_names", nargs=-1, required=True)
+@click.option("--start-date", default=None)
+@click.option("--end-date", default=None)
+@click.option("--periods", default="1,5,10", show_default=True)
+@click.option("--quantiles", default=10, show_default=True)
+@click.option(
+    "--return-type",
+    type=click.Choice(["open_t1", "close_t0"]),
+    default="open_t1",
+    show_default=True,
+)
+@click.option("--universe", default=None)
+@click.option("--max-loss", default=0.35, show_default=True)
+@click.option("--output-dir", default="data/evaluations", show_default=True)
+@click.pass_context
+def evaluate_factors_command(
+    ctx,
+    factor_names,
+    start_date,
+    end_date,
+    periods,
+    quantiles,
+    return_type,
+    universe,
+    max_loss,
+    output_dir,
+):
+    """Evaluate one or more stored factors."""
+    _run_evaluation_command(
+        ctx,
+        factor_names=factor_names,
+        start_date=start_date,
+        end_date=end_date,
+        periods=periods,
+        quantiles=quantiles,
+        return_type=return_type,
+        universe=universe,
+        max_loss=max_loss,
+        output_dir=output_dir,
     )
 
 
