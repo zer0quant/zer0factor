@@ -9,6 +9,21 @@ import pandas as pd
 ReturnType = Literal["open_t1", "close_t0"]
 
 
+def _normalize_period(period: object) -> int:
+    if isinstance(period, bool):
+        raise ValueError("periods must be positive integers")
+    if isinstance(period, int):
+        return period
+    if isinstance(period, str):
+        try:
+            normalized = int(period)
+        except ValueError as exc:
+            raise ValueError("periods must be positive integers") from exc
+        if str(normalized) == period:
+            return normalized
+    raise ValueError("periods must be positive integers")
+
+
 @dataclass(frozen=True)
 class EvaluationConfig:
     factor_names: tuple[str, ...]
@@ -23,8 +38,11 @@ class EvaluationConfig:
     rolling_ic_window: int = 63
 
     def __post_init__(self) -> None:
+        if isinstance(self.factor_names, (str, bytes)):
+            raise ValueError("factor_names must be a sequence of names")
+
         factor_names = tuple(self.factor_names)
-        periods = tuple(int(period) for period in self.periods)
+        periods = tuple(_normalize_period(period) for period in self.periods)
         output_dir = Path(self.output_dir)
 
         if not factor_names:

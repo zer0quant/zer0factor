@@ -56,6 +56,16 @@ def test_evaluation_config_rejects_empty_factor_names():
         )
 
 
+@pytest.mark.parametrize("factor_names", ["abc", b"abc"])
+def test_evaluation_config_rejects_scalar_string_factor_names(factor_names):
+    with pytest.raises(ValueError, match="factor_names must be a sequence of names"):
+        EvaluationConfig(
+            factor_names=factor_names,
+            start_date="20240101",
+            end_date="20240131",
+        )
+
+
 def test_evaluation_config_rejects_non_positive_periods():
     with pytest.raises(ValueError, match="periods must be positive integers"):
         EvaluationConfig(
@@ -63,4 +73,14 @@ def test_evaluation_config_rejects_non_positive_periods():
             start_date="20240101",
             end_date="20240131",
             periods=(1, 0),
+        )
+
+
+def test_evaluation_config_rejects_fractional_periods():
+    with pytest.raises(ValueError, match="periods must be positive integers"):
+        EvaluationConfig(
+            factor_names=("factor_a",),
+            start_date="20240101",
+            end_date="20240131",
+            periods=(1.9,),
         )
