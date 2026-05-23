@@ -57,7 +57,7 @@ def write_run_summary(
         "metadata": run_dir / "metadata.json",
     }
     summary.to_csv(paths["summary_csv"], index=False)
-    summary.to_parquet(paths["summary_parquet"])
+    summary.to_parquet(paths["summary_parquet"], index=False)
     paths["metadata"].write_text(
         json.dumps(_build_metadata(config=config, run_id=run_id), indent=2) + "\n"
     )
