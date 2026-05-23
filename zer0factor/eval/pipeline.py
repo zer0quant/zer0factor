@@ -43,7 +43,7 @@ def evaluate_factor(
     storage,
     pro,
     config: EvaluationConfig,
-    factor_dir: str | Path,
+    run_dir: str | Path,
     price_data: pd.DataFrame | None = None,
     universe_panel: pd.DataFrame | None = None,
 ) -> FactorEvaluationResult:
@@ -85,7 +85,7 @@ def evaluate_factor(
         quantile_returns=quantile_returns,
     )
 
-    factor_dir = Path(factor_dir)
+    factor_dir = Path(run_dir) / "factors" / factor_name
     write_factor_artifacts(
         factor_dir=factor_dir,
         clean_factor_data=clean_factor_data,
@@ -150,7 +150,7 @@ def evaluate_factors(
             storage=storage,
             pro=pro,
             config=resolved_config,
-            factor_dir=run_dir / "factors" / factor_name,
+            run_dir=run_dir,
             price_data=price_data,
             universe_panel=universe_panel,
         )

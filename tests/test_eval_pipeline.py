@@ -1,6 +1,6 @@
 import pandas as pd
 
-from zer0factor.eval import EvaluationConfig, evaluate_factors
+from zer0factor.eval import EvaluationConfig, evaluate_factor, evaluate_factors
 from zer0factor.storage import FactorStorage
 
 
@@ -18,8 +18,7 @@ class FakePro:
         )
 
 
-def test_evaluate_factors_writes_run_artifacts(tmp_path, monkeypatch):
-    storage = FactorStorage(tmp_path / "factors", tmp_path / "factor.duckdb")
+def write_factor_a(storage):
     storage.write(
         "factor_a",
         pd.DataFrame(
@@ -31,6 +30,8 @@ def test_evaluate_factors_writes_run_artifacts(tmp_path, monkeypatch):
         ),
     )
 
+
+def patch_clean_factor_data(monkeypatch):
     clean = pd.DataFrame(
         {
             "factor": [1.0, 2.0],
@@ -54,7 +55,9 @@ def test_evaluate_factors_writes_run_artifacts(tmp_path, monkeypatch):
         fake_clean_factor_and_forward_returns,
     )
 
-    config = EvaluationConfig(
+
+def make_config(tmp_path):
+    return EvaluationConfig(
         factor_names=("factor_a",),
         start_date="20240101",
         end_date="20240102",
@@ -62,6 +65,14 @@ def test_evaluate_factors_writes_run_artifacts(tmp_path, monkeypatch):
         quantiles=2,
         output_dir=tmp_path / "evaluations",
     )
+
+
+def test_evaluate_factors_writes_run_artifacts(tmp_path, monkeypatch):
+    storage = FactorStorage(tmp_path / "factors", tmp_path / "factor.duckdb")
+    write_factor_a(storage)
+    patch_clean_factor_data(monkeypatch)
+
+    config = make_config(tmp_path)
 
     result = evaluate_factors(
         factor_names=("factor_a",),
@@ -76,6 +87,30 @@ def test_evaluate_factors_writes_run_artifacts(tmp_path, monkeypatch):
     assert (result.output_dir / "summary.csv").exists()
     assert (result.output_dir / "metadata.json").exists()
     factor_dir = result.output_dir / "factors" / "factor_a"
+    assert (factor_dir / "clean_factor_data.parquet").exists()
+    assert (factor_dir / "daily_ic.parquet").exists()
+    assert (factor_dir / "quantile_returns.parquet").exists()
+    assert (factor_dir / "figures" / "quantile_returns_1D.png").exists()
+
+
+def test_evaluate_factor_derives_factor_artifact_dir_from_run_dir(tmp_path, monkeypatch):
+    storage = FactorStorage(tmp_path / "factors", tmp_path / "factor.duckdb")
+    write_factor_a(storage)
+    patch_clean_factor_data(monkeypatch)
+
+    config = make_config(tmp_path)
+    run_dir = tmp_path / "evaluations" / "run_001"
+
+    result = evaluate_factor(
+        factor_name="factor_a",
+        storage=storage,
+        pro=FakePro(),
+        config=config,
+        run_dir=run_dir,
+    )
+
+    factor_dir = run_dir / "factors" / "factor_a"
+    assert result.output_dir == factor_dir
     assert (factor_dir / "clean_factor_data.parquet").exists()
     assert (factor_dir / "daily_ic.parquet").exists()
     assert (factor_dir / "quantile_returns.parquet").exists()
