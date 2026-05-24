@@ -543,3 +543,39 @@ def test_load_universe_panel_returns_empty_bool_frame_when_all_rows_drop():
 
     assert result.empty
     assert result.dtypes.tolist() == []
+
+
+def test_evaluate_factors_summary_contains_ic_freq_columns(tmp_path, monkeypatch):
+    from zer0factor.eval import EvaluationConfig, evaluate_factors
+    from zer0factor.storage import FactorStorage
+
+    storage = FactorStorage(tmp_path / "factors", tmp_path / "factor.duckdb")
+    write_factor_a(storage)
+
+    dates = pd.date_range("2024-01-02", periods=30, freq="B")
+    assets = ["000001.SZ", "000002.SZ"]
+    index = pd.MultiIndex.from_product([dates, assets], names=["date", "asset"])
+    clean = pd.DataFrame(
+        {
+            "factor": [float(i % 5 + 1) for i in range(60)],
+            "factor_quantile": [(i % 2) + 1 for i in range(60)],
+            "1D": [0.001 * (i % 10 - 5) for i in range(60)],
+        },
+        index=index,
+    )
+    monkeypatch.setattr(
+        "zer0factor.eval.pipeline.get_clean_factor_and_forward_returns",
+        lambda *a, **kw: clean,
+    )
+
+    config = make_config(tmp_path, periods=(1,), quantiles=2)
+    result = evaluate_factors(
+        factor_names=("factor_a",),
+        storage=storage,
+        pro=FakePro(),
+        config=config,
+        run_id="run_ext",
+    )
+
+    for col in ["IC>0 %(W)", "IC>0 %(M)", "IC_near_far_ratio"]:
+        assert col in result.summary.columns, f"missing: {col}"

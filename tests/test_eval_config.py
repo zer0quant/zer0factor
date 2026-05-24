@@ -84,3 +84,24 @@ def test_evaluation_config_rejects_fractional_periods():
             end_date="20240131",
             periods=(1.9,),
         )
+
+
+def test_evaluation_config_accepts_benchmark_index():
+    from zer0factor.eval.config import EvaluationConfig
+    config = EvaluationConfig(
+        factor_names=("f",),
+        start_date="20240101",
+        end_date="20240131",
+        benchmark_index="000300.SH",
+    )
+    assert config.benchmark_index == "000300.SH"
+
+
+def test_evaluation_config_benchmark_index_defaults_to_none():
+    from zer0factor.eval.config import EvaluationConfig
+    config = EvaluationConfig(
+        factor_names=("f",),
+        start_date="20240101",
+        end_date="20240131",
+    )
+    assert config.benchmark_index is None

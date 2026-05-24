@@ -105,6 +105,16 @@ def evaluate_factor(
         f"evaluation_metrics_finished factor={factor_name} periods={len(quantile_returns.columns)}",
     )
 
+    from zer0factor.eval.loaders import load_index_daily
+    index_returns = None
+    if config.benchmark_index:
+        index_returns = load_index_daily(
+            pro,
+            ts_code=config.benchmark_index,
+            start_date=config.start_date,
+            end_date=config.end_date or "",
+        )
+
     summary = build_summary(
         factor_name=factor_name,
         return_type=config.return_type,
@@ -114,6 +124,8 @@ def evaluate_factor(
         quantiles=config.quantiles,
         daily_ic=daily_ic,
         quantile_returns=quantile_returns,
+        clean_factor_data=clean_factor_data,
+        index_returns=index_returns,
     )
 
     factor_dir = Path(run_dir) / "factors" / factor_name
@@ -166,6 +178,7 @@ def evaluate_factors(
         universe=config.universe,
         output_dir=config.output_dir,
         rolling_ic_window=config.rolling_ic_window,
+        benchmark_index=config.benchmark_index,
     )
     run_id, run_dir = create_run_directory(resolved_config, run_id=run_id)
     _log(

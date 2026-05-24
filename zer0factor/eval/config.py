@@ -36,6 +36,7 @@ class EvaluationConfig:
     universe: str | None = None
     output_dir: Path = Path("data/evaluations")
     rolling_ic_window: int = 63
+    benchmark_index: str | None = None
 
     def __post_init__(self) -> None:
         if isinstance(self.factor_names, (str, bytes)):
