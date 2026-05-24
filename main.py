@@ -145,6 +145,52 @@ def factor_list_command(ctx, registry_path, category, enabled, registered, orpha
             )
 
 
+@cli.command("factor-info")
+@click.argument("name")
+@click.option("--registry", "registry_path", default="config/factors.toml", show_default=True)
+@click.pass_context
+def factor_info_command(ctx, name, registry_path):
+    """Show registry metadata and storage status for a single factor."""
+    cfg = load_config(ctx.obj["config_path"])
+    storage = FactorStorage(cfg.factor_dir, cfg.db_path)
+    registry = FactorRegistry(Path(registry_path))
+
+    try:
+        meta = registry.get(name)
+    except KeyError:
+        click.echo(f"Error: '{name}' is not registered in {registry_path}", err=True)
+        raise SystemExit(1)
+
+    tags = ", ".join(meta.tags) if meta.tags else "-"
+    click.echo("── Registry ──────────────────────────────────")
+    click.echo(f"name:          {meta.name}")
+    click.echo(f"category:      {meta.category}")
+    click.echo(f"source_type:   {meta.source_type}")
+    click.echo(f"source_factor: {meta.source_factor or '-'}")
+    click.echo(f"enabled:       {'true' if meta.enabled else 'false'}")
+    click.echo(f"tags:          {tags}")
+    click.echo(f"description:   {meta.description or '-'}")
+    if meta.evaluate:
+        ev = meta.evaluate
+        click.echo(
+            f"evaluate:      quantiles={ev.quantiles}"
+            f"  periods={list(ev.periods)}"
+            f"  return_type={ev.return_type}"
+        )
+    else:
+        click.echo("evaluate:      (uses global defaults)")
+
+    stats = storage.factor_stats(name)
+    click.echo("\n── Storage ───────────────────────────────────")
+    if stats:
+        click.echo("status:        found")
+        click.echo(f"rows:          {stats.rows:,}")
+        click.echo(f"start_date:    {stats.start_date}")
+        click.echo(f"end_date:      {stats.end_date}")
+    else:
+        click.echo("status:        not found in storage")
+
+
 def configure_logging(log_path: Path) -> None:
     log_path.parent.mkdir(parents=True, exist_ok=True)
     logger.remove()

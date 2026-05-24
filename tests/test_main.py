@@ -789,3 +789,104 @@ description = ""
     assert result.exit_code == 0
     assert "z_orphan" in result.output
     assert "z_neu_daily_return" not in result.output
+
+
+def test_factor_info_command_shows_help():
+    runner = CliRunner()
+    result = runner.invoke(cli, ["factor-info", "--help"])
+    assert result.exit_code == 0
+
+
+def test_factor_info_shows_registry_and_storage(tmp_path):
+    factor_dir = tmp_path / "factors"
+    db_path = tmp_path / "meta.duckdb"
+    settings = _write_settings(tmp_path, factor_dir, db_path)
+
+    registry_toml = _write_registry_toml(tmp_path, """
+[[factors]]
+name = "z_neu_daily_return"
+category = "price"
+source_type = "neutralized"
+source_factor = "daily_return"
+enabled = true
+tags = ["momentum"]
+description = "Test factor"
+
+[factors.evaluate]
+default = true
+quantiles = 5
+periods = [1, 5, 10]
+return_type = "open_t1"
+""")
+
+    storage = FactorStorage(factor_dir, db_path)
+    df = pd.DataFrame({
+        "trade_date": ["20240102", "20240103"],
+        "ts_code": ["000001.SZ", "000001.SZ"],
+        "value": [0.1, 0.2],
+    })
+    storage.write("z_neu_daily_return", df)
+
+    runner = CliRunner()
+    result = runner.invoke(cli, [
+        "--config", str(settings),
+        "factor-info", "z_neu_daily_return",
+        "--registry", str(registry_toml),
+    ])
+    assert result.exit_code == 0
+    assert "z_neu_daily_return" in result.output
+    assert "price" in result.output
+    assert "neutralized" in result.output
+    assert "daily_return" in result.output
+    assert "momentum" in result.output
+    assert "20240102" in result.output
+    assert "20240103" in result.output
+
+
+def test_factor_info_unregistered_factor_exits_nonzero(tmp_path):
+    factor_dir = tmp_path / "factors"
+    db_path = tmp_path / "meta.duckdb"
+    settings = _write_settings(tmp_path, factor_dir, db_path)
+
+    registry_toml = _write_registry_toml(tmp_path, """
+[[factors]]
+name = "z_neu_daily_return"
+category = "price"
+source_type = "neutralized"
+enabled = true
+description = ""
+""")
+
+    runner = CliRunner()
+    result = runner.invoke(cli, [
+        "--config", str(settings),
+        "factor-info", "z_does_not_exist",
+        "--registry", str(registry_toml),
+    ])
+    assert result.exit_code != 0
+
+
+def test_factor_info_shows_not_found_when_missing_from_storage(tmp_path):
+    factor_dir = tmp_path / "factors"
+    db_path = tmp_path / "meta.duckdb"
+    settings = _write_settings(tmp_path, factor_dir, db_path)
+
+    registry_toml = _write_registry_toml(tmp_path, """
+[[factors]]
+name = "z_neu_daily_return"
+category = "price"
+source_type = "neutralized"
+enabled = true
+description = ""
+""")
+
+    FactorStorage(factor_dir, db_path)  # init storage, write nothing
+
+    runner = CliRunner()
+    result = runner.invoke(cli, [
+        "--config", str(settings),
+        "factor-info", "z_neu_daily_return",
+        "--registry", str(registry_toml),
+    ])
+    assert result.exit_code == 0
+    assert "not found" in result.output.lower() or "N" in result.output
