@@ -119,7 +119,7 @@ def _build_period_summary(
         "long_short_spread_bps": spread * 10000,
         "IC>0 %(W)": _get_freq_win_rate(ic_freq_win_rates["weekly"], period),
         "IC>0 %(M)": _get_freq_win_rate(ic_freq_win_rates["monthly"], period),
-        "IC_near_far_ratio": float(ic_near_far_ratio[period]) if period in ic_near_far_ratio.index and not pd.isna(ic_near_far_ratio[period]) else pd.NA,
+        "IC_near_far_ratio": _get_near_far_ratio(ic_near_far_ratio, period),
     }
 
 
@@ -131,6 +131,13 @@ def _safe_ratio(numerator: object, denominator: object) -> object:
 
 def _is_null_or_effectively_zero(value: object) -> bool:
     return bool(pd.isna(value) or np.isclose(value, 0.0))
+
+
+def _get_near_far_ratio(ratio_series: pd.Series, period) -> float:
+    if period not in ratio_series.index:
+        return float("nan")
+    val = ratio_series[period]
+    return float(val) if not pd.isna(val) else float("nan")
 
 
 def _get_freq_win_rate(win_rate_series: pd.Series, period) -> object:
