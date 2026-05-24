@@ -13,10 +13,10 @@ def detect_direction(daily_ic: pd.DataFrame) -> int:
 
 
 def annualized_return(daily_returns: pd.Series) -> float:
-    n = len(daily_returns.dropna())
-    if n == 0:
+    clean = daily_returns.dropna()
+    if len(clean) == 0:
         return float("nan")
-    return float((1 + daily_returns.dropna()).prod() ** (252 / n) - 1)
+    return float((1 + clean).prod() ** (252 / len(clean)) - 1)
 
 
 def max_drawdown(daily_returns: pd.Series) -> float:
@@ -47,7 +47,7 @@ def calmar_ratio(daily_returns: pd.Series) -> float:
 
 def build_group_return_metrics(
     mean_ret_by_date: pd.DataFrame,
-    mean_ret_by_date_demeaned: pd.DataFrame,
+    mean_ret_by_date_demeaned: pd.DataFrame | None,
     *,
     direction: int,
     period: str,
@@ -69,8 +69,12 @@ def build_group_return_metrics(
     short_daily = _extract_quantile_daily(mean_ret_by_date, q_short, period)
     ls_daily = long_daily - short_daily
 
-    long_exc_daily = _extract_quantile_daily(mean_ret_by_date_demeaned, q_long, period)
-    short_exc_daily = _extract_quantile_daily(mean_ret_by_date_demeaned, q_short, period)
+    if mean_ret_by_date_demeaned is not None:
+        long_exc_daily = _extract_quantile_daily(mean_ret_by_date_demeaned, q_long, period)
+        short_exc_daily = _extract_quantile_daily(mean_ret_by_date_demeaned, q_short, period)
+    else:
+        long_exc_daily = pd.Series(dtype=float)
+        short_exc_daily = pd.Series(dtype=float)
 
     result: dict[str, float] = {}
 

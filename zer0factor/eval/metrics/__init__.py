@@ -55,9 +55,8 @@ def build_summary(
     _mean_ret_by_date = None
     _mean_ret_by_date_demeaned = None
     if clean_factor_data is not None:
-        from alphalens.performance import mean_return_by_quantile as _mrq
-        _mean_ret_by_date, _ = _mrq(clean_factor_data, by_date=True, demeaned=False)
-        _mean_ret_by_date_demeaned, _ = _mrq(clean_factor_data, by_date=True, demeaned=True)
+        _mean_ret_by_date, _ = mean_return_by_quantile(clean_factor_data, by_date=True, demeaned=False)
+        _mean_ret_by_date_demeaned, _ = mean_return_by_quantile(clean_factor_data, by_date=True, demeaned=True)
 
     rows = [
         _build_period_summary(
