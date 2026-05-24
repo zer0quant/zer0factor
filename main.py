@@ -559,7 +559,6 @@ def _run_evaluation_command(
 
     def log_progress(message: str) -> None:
         logger.info(message)
-        click.echo(message, err=True)
 
     result = evaluate_factors(
         factor_names=factor_names,
