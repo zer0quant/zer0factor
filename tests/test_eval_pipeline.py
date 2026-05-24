@@ -1,3 +1,5 @@
+import warnings
+
 import pandas as pd
 import pytest
 
@@ -310,6 +312,58 @@ def test_evaluate_factor_rejects_empty_clean_factor_data(tmp_path, monkeypatch):
             config=config,
             run_dir=tmp_path / "evaluations" / "run_001",
         )
+
+
+def test_evaluate_factor_filters_alphalens_pct_change_future_warning(
+    tmp_path, monkeypatch
+):
+    storage = FactorStorage(tmp_path / "factors", tmp_path / "factor.duckdb")
+    write_factor_a(storage)
+    clean = pd.DataFrame(
+        {
+            "factor": [1.0, 2.0],
+            "factor_quantile": [1, 2],
+            "1D": [0.01, 0.02],
+        },
+        index=pd.MultiIndex.from_tuples(
+            [
+                (pd.Timestamp("2024-01-01"), "000001.SZ"),
+                (pd.Timestamp("2024-01-02"), "000001.SZ"),
+            ],
+            names=["date", "asset"],
+        ),
+    )
+
+    def fake_clean_factor_and_forward_returns(*args, **kwargs):
+        warnings.warn(
+            "The default fill_method='pad' in DataFrame.pct_change is deprecated "
+            "and will be removed in a future version.",
+            FutureWarning,
+            stacklevel=2,
+        )
+        return clean
+
+    monkeypatch.setattr(
+        "zer0factor.eval.pipeline.get_clean_factor_and_forward_returns",
+        fake_clean_factor_and_forward_returns,
+    )
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        evaluate_factor(
+            factor_name="factor_a",
+            storage=storage,
+            pro=FakePro(),
+            config=make_config(tmp_path),
+            run_dir=tmp_path / "evaluations" / "run_001",
+        )
+
+    assert not [
+        warning
+        for warning in caught
+        if warning.category is FutureWarning
+        and "DataFrame.pct_change is deprecated" in str(warning.message)
+    ]
 
 
 def test_evaluate_factor_rejects_quantile_returns_without_periods(

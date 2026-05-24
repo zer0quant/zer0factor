@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import warnings
 from collections.abc import Callable
 from pathlib import Path
 
@@ -81,7 +82,7 @@ def evaluate_factor(
     prices = build_price_matrix(price_data, config.return_type)
 
     _log(log_info, f"evaluation_clean_factor_started factor={factor_name}")
-    clean_factor_data = get_clean_factor_and_forward_returns(
+    clean_factor_data = _get_clean_factor_and_forward_returns(
         factor,
         prices,
         quantiles=config.quantiles,
@@ -244,6 +245,32 @@ def evaluate_factors(
 def _log(log_info: Callable[[str], None] | None, message: str) -> None:
     if log_info is not None:
         log_info(message)
+
+
+def _get_clean_factor_and_forward_returns(
+    factor: pd.Series,
+    prices: pd.DataFrame,
+    *,
+    quantiles: int,
+    periods: tuple[int, ...],
+    max_loss: float,
+) -> pd.DataFrame:
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore",
+            message=(
+                "The default fill_method='pad' in DataFrame.pct_change "
+                "is deprecated.*"
+            ),
+            category=FutureWarning,
+        )
+        return get_clean_factor_and_forward_returns(
+            factor,
+            prices,
+            quantiles=quantiles,
+            periods=periods,
+            max_loss=max_loss,
+        )
 
 
 def _max_stored_factor_trade_date(
