@@ -160,3 +160,20 @@ def test_build_ranked_summary_includes_return_columns_when_present():
     assert "long_sharpe" in result.columns
     assert "ls_calmar" in result.columns
     assert "turnover_annual_long" in result.columns
+
+
+def test_display_columns_includes_new_metric_columns():
+    from zer0factor.eval.report import _display_columns
+
+    frame = pd.DataFrame(columns=[
+        "factor_name", "period", "sample_count",
+        "IC Mean", "ICIR", "IC>0 %", "long_short_spread_bps",
+        "long_sharpe", "ls_calmar", "turnover_annual_long",
+        "IC>0 %(W)", "IC>0 %(M)", "IC_near_far_ratio",
+        "monotonicity_q_mean", "ls_ann_ret_ratio",
+    ])
+    displayed = _display_columns(frame)
+    for col in ["long_sharpe", "ls_calmar", "turnover_annual_long",
+                "IC>0 %(W)", "IC>0 %(M)", "IC_near_far_ratio",
+                "monotonicity_q_mean", "ls_ann_ret_ratio"]:
+        assert col in displayed, f"_display_columns missing: {col}"
