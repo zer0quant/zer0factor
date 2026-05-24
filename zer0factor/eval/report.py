@@ -176,6 +176,22 @@ def _display_columns(frame: pd.DataFrame) -> pd.DataFrame:
         "monotonicity_q_mean",
         "monotonicity_q_ir",
         "monotonicity_q_pos_rate",
+        "long_sharpe",
+        "long_calmar",
+        "long_ann_ret",
+        "ls_sharpe",
+        "ls_calmar",
+        "ls_ann_ret",
+        "long_exc_sharpe",
+        "long_exc_calmar",
+        "idx_exc_sharpe",
+        "idx_exc_calmar",
+        "turnover_daily_long",
+        "turnover_annual_long",
+        "IC>0 %(W)",
+        "IC>0 %(M)",
+        "IC_near_far_ratio",
+        "ls_ann_ret_ratio",
         "long_short_spread_bps",
         "sample_count",
     ]
@@ -216,7 +232,7 @@ def _align_monotonicity(
         ranked.loc[:, ["factor_name", "period"]].astype(str)
     )
     if monotonicity is None:
-        return pd.Series(pd.NA, index=ranked.index, dtype="float64")
+        return pd.Series(float("nan"), index=ranked.index, dtype="float64")
     aligned = monotonicity.reindex(index)
     return pd.Series(aligned.to_numpy(), index=ranked.index, dtype="float64")
 

@@ -138,3 +138,25 @@ def test_generate_evaluation_report_requires_summary_csv(tmp_path):
 
     with pytest.raises(FileNotFoundError, match="summary.csv not found"):
         generate_evaluation_report(run_dir=run_dir)
+
+
+def test_build_ranked_summary_includes_return_columns_when_present():
+    from zer0factor.eval.report import build_ranked_summary, ReportThresholds
+
+    summary = pd.DataFrame({
+        "factor_name": ["f"],
+        "period": ["1D"],
+        "sample_count": [1000],
+        "IC Mean": [0.05],
+        "ICIR": [0.5],
+        "IC>0 %": [55.0],
+        "long_short_spread_bps": [10.0],
+        "long_sharpe": [1.2],
+        "ls_calmar": [0.8],
+        "turnover_annual_long": [24.0],
+        "monotonicity_q_mean": [0.7],
+    })
+    result = build_ranked_summary(summary, ReportThresholds())
+    assert "long_sharpe" in result.columns
+    assert "ls_calmar" in result.columns
+    assert "turnover_annual_long" in result.columns

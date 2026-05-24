@@ -670,6 +670,7 @@ def _run_evaluation_command(
     universe: str | None,
     max_loss: float,
     output_dir: str,
+    benchmark_index: str | None = None,
 ) -> None:
     result = _run_evaluation_job(
         ctx,
@@ -682,6 +683,7 @@ def _run_evaluation_command(
         universe=universe,
         max_loss=max_loss,
         output_dir=Path(output_dir),
+        benchmark_index=benchmark_index,
     )
     click.echo(f"Evaluation run {result.run_id} written to {result.output_dir}")
 
@@ -698,6 +700,7 @@ def _run_evaluation_job(
     universe: str | None,
     max_loss: float,
     output_dir: Path,
+    benchmark_index: str | None = None,
 ):
     from zer0share.api import LocalPro
 
@@ -715,6 +718,7 @@ def _run_evaluation_job(
         max_loss=max_loss,
         universe=universe,
         output_dir=output_dir,
+        benchmark_index=benchmark_index,
     )
     storage = FactorStorage(cfg.factor_dir, cfg.db_path)
 
@@ -752,6 +756,7 @@ def _run_evaluation_job(
 @click.option("--universe", default=None)
 @click.option("--max-loss", default=0.35, show_default=True)
 @click.option("--output-dir", default="data/evaluations", show_default=True)
+@click.option("--benchmark-index", default=None, help="指数代码，如 000300.SH，用于计算多头指数超额收益")
 @click.pass_context
 def evaluate_factor_command(
     ctx,
@@ -764,6 +769,7 @@ def evaluate_factor_command(
     universe,
     max_loss,
     output_dir,
+    benchmark_index,
 ):
     """Evaluate one stored factor."""
     _run_evaluation_command(
@@ -777,6 +783,7 @@ def evaluate_factor_command(
         universe=universe,
         max_loss=max_loss,
         output_dir=output_dir,
+        benchmark_index=benchmark_index,
     )
 
 
@@ -795,6 +802,7 @@ def evaluate_factor_command(
 @click.option("--universe", default=None)
 @click.option("--max-loss", default=0.35, show_default=True)
 @click.option("--output-dir", default="data/evaluations", show_default=True)
+@click.option("--benchmark-index", default=None, help="指数代码，如 000300.SH，用于计算多头指数超额收益")
 @click.pass_context
 def evaluate_factors_command(
     ctx,
@@ -807,6 +815,7 @@ def evaluate_factors_command(
     universe,
     max_loss,
     output_dir,
+    benchmark_index,
 ):
     """Evaluate one or more stored factors."""
     _run_evaluation_command(
@@ -820,6 +829,7 @@ def evaluate_factors_command(
         universe=universe,
         max_loss=max_loss,
         output_dir=output_dir,
+        benchmark_index=benchmark_index,
     )
 
 
@@ -830,8 +840,9 @@ def evaluate_factors_command(
     required=True,
     type=click.Path(exists=True, dir_okay=False, path_type=Path),
 )
+@click.option("--benchmark-index", default=None, help="指数代码，如 000300.SH，用于计算多头指数超额收益")
 @click.pass_context
-def evaluate_batch_command(ctx, batch_file):
+def evaluate_batch_command(ctx, batch_file, benchmark_index):
     """Evaluate factors from a TOML batch file."""
     batch = load_batch_evaluation_config(batch_file)
     result = _run_evaluation_job(
@@ -845,6 +856,7 @@ def evaluate_batch_command(ctx, batch_file):
         universe=batch.universe,
         max_loss=batch.max_loss,
         output_dir=batch.output_dir,
+        benchmark_index=benchmark_index,
     )
     click.echo(f"Evaluation run {result.run_id} written to {result.output_dir}")
 
