@@ -14,6 +14,7 @@ from zer0factor.eval.metrics.ic import (
     calculate_ic_near_far_ratio,
 )
 from zer0factor.eval.metrics.returns import build_group_return_metrics, detect_direction
+from zer0factor.eval.metrics.turnover import calculate_quantile_turnover
 
 
 def calculate_daily_ic(clean_factor_data: pd.DataFrame) -> pd.DataFrame:
@@ -79,6 +80,7 @@ def build_summary(
             mean_ret_by_date=_mean_ret_by_date,
             mean_ret_by_date_demeaned=_mean_ret_by_date_demeaned,
             index_returns=index_returns,
+            clean_factor_data=clean_factor_data,
         )
         for period in daily_ic.columns
     ]
@@ -106,6 +108,7 @@ def _build_period_summary(
     mean_ret_by_date: pd.DataFrame | None,
     mean_ret_by_date_demeaned: pd.DataFrame | None,
     index_returns: pd.Series | None,
+    clean_factor_data: pd.DataFrame | None = None,
 ) -> dict[str, object]:
     ic_mean = ic_values.mean()
     ic_std = ic_values.std()
@@ -151,6 +154,15 @@ def _build_period_summary(
             index_returns=index_returns,
         )
         base.update(ret_metrics)
+
+    if clean_factor_data is not None:
+        to_metrics = calculate_quantile_turnover(
+            clean_factor_data,
+            long_quantile=n_quantiles if direction == 1 else 1,
+            short_quantile=1 if direction == 1 else n_quantiles,
+            period=str(period),
+        )
+        base.update(to_metrics)
 
     return base
 
