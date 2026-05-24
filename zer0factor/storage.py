@@ -1,9 +1,17 @@
+from dataclasses import dataclass
 from pathlib import Path
 
 import duckdb
 import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
+
+
+@dataclass(frozen=True)
+class FactorStats:
+    rows: int
+    start_date: str
+    end_date: str
 
 
 class FactorStorage:
@@ -83,3 +91,19 @@ class FactorStorage:
                 "SELECT factor_name FROM factor_registry ORDER BY factor_name"
             ).fetchall()
         return [r[0] for r in rows]
+
+    def factor_stats(self, factor_name: str) -> FactorStats | None:
+        factor_path = self._factor_dir / factor_name
+        if not factor_path.exists():
+            return None
+        if not list(factor_path.glob("date=*/data.parquet")):
+            return None
+        pattern = str(factor_path / "date=*" / "data.parquet")
+        row = duckdb.connect().execute(
+            "SELECT count(*) AS rows, min(date) AS start_date, max(date) AS end_date"
+            " FROM read_parquet(?, hive_partitioning=true)",
+            [pattern],
+        ).fetchone()
+        if row is None or row[0] == 0:
+            return None
+        return FactorStats(rows=int(row[0]), start_date=str(row[1]), end_date=str(row[2]))
