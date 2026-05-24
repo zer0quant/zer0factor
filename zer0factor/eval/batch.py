@@ -6,6 +6,7 @@ from pathlib import Path
 
 from zer0factor.eval.config import ReturnType
 from zer0factor.eval.report import ReportThresholds
+from zer0factor.registry import FactorRegistry
 
 
 @dataclass(frozen=True)
@@ -31,12 +32,29 @@ def load_batch_evaluation_config(path: Path | str) -> BatchEvaluationConfig:
         raw = tomllib.load(file)
 
     evaluation = raw.get("evaluation", {})
-    factors = evaluation.get("factors", ())
-    if isinstance(factors, (str, bytes)):
-        raise ValueError("batch config [evaluation].factors must be a list of names")
-    factor_names = tuple(factors)
-    if not factor_names:
-        raise ValueError("batch config [evaluation].factors must not be empty")
+    factor_source = evaluation.get("factor_source", "explicit")
+    if factor_source == "registry":
+        registry_path = Path(evaluation.get("registry_path", "config/factors.toml"))
+        registry = FactorRegistry(registry_path)
+        enabled_only = bool(evaluation.get("enabled_only", True))
+        categories = set(evaluation.get("categories") or [])
+        candidates = registry.filter(enabled=True if enabled_only else None)
+        if categories:
+            candidates = [f for f in candidates if f.category in categories]
+        factor_names = tuple(f.name for f in candidates)
+        if not factor_names:
+            raise ValueError("no factors matched from registry with the given filters")
+    elif factor_source == "explicit":
+        raw_factors = evaluation.get("factors", ())
+        if isinstance(raw_factors, (str, bytes)):
+            raise ValueError("batch config [evaluation].factors must be a list of names")
+        factor_names = tuple(raw_factors)
+        if not factor_names:
+            raise ValueError("batch config [evaluation].factors must not be empty")
+    else:
+        raise ValueError(
+            f"unknown factor_source '{factor_source}': must be 'explicit' or 'registry'"
+        )
 
     return BatchEvaluationConfig(
         factor_names=factor_names,
