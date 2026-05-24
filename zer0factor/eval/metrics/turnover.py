@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+import re
 
 import pandas as pd
 
@@ -58,4 +59,7 @@ def _quantile_daily_turnover(
 
 
 def _parse_period_int(period: str) -> int:
-    return int(period.rstrip("D").rstrip("d"))
+    m = re.match(r"^(\d+)[Dd]$", period)
+    if not m:
+        raise ValueError(f"Cannot parse period '{period}': expected format like '1D' or '5D'")
+    return int(m.group(1))

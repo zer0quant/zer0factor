@@ -60,3 +60,4 @@ def test_calculate_quantile_turnover_full_turnover_when_all_stocks_change():
     )
     result = calculate_quantile_turnover(cfd, long_quantile=4, short_quantile=1, period="1D")
     assert result["turnover_daily_long"] == pytest.approx(1.0)
+    assert result["turnover_daily_short"] == pytest.approx(1.0)
