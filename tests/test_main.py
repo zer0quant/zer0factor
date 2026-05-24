@@ -172,6 +172,7 @@ def test_evaluate_summary_command_is_registered():
     assert result.exit_code == 0
     assert "Summarize an evaluation run" in result.output
     assert "--min-ic" in result.output
+    assert "--min-monotonicity" in result.output
     assert "--run-dir" in result.output
 
 
@@ -194,6 +195,7 @@ def test_evaluate_summary_command_prints_report_paths(monkeypatch, tmp_path):
     def fake_generate_evaluation_report(**kwargs):
         assert kwargs["run_dir"] == tmp_path / "run_001"
         assert kwargs["thresholds"].min_ic == 0.01
+        assert kwargs["thresholds"].min_monotonicity == 0.4
         return FakeReport()
 
     monkeypatch.setattr("main.generate_evaluation_report", fake_generate_evaluation_report)
@@ -206,6 +208,8 @@ def test_evaluate_summary_command_prints_report_paths(monkeypatch, tmp_path):
             str(tmp_path / "run_001"),
             "--min-ic",
             "0.01",
+            "--min-monotonicity",
+            "0.4",
         ],
     )
 

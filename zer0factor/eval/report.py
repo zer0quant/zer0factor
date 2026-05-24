@@ -24,6 +24,7 @@ class ReportThresholds:
     min_win_rate: float = 52.0
     min_spread_bps: float = 0.0
     min_sample_count: int = 1000
+    min_monotonicity: float = 0.3
 
 
 @dataclass(frozen=True)
@@ -45,6 +46,7 @@ def find_latest_run_dir(evaluations_dir: Path | str = Path("data/evaluations")) 
 def build_ranked_summary(
     summary: pd.DataFrame,
     thresholds: ReportThresholds,
+    monotonicity: pd.Series | None = None,
 ) -> pd.DataFrame:
     missing = REQUIRED_SUMMARY_COLUMNS.difference(summary.columns)
     if missing:
@@ -52,20 +54,33 @@ def build_ranked_summary(
         raise ValueError(f"summary.csv missing required columns: {missing_columns}")
 
     ranked = summary.copy()
+    ranked["direction"] = 1
+    ranked.loc[ranked["IC Mean"].lt(0), "direction"] = -1
+    ranked["adjusted_spread_bps"] = (
+        ranked["long_short_spread_bps"] * ranked["direction"]
+    )
+    ranked["monotonicity"] = _align_monotonicity(ranked, monotonicity)
     ranked["score"] = (
         ranked["IC Mean"] * 100 + ranked["ICIR"] + ranked["long_short_spread_bps"] / 10
     )
+    ranked["adjusted_score"] = (
+        ranked["IC Mean"].abs() * 100
+        + ranked["ICIR"]
+        + ranked["adjusted_spread_bps"] / 10
+        + ranked["monotonicity"].fillna(0)
+    )
     ranked["passed"] = (
-        ranked["IC Mean"].ge(thresholds.min_ic)
+        ranked["IC Mean"].abs().ge(thresholds.min_ic)
         & ranked["ICIR"].ge(thresholds.min_icir)
         & ranked["IC>0 %"].ge(thresholds.min_win_rate)
-        & ranked["long_short_spread_bps"].gt(thresholds.min_spread_bps)
+        & ranked["adjusted_spread_bps"].gt(thresholds.min_spread_bps)
         & ranked["sample_count"].ge(thresholds.min_sample_count)
+        & ranked["monotonicity"].ge(thresholds.min_monotonicity)
     )
     ranked["passed"] = ranked["passed"].fillna(False).astype(bool)
-    return ranked.sort_values(["passed", "score"], ascending=[False, False]).reset_index(
-        drop=True
-    )
+    return ranked.sort_values(
+        ["passed", "adjusted_score"], ascending=[False, False]
+    ).reset_index(drop=True)
 
 
 def generate_evaluation_report(
@@ -80,7 +95,8 @@ def generate_evaluation_report(
 
     resolved_thresholds = thresholds or ReportThresholds()
     summary = pd.read_csv(summary_path)
-    ranked = build_ranked_summary(summary, resolved_thresholds)
+    monotonicity = load_quantile_monotonicity(resolved_run_dir, summary)
+    ranked = build_ranked_summary(summary, resolved_thresholds, monotonicity=monotonicity)
 
     ranked_summary_path = resolved_run_dir / "ranked_summary.csv"
     report_path = resolved_run_dir / "report.md"
@@ -117,11 +133,12 @@ def render_markdown_report(
         "",
         "## Rules",
         "",
-        f"- IC Mean >= {thresholds.min_ic}",
+        f"- abs(IC Mean) >= {thresholds.min_ic}",
         f"- ICIR >= {thresholds.min_icir}",
         f"- IC>0 % >= {thresholds.min_win_rate}",
-        f"- long_short_spread_bps > {thresholds.min_spread_bps}",
+        f"- adjusted_spread_bps > {thresholds.min_spread_bps}",
         f"- sample_count >= {thresholds.min_sample_count}",
+        f"- monotonicity >= {thresholds.min_monotonicity}",
         "",
         "## Top Factors",
         "",
@@ -147,15 +164,84 @@ def _display_columns(frame: pd.DataFrame) -> pd.DataFrame:
     columns = [
         "factor_name",
         "period",
+        "adjusted_score",
         "score",
         "passed",
+        "direction",
         "IC Mean",
         "ICIR",
         "IC>0 %",
+        "adjusted_spread_bps",
+        "monotonicity",
         "long_short_spread_bps",
         "sample_count",
     ]
     return frame.loc[:, [column for column in columns if column in frame.columns]]
+
+
+def load_quantile_monotonicity(run_dir: Path, summary: pd.DataFrame) -> pd.Series:
+    values: dict[tuple[str, str], float] = {}
+    factors = summary["factor_name"].dropna().astype(str).unique()
+    quantile_returns_by_factor = {
+        factor_name: _read_quantile_returns(run_dir, factor_name)
+        for factor_name in factors
+    }
+    for _, row in summary.iterrows():
+        factor_name = str(row["factor_name"])
+        period = str(row["period"])
+        direction = -1 if row["IC Mean"] < 0 else 1
+        quantile_returns = quantile_returns_by_factor.get(factor_name)
+        raw_monotonicity = _calculate_period_monotonicity(quantile_returns, period)
+        values[(factor_name, period)] = raw_monotonicity * direction
+    if not values:
+        return pd.Series(
+            dtype="float64",
+            index=pd.MultiIndex.from_tuples([], names=["factor_name", "period"]),
+        )
+    return pd.Series(
+        values,
+        index=pd.MultiIndex.from_tuples(values.keys(), names=["factor_name", "period"]),
+        dtype="float64",
+    )
+
+
+def _align_monotonicity(
+    ranked: pd.DataFrame,
+    monotonicity: pd.Series | None,
+) -> pd.Series:
+    index = pd.MultiIndex.from_frame(
+        ranked.loc[:, ["factor_name", "period"]].astype(str)
+    )
+    if monotonicity is None:
+        return pd.Series(pd.NA, index=ranked.index, dtype="float64")
+    aligned = monotonicity.reindex(index)
+    return pd.Series(aligned.to_numpy(), index=ranked.index, dtype="float64")
+
+
+def _read_quantile_returns(run_dir: Path, factor_name: str) -> pd.DataFrame | None:
+    path = run_dir / "factors" / factor_name / "quantile_returns.parquet"
+    if not path.exists():
+        return None
+    return pd.read_parquet(path)
+
+
+def _calculate_period_monotonicity(
+    quantile_returns: pd.DataFrame | None,
+    period: str,
+) -> float:
+    if quantile_returns is None or period not in quantile_returns.columns:
+        return float("nan")
+
+    period_returns = quantile_returns[period].dropna()
+    if len(period_returns) < 2:
+        return float("nan")
+
+    quantile_order = pd.Series(
+        range(1, len(period_returns) + 1),
+        index=period_returns.index,
+        dtype="float64",
+    )
+    return float(quantile_order.corr(period_returns, method="spearman"))
 
 
 def _to_markdown_table(frame: pd.DataFrame) -> str:

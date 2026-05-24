@@ -676,6 +676,7 @@ def evaluate_factors_command(
 @click.option("--min-win-rate", default=52.0, show_default=True, type=float)
 @click.option("--min-spread-bps", default=0.0, show_default=True, type=float)
 @click.option("--min-sample-count", default=1000, show_default=True, type=int)
+@click.option("--min-monotonicity", default=0.3, show_default=True, type=float)
 def evaluate_summary_command(
     run_dir,
     evaluations_dir,
@@ -684,6 +685,7 @@ def evaluate_summary_command(
     min_win_rate,
     min_spread_bps,
     min_sample_count,
+    min_monotonicity,
 ):
     """Summarize an evaluation run."""
     resolved_run_dir = Path(run_dir) if run_dir else find_latest_run_dir(Path(evaluations_dir))
@@ -695,6 +697,7 @@ def evaluate_summary_command(
             min_win_rate=min_win_rate,
             min_spread_bps=min_spread_bps,
             min_sample_count=min_sample_count,
+            min_monotonicity=min_monotonicity,
         ),
     )
     click.echo(f"Report written to {result.report_path}")
@@ -702,8 +705,15 @@ def evaluate_summary_command(
     preview_columns = [
         "factor_name",
         "period",
+        "adjusted_score",
         "score",
         "passed",
+        "direction",
+        "adjusted_spread_bps",
+        "monotonicity",
+    ]
+    preview_columns = [
+        column for column in preview_columns if column in result.ranked_summary.columns
     ]
     click.echo(result.ranked_summary.loc[:, preview_columns].head(10).to_string(index=False))
 
