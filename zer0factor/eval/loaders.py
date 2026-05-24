@@ -61,6 +61,33 @@ def load_universe_panel(
     return panel.astype(bool).sort_index().sort_index(axis=1)
 
 
+def load_index_daily(
+    pro,
+    *,
+    ts_code: str,
+    start_date: str,
+    end_date: str | None,
+) -> pd.Series:
+    """
+    Returns daily index return Series.
+    index: DatetimeIndex (ascending)
+    values: pct_chg / 100 (decimal form)
+    """
+    df = pro.index_daily(
+        ts_code=ts_code,
+        start_date=start_date,
+        end_date=end_date,
+        fields="trade_date,pct_chg",
+    )
+    if df.empty:
+        return pd.Series(dtype=float)
+
+    df = df[["trade_date", "pct_chg"]].dropna()
+    df["date"] = pd.to_datetime(df["trade_date"], format="%Y%m%d")
+    result = df.set_index("date")["pct_chg"] / 100
+    return result.sort_index()
+
+
 def _extend_end_date(base_date: str, days: int) -> str:
     parsed = datetime.strptime(base_date, "%Y%m%d")
     return (parsed + timedelta(days=days)).strftime("%Y%m%d")
