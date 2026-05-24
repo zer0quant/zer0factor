@@ -47,10 +47,11 @@ def test_calculate_monotonicity_single_quantile_is_nan():
 
 
 def test_calculate_quarterly_monotonicity_stats_keys():
-    mean_ret = make_mean_ret_by_date(n_dates=60, n_quantiles=5)
+    mean_ret = make_mean_ret_by_date(n_dates=130, n_quantiles=5)
     result = calculate_quarterly_monotonicity_stats(mean_ret, direction=1, period="1D")
     for key in ["monotonicity_q_mean", "monotonicity_q_ir", "monotonicity_q_pos_rate"]:
         assert key in result, f"missing key: {key}"
+    assert not math.isnan(result["monotonicity_q_mean"])
 
 
 def test_calculate_quarterly_monotonicity_stats_few_quarters_is_nan():
@@ -60,7 +61,7 @@ def test_calculate_quarterly_monotonicity_stats_few_quarters_is_nan():
 
 
 def test_calculate_quarterly_monotonicity_pos_rate_between_0_and_100():
-    mean_ret = make_mean_ret_by_date(n_dates=60, n_quantiles=5)
+    mean_ret = make_mean_ret_by_date(n_dates=130, n_quantiles=5)
     result = calculate_quarterly_monotonicity_stats(mean_ret, direction=1, period="1D")
-    if not math.isnan(result["monotonicity_q_pos_rate"]):
-        assert 0 <= result["monotonicity_q_pos_rate"] <= 100
+    assert not math.isnan(result["monotonicity_q_pos_rate"])
+    assert 0 <= result["monotonicity_q_pos_rate"] <= 100

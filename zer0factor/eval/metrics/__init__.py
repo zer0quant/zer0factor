@@ -14,10 +14,7 @@ from zer0factor.eval.metrics.ic import (
     calculate_ic_near_far_ratio,
 )
 from zer0factor.eval.metrics.returns import build_group_return_metrics, detect_direction
-from zer0factor.eval.metrics.monotonicity import (
-    calculate_monotonicity,
-    calculate_quarterly_monotonicity_stats,
-)
+from zer0factor.eval.metrics.monotonicity import calculate_quarterly_monotonicity_stats
 from zer0factor.eval.metrics.turnover import calculate_quantile_turnover
 
 

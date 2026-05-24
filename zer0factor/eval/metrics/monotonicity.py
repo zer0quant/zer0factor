@@ -53,7 +53,7 @@ def calculate_quarterly_monotonicity_stats(
     for _quarter, group in grouped:
         if group.empty:
             continue
-        cum_ret = (1 + group).prod() - 1
+        cum_ret = (1 + group).prod(skipna=False) - 1
         if len(cum_ret.dropna()) < 2:
             continue
         quantile_order = pd.Series(
