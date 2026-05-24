@@ -9,6 +9,11 @@ from alphalens.performance import (
     mean_return_by_quantile,
 )
 
+from zer0factor.eval.metrics.ic import (
+    calculate_ic_freq_win_rates,
+    calculate_ic_near_far_ratio,
+)
+
 
 def calculate_daily_ic(clean_factor_data: pd.DataFrame) -> pd.DataFrame:
     return factor_information_coefficient(clean_factor_data)
@@ -35,10 +40,14 @@ def build_summary(
     quantiles: int,
     daily_ic: pd.DataFrame,
     quantile_returns: pd.DataFrame,
+    clean_factor_data: pd.DataFrame | None = None,
+    index_returns: "pd.Series | None" = None,
 ) -> pd.DataFrame:
     lowest_quantile = quantile_returns.index.min()
     highest_quantile = quantile_returns.index.max()
     long_short_spread = calculate_long_short_spread(quantile_returns)
+    ic_freq_win_rates = calculate_ic_freq_win_rates(daily_ic)
+    ic_near_far_ratio = calculate_ic_near_far_ratio(daily_ic)
 
     rows = [
         _build_period_summary(
@@ -54,6 +63,8 @@ def build_summary(
             lowest_quantile=lowest_quantile,
             highest_quantile=highest_quantile,
             long_short_spread=long_short_spread,
+            ic_freq_win_rates=ic_freq_win_rates,
+            ic_near_far_ratio=ic_near_far_ratio,
         )
         for period in daily_ic.columns
     ]
@@ -74,6 +85,8 @@ def _build_period_summary(
     lowest_quantile: Hashable,
     highest_quantile: Hashable,
     long_short_spread: pd.Series,
+    ic_freq_win_rates: dict,
+    ic_near_far_ratio: pd.Series,
 ) -> dict[str, object]:
     ic_mean = ic_values.mean()
     ic_std = ic_values.std()
@@ -104,6 +117,9 @@ def _build_period_summary(
         "mean_return_qN": quantile_returns.loc[highest_quantile, period],
         "long_short_spread": spread,
         "long_short_spread_bps": spread * 10000,
+        "IC>0 %(W)": _get_freq_win_rate(ic_freq_win_rates["weekly"], period),
+        "IC>0 %(M)": _get_freq_win_rate(ic_freq_win_rates["monthly"], period),
+        "IC_near_far_ratio": float(ic_near_far_ratio[period]) if period in ic_near_far_ratio.index and not pd.isna(ic_near_far_ratio[period]) else pd.NA,
     }
 
 
@@ -115,3 +131,10 @@ def _safe_ratio(numerator: object, denominator: object) -> object:
 
 def _is_null_or_effectively_zero(value: object) -> bool:
     return bool(pd.isna(value) or np.isclose(value, 0.0))
+
+
+def _get_freq_win_rate(win_rate_series: pd.Series, period) -> object:
+    if period not in win_rate_series.index:
+        return pd.NA
+    val = win_rate_series[period]
+    return float(val) if not pd.isna(val) else pd.NA
