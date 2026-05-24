@@ -556,11 +556,17 @@ def _run_evaluation_command(
         output_dir=Path(output_dir),
     )
     storage = FactorStorage(cfg.factor_dir, cfg.db_path)
+
+    def log_progress(message: str) -> None:
+        logger.info(message)
+        click.echo(message, err=True)
+
     result = evaluate_factors(
         factor_names=factor_names,
         storage=storage,
         pro=LocalPro(cfg.zer0share_data_dir),
         config=config,
+        log_info=log_progress,
     )
     logger.info(
         "factor_evaluation_job_finished run_id={} output_dir={} factors={}",

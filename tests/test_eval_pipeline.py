@@ -148,6 +148,39 @@ def test_evaluate_factors_writes_run_artifacts(tmp_path, monkeypatch):
     assert not (factor_dir / "figures" / "quantile_returns_5D.png").exists()
 
 
+def test_evaluate_factors_reports_stage_progress(tmp_path, monkeypatch):
+    storage = FactorStorage(tmp_path / "factors", tmp_path / "factor.duckdb")
+    write_factor_a(storage)
+    patch_clean_factor_data(monkeypatch)
+    messages = []
+
+    evaluate_factors(
+        factor_names=("factor_a",),
+        storage=storage,
+        pro=FakePro(),
+        config=make_config(tmp_path),
+        run_id="run_001",
+        log_info=messages.append,
+    )
+
+    assert messages == [
+        "evaluation_run_started factors=1 start_date=20240101 "
+        "end_date=20240102 periods=1 return_type=open_t1",
+        "evaluation_price_load_started start_date=20240101 end_date=20240102",
+        "evaluation_price_load_finished rows=4",
+        "evaluation_factor_started factor=factor_a",
+        "evaluation_factor_load_finished factor=factor_a rows=2",
+        "evaluation_clean_factor_started factor=factor_a",
+        "evaluation_clean_factor_finished factor=factor_a rows=2",
+        "evaluation_metrics_finished factor=factor_a periods=1",
+        "evaluation_artifacts_written factor=factor_a output_dir="
+        + str(tmp_path / "evaluations" / "run_001" / "factors" / "factor_a"),
+        "evaluation_run_finished run_id=run_001 output_dir="
+        + str(tmp_path / "evaluations" / "run_001")
+        + " factors=1",
+    ]
+
+
 def test_evaluate_factor_derives_factor_artifact_dir_from_run_dir(tmp_path, monkeypatch):
     storage = FactorStorage(tmp_path / "factors", tmp_path / "factor.duckdb")
     write_factor_a(storage)

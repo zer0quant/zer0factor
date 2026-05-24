@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 
 import pandas as pd
@@ -46,6 +47,7 @@ def evaluate_factor(
     run_dir: str | Path,
     price_data: pd.DataFrame | None = None,
     universe_panel: pd.DataFrame | None = None,
+    log_info: Callable[[str], None] | None = None,
 ) -> FactorEvaluationResult:
     if factor_name not in config.factor_names:
         raise ValueError("factor_name must be included in config.factor_names")
@@ -58,6 +60,10 @@ def evaluate_factor(
     )
     if factor_data.empty:
         raise ValueError(f"{factor_name}: no factor data")
+    _log(
+        log_info,
+        f"evaluation_factor_load_finished factor={factor_name} rows={len(factor_data)}",
+    )
 
     factor = factor_long_to_alphalens_series(factor_data)
     factor = filter_factor_by_universe(factor, universe_panel)
@@ -74,6 +80,7 @@ def evaluate_factor(
         )
     prices = build_price_matrix(price_data, config.return_type)
 
+    _log(log_info, f"evaluation_clean_factor_started factor={factor_name}")
     clean_factor_data = get_clean_factor_and_forward_returns(
         factor,
         prices,
@@ -83,11 +90,19 @@ def evaluate_factor(
     )
     if clean_factor_data.empty:
         raise ValueError(f"{factor_name}: no clean factor data")
+    _log(
+        log_info,
+        f"evaluation_clean_factor_finished factor={factor_name} rows={len(clean_factor_data)}",
+    )
 
     daily_ic = calculate_daily_ic(clean_factor_data)
     quantile_returns = calculate_quantile_returns(clean_factor_data)
     if quantile_returns.empty or len(quantile_returns.columns) == 0:
         raise ValueError(f"{factor_name}: no quantile return periods")
+    _log(
+        log_info,
+        f"evaluation_metrics_finished factor={factor_name} periods={len(quantile_returns.columns)}",
+    )
 
     summary = build_summary(
         factor_name=factor_name,
@@ -114,6 +129,10 @@ def evaluate_factor(
         quantile_returns=quantile_returns,
         rolling_ic_window=config.rolling_ic_window,
     )
+    _log(
+        log_info,
+        f"evaluation_artifacts_written factor={factor_name} output_dir={factor_dir}",
+    )
 
     return FactorEvaluationResult(
         factor_name=factor_name,
@@ -133,6 +152,7 @@ def evaluate_factors(
     pro,
     config: EvaluationConfig,
     run_id: str | None = None,
+    log_info: Callable[[str], None] | None = None,
 ) -> EvaluationRunResult:
     resolved_config = EvaluationConfig(
         factor_names=tuple(factor_names),
@@ -147,10 +167,24 @@ def evaluate_factors(
         rolling_ic_window=config.rolling_ic_window,
     )
     run_id, run_dir = create_run_directory(resolved_config, run_id=run_id)
+    _log(
+        log_info,
+        "evaluation_run_started "
+        f"factors={len(resolved_config.factor_names)} "
+        f"start_date={resolved_config.start_date} "
+        f"end_date={resolved_config.end_date or 'latest'} "
+        f"periods={','.join(str(period) for period in resolved_config.periods)} "
+        f"return_type={resolved_config.return_type}",
+    )
     price_end_date = resolved_config.end_date or _max_stored_factor_trade_date(
         storage,
         resolved_config.factor_names,
         start_date=resolved_config.start_date,
+    )
+    _log(
+        log_info,
+        "evaluation_price_load_started "
+        f"start_date={resolved_config.start_date} end_date={price_end_date}",
     )
     price_data = load_price_data(
         pro,
@@ -158,6 +192,7 @@ def evaluate_factors(
         end_date=price_end_date,
         periods=resolved_config.periods,
     )
+    _log(log_info, f"evaluation_price_load_finished rows={len(price_data)}")
     universe_panel = load_universe_panel(
         pro,
         universe_name=resolved_config.universe,
@@ -165,18 +200,22 @@ def evaluate_factors(
         end_date=resolved_config.end_date,
     )
 
-    factor_results = tuple(
-        evaluate_factor(
-            factor_name=factor_name,
-            storage=storage,
-            pro=pro,
-            config=resolved_config,
-            run_dir=run_dir,
-            price_data=price_data,
-            universe_panel=universe_panel,
+    factor_results = []
+    for factor_name in resolved_config.factor_names:
+        _log(log_info, f"evaluation_factor_started factor={factor_name}")
+        factor_results.append(
+            evaluate_factor(
+                factor_name=factor_name,
+                storage=storage,
+                pro=pro,
+                config=resolved_config,
+                run_dir=run_dir,
+                price_data=price_data,
+                universe_panel=universe_panel,
+                log_info=log_info,
+            )
         )
-        for factor_name in resolved_config.factor_names
-    )
+    factor_results = tuple(factor_results)
     summary = pd.concat(
         [factor_result.summary for factor_result in factor_results],
         ignore_index=True,
@@ -187,6 +226,11 @@ def evaluate_factors(
         config=resolved_config,
         run_id=run_id,
     )
+    _log(
+        log_info,
+        "evaluation_run_finished "
+        f"run_id={run_id} output_dir={run_dir} factors={len(factor_results)}",
+    )
 
     return EvaluationRunResult(
         run_id=run_id,
@@ -195,6 +239,11 @@ def evaluate_factors(
         summary=summary,
         metadata_path=run_paths["metadata"],
     )
+
+
+def _log(log_info: Callable[[str], None] | None, message: str) -> None:
+    if log_info is not None:
+        log_info(message)
 
 
 def _max_stored_factor_trade_date(

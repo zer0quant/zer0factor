@@ -164,6 +164,61 @@ def test_evaluate_factors_command_is_registered():
     assert "--output-dir" in result.output
 
 
+def test_evaluate_factor_command_prints_progress(monkeypatch, tmp_path):
+    runner = CliRunner()
+
+    def fake_load_config(path):
+        return type(
+            "Config",
+            (),
+            {
+                "factor_dir": tmp_path / "factors",
+                "db_path": tmp_path / "factor.duckdb",
+                "log_path": tmp_path / "factor.log",
+                "start_date": "20240101",
+                "end_date": "20240102",
+                "zer0share_data_dir": tmp_path / "zer0share",
+            },
+        )()
+
+    class FakeLocalPro:
+        def __init__(self, data_dir):
+            self.data_dir = data_dir
+
+    class FakeRunResult:
+        run_id = "run_001"
+        output_dir = tmp_path / "evaluations" / "run_001"
+        factor_results = (object(),)
+
+    def fake_evaluate_factors(*, log_info, **kwargs):
+        log_info("evaluation_run_started factors=1")
+        log_info("evaluation_price_load_started start_date=20240101 end_date=20240115")
+        return FakeRunResult()
+
+    monkeypatch.setattr("main.load_config", fake_load_config)
+    monkeypatch.setattr("main.evaluate_factors", fake_evaluate_factors)
+    import zer0share.api
+
+    monkeypatch.setattr(zer0share.api, "LocalPro", FakeLocalPro)
+
+    result = runner.invoke(
+        cli,
+        [
+            "--config",
+            str(tmp_path / "settings.toml"),
+            "evaluate-factor",
+            "factor_a",
+            "--output-dir",
+            str(tmp_path / "evaluations"),
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "evaluation_run_started factors=1" in result.output
+    assert "evaluation_price_load_started start_date=20240101 end_date=20240115" in result.output
+    assert "Evaluation run run_001 written to" in result.output
+
+
 def test_standardize_factor_command_is_registered():
     runner = CliRunner()
 
