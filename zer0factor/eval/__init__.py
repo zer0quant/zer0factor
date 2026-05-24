@@ -1,3 +1,4 @@
+from zer0factor.eval.batch import BatchEvaluationConfig, load_batch_evaluation_config
 from zer0factor.eval.config import (
     EvaluationConfig,
     EvaluationRunResult,
@@ -12,6 +13,7 @@ from zer0factor.eval.report import (
 )
 
 __all__ = [
+    "BatchEvaluationConfig",
     "EvaluationConfig",
     "EvaluationReportResult",
     "EvaluationRunResult",
@@ -21,4 +23,5 @@ __all__ = [
     "evaluate_factors",
     "find_latest_run_dir",
     "generate_evaluation_report",
+    "load_batch_evaluation_config",
 ]

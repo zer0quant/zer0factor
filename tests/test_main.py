@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pandas as pd
 import pytest
 from click.testing import CliRunner
@@ -164,6 +166,16 @@ def test_evaluate_factors_command_is_registered():
     assert "--output-dir" in result.output
 
 
+def test_evaluate_batch_command_is_registered():
+    runner = CliRunner()
+
+    result = runner.invoke(cli, ["evaluate-batch", "--help"])
+
+    assert result.exit_code == 0
+    assert "Evaluate factors from a TOML batch file" in result.output
+    assert "--file" in result.output
+
+
 def test_evaluate_summary_command_is_registered():
     runner = CliRunner()
 
@@ -214,6 +226,109 @@ def test_evaluate_summary_command_prints_report_paths(monkeypatch, tmp_path):
     )
 
     assert result.exit_code == 0
+    assert "Report written to" in result.output
+    assert "factor_a" in result.output
+
+
+def test_evaluate_batch_command_runs_evaluation_and_report(monkeypatch, tmp_path):
+    runner = CliRunner()
+    batch_file = tmp_path / "batch.toml"
+    batch_file.write_text(
+        """
+[evaluation]
+factors = ["factor_a", "factor_b"]
+start_date = "20240101"
+end_date = "20240131"
+periods = [1, 5]
+quantiles = 5
+return_type = "close_t0"
+universe = "000001.SZ,000002.SZ"
+max_loss = 0.25
+output_dir = "batch_evaluations"
+
+[report]
+min_ic = 0.01
+min_monotonicity = 0.4
+""",
+        encoding="utf-8",
+    )
+
+    def fake_load_config(path):
+        return type(
+            "Config",
+            (),
+            {
+                "factor_dir": tmp_path / "factors",
+                "db_path": tmp_path / "factor.duckdb",
+                "log_path": tmp_path / "factor.log",
+                "start_date": "20230101",
+                "end_date": "20231231",
+                "zer0share_data_dir": tmp_path / "zer0share",
+            },
+        )()
+
+    class FakeLocalPro:
+        def __init__(self, data_dir):
+            self.data_dir = data_dir
+
+    class FakeRunResult:
+        run_id = "run_001"
+        output_dir = tmp_path / "batch_evaluations" / "run_001"
+        factor_results = (object(), object())
+
+    class FakeReport:
+        report_path = FakeRunResult.output_dir / "report.md"
+        ranked_summary_path = FakeRunResult.output_dir / "ranked_summary.csv"
+        ranked_summary = pd.DataFrame(
+            {
+                "factor_name": ["factor_a"],
+                "period": ["1D"],
+                "adjusted_score": [4.2],
+                "passed": [True],
+            }
+        )
+
+    def fake_evaluate_factors(*, factor_names, config, log_info, **kwargs):
+        assert factor_names == ("factor_a", "factor_b")
+        assert config.factor_names == ("factor_a", "factor_b")
+        assert config.start_date == "20240101"
+        assert config.end_date == "20240131"
+        assert config.periods == (1, 5)
+        assert config.quantiles == 5
+        assert config.return_type == "close_t0"
+        assert config.universe == "000001.SZ,000002.SZ"
+        assert config.max_loss == 0.25
+        assert config.output_dir == Path("batch_evaluations")
+        log_info("batch_eval_progress")
+        return FakeRunResult()
+
+    def fake_generate_evaluation_report(**kwargs):
+        assert kwargs["run_dir"] == FakeRunResult.output_dir
+        assert kwargs["thresholds"].min_ic == 0.01
+        assert kwargs["thresholds"].min_monotonicity == 0.4
+        return FakeReport()
+
+    monkeypatch.setattr("main.load_config", fake_load_config)
+    monkeypatch.setattr("main.evaluate_factors", fake_evaluate_factors)
+    monkeypatch.setattr("main.generate_evaluation_report", fake_generate_evaluation_report)
+    import zer0share.api
+
+    monkeypatch.setattr(zer0share.api, "LocalPro", FakeLocalPro)
+
+    result = runner.invoke(
+        cli,
+        [
+            "--config",
+            str(tmp_path / "settings.toml"),
+            "evaluate-batch",
+            "--file",
+            str(batch_file),
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "batch_eval_progress" in result.output
+    assert "Evaluation run run_001 written to" in result.output
     assert "Report written to" in result.output
     assert "factor_a" in result.output
 

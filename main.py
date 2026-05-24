@@ -14,6 +14,7 @@ from zer0factor.eval import (
     evaluate_factors,
     find_latest_run_dir,
     generate_evaluation_report,
+    load_batch_evaluation_config,
 )
 from zer0factor.exposures import build_sw_l1_industry_panel
 from zer0factor.factors import (
@@ -544,6 +545,34 @@ def _run_evaluation_command(
     max_loss: float,
     output_dir: str,
 ) -> None:
+    result = _run_evaluation_job(
+        ctx,
+        factor_names=factor_names,
+        start_date=start_date,
+        end_date=end_date,
+        periods=_parse_periods(periods),
+        quantiles=quantiles,
+        return_type=return_type,
+        universe=universe,
+        max_loss=max_loss,
+        output_dir=Path(output_dir),
+    )
+    click.echo(f"Evaluation run {result.run_id} written to {result.output_dir}")
+
+
+def _run_evaluation_job(
+    ctx,
+    *,
+    factor_names: tuple[str, ...],
+    start_date: str | None,
+    end_date: str | None,
+    periods: tuple[int, ...],
+    quantiles: int,
+    return_type: str,
+    universe: str | None,
+    max_loss: float,
+    output_dir: Path,
+):
     from zer0share.api import LocalPro
 
     cfg = load_config(ctx.obj["config_path"])
@@ -554,12 +583,12 @@ def _run_evaluation_command(
         factor_names=factor_names,
         start_date=resolved_start,
         end_date=resolved_end,
-        periods=_parse_periods(periods),
+        periods=periods,
         quantiles=quantiles,
         return_type=return_type,
         max_loss=max_loss,
         universe=universe,
-        output_dir=Path(output_dir),
+        output_dir=output_dir,
     )
     storage = FactorStorage(cfg.factor_dir, cfg.db_path)
 
@@ -579,7 +608,7 @@ def _run_evaluation_command(
         result.output_dir,
         len(result.factor_results),
     )
-    click.echo(f"Evaluation run {result.run_id} written to {result.output_dir}")
+    return result
 
 
 @cli.command("evaluate-factor")
@@ -666,6 +695,53 @@ def evaluate_factors_command(
         max_loss=max_loss,
         output_dir=output_dir,
     )
+
+
+@cli.command("evaluate-batch")
+@click.option(
+    "--file",
+    "batch_file",
+    required=True,
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+)
+@click.pass_context
+def evaluate_batch_command(ctx, batch_file):
+    """Evaluate factors from a TOML batch file."""
+    batch = load_batch_evaluation_config(batch_file)
+    result = _run_evaluation_job(
+        ctx,
+        factor_names=batch.factor_names,
+        start_date=batch.start_date,
+        end_date=batch.end_date,
+        periods=batch.periods,
+        quantiles=batch.quantiles,
+        return_type=batch.return_type,
+        universe=batch.universe,
+        max_loss=batch.max_loss,
+        output_dir=batch.output_dir,
+    )
+    click.echo(f"Evaluation run {result.run_id} written to {result.output_dir}")
+
+    report = generate_evaluation_report(
+        run_dir=result.output_dir,
+        thresholds=batch.report_thresholds,
+    )
+    click.echo(f"Report written to {report.report_path}")
+    click.echo(f"Ranked summary written to {report.ranked_summary_path}")
+    preview_columns = [
+        "factor_name",
+        "period",
+        "adjusted_score",
+        "score",
+        "passed",
+        "direction",
+        "adjusted_spread_bps",
+        "monotonicity",
+    ]
+    preview_columns = [
+        column for column in preview_columns if column in report.ranked_summary.columns
+    ]
+    click.echo(report.ranked_summary.loc[:, preview_columns].head(10).to_string(index=False))
 
 
 @cli.command("evaluate-summary")
