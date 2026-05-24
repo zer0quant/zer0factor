@@ -88,7 +88,11 @@ def factor_list_command(ctx, registry_path, category, enabled, registered, orpha
 
     cfg = load_config(ctx.obj["config_path"])
     storage = FactorStorage(cfg.factor_dir, cfg.db_path)
-    registry = FactorRegistry(Path(registry_path))
+    try:
+        registry = FactorRegistry(Path(registry_path))
+    except FileNotFoundError:
+        click.echo(f"Error: registry file not found: {registry_path}", err=True)
+        raise SystemExit(1)
     validation = registry.validate(storage)
 
     rows = []
@@ -112,7 +116,7 @@ def factor_list_command(ctx, registry_path, category, enabled, registered, orpha
                 "SOURCE": "registry",
             })
 
-    if not registered:
+    if not registered and category is None:
         for name in validation.orphan_stored:
             stats = storage.factor_stats(name)
             rows.append({
@@ -153,7 +157,11 @@ def factor_info_command(ctx, name, registry_path):
     """Show registry metadata and storage status for a single factor."""
     cfg = load_config(ctx.obj["config_path"])
     storage = FactorStorage(cfg.factor_dir, cfg.db_path)
-    registry = FactorRegistry(Path(registry_path))
+    try:
+        registry = FactorRegistry(Path(registry_path))
+    except FileNotFoundError:
+        click.echo(f"Error: registry file not found: {registry_path}", err=True)
+        raise SystemExit(1)
 
     try:
         meta = registry.get(name)

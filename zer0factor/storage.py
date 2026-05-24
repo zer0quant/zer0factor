@@ -96,14 +96,17 @@ class FactorStorage:
         factor_path = self._factor_dir / factor_name
         if not factor_path.exists():
             return None
-        if not list(factor_path.glob("date=*/data.parquet")):
+        partitions = sorted(factor_path.glob("date=*/data.parquet"))
+        if not partitions:
             return None
+        dates = sorted(p.parent.name.split("=")[1] for p in partitions)
+        start_date = dates[0]
+        end_date = dates[-1]
         pattern = str(factor_path / "date=*" / "data.parquet")
         row = duckdb.connect().execute(
-            "SELECT count(*) AS rows, min(date) AS start_date, max(date) AS end_date"
-            " FROM read_parquet(?, hive_partitioning=true)",
+            "SELECT count(*) AS rows FROM read_parquet(?)",
             [pattern],
         ).fetchone()
         if row is None or row[0] == 0:
             return None
-        return FactorStats(rows=int(row[0]), start_date=str(row[1]), end_date=str(row[2]))
+        return FactorStats(rows=int(row[0]), start_date=start_date, end_date=end_date)

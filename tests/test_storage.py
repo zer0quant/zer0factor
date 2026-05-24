@@ -76,3 +76,18 @@ def test_factor_stats_returns_none_for_empty_factor(tmp_path):
     df = pd.DataFrame(columns=["trade_date", "ts_code", "value"])
     storage.write("z_empty", df)
     assert storage.factor_stats("z_empty") is None
+
+
+def test_factor_stats_returns_stats_for_single_date_factor(tmp_path):
+    storage = FactorStorage(tmp_path / "factors", tmp_path / "meta.duckdb")
+    df = pd.DataFrame({
+        "trade_date": ["20240102", "20240102"],
+        "ts_code": ["000001.SZ", "000002.SZ"],
+        "value": [0.1, 0.2],
+    })
+    storage.write("z_single_date", df)
+    stats = storage.factor_stats("z_single_date")
+    assert stats is not None
+    assert stats.rows == 2
+    assert str(stats.start_date) == "20240102"
+    assert str(stats.end_date) == "20240102"

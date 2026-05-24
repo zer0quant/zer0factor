@@ -44,6 +44,8 @@ class FactorRegistry:
             raw = tomllib.load(f)
         for entry in raw.get("factors", []):
             meta = _parse_factor_meta(entry)
+            if meta.name in self._factors:
+                raise ValueError(f"duplicate factor name in registry: {meta.name}")
             self._factors[meta.name] = meta
 
     def all(self) -> list[FactorMeta]:

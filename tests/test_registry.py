@@ -231,3 +231,23 @@ description = ""
     result = reg.validate(storage)
     assert result.registered_missing == ()
     assert result.orphan_stored == ()
+
+
+def test_registry_duplicate_name_raises(tmp_path):
+    p = _write_registry(tmp_path, """
+[[factors]]
+name = "z_neu_daily_return"
+category = "price"
+source_type = "neutralized"
+enabled = true
+description = ""
+
+[[factors]]
+name = "z_neu_daily_return"
+category = "volume"
+source_type = "neutralized"
+enabled = true
+description = "duplicate"
+""")
+    with pytest.raises(ValueError, match="duplicate factor name"):
+        FactorRegistry(p)
