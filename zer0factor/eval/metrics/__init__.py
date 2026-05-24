@@ -13,6 +13,7 @@ from zer0factor.eval.metrics.ic import (
     calculate_ic_freq_win_rates,
     calculate_ic_near_far_ratio,
 )
+from zer0factor.eval.metrics.returns import build_group_return_metrics, detect_direction
 
 
 def calculate_daily_ic(clean_factor_data: pd.DataFrame) -> pd.DataFrame:
@@ -49,6 +50,15 @@ def build_summary(
     ic_freq_win_rates = calculate_ic_freq_win_rates(daily_ic)
     ic_near_far_ratio = calculate_ic_near_far_ratio(daily_ic)
 
+    direction = detect_direction(daily_ic)
+
+    _mean_ret_by_date = None
+    _mean_ret_by_date_demeaned = None
+    if clean_factor_data is not None:
+        from alphalens.performance import mean_return_by_quantile as _mrq
+        _mean_ret_by_date, _ = _mrq(clean_factor_data, by_date=True, demeaned=False)
+        _mean_ret_by_date_demeaned, _ = _mrq(clean_factor_data, by_date=True, demeaned=True)
+
     rows = [
         _build_period_summary(
             factor_name=factor_name,
@@ -65,6 +75,11 @@ def build_summary(
             long_short_spread=long_short_spread,
             ic_freq_win_rates=ic_freq_win_rates,
             ic_near_far_ratio=ic_near_far_ratio,
+            direction=direction,
+            n_quantiles=quantiles,
+            mean_ret_by_date=_mean_ret_by_date,
+            mean_ret_by_date_demeaned=_mean_ret_by_date_demeaned,
+            index_returns=index_returns,
         )
         for period in daily_ic.columns
     ]
@@ -87,6 +102,11 @@ def _build_period_summary(
     long_short_spread: pd.Series,
     ic_freq_win_rates: dict,
     ic_near_far_ratio: pd.Series,
+    direction: int,
+    n_quantiles: int,
+    mean_ret_by_date: pd.DataFrame | None,
+    mean_ret_by_date_demeaned: pd.DataFrame | None,
+    index_returns: pd.Series | None,
 ) -> dict[str, object]:
     ic_mean = ic_values.mean()
     ic_std = ic_values.std()
@@ -100,7 +120,7 @@ def _build_period_summary(
     )
     spread = long_short_spread[period]
 
-    return {
+    base = {
         "factor_name": factor_name,
         "return_type": return_type,
         "period": str(period),
@@ -121,6 +141,19 @@ def _build_period_summary(
         "IC>0 %(M)": _get_freq_win_rate(ic_freq_win_rates["monthly"], period),
         "IC_near_far_ratio": _get_near_far_ratio(ic_near_far_ratio, period),
     }
+
+    if mean_ret_by_date is not None:
+        ret_metrics = build_group_return_metrics(
+            mean_ret_by_date=mean_ret_by_date,
+            mean_ret_by_date_demeaned=mean_ret_by_date_demeaned,
+            direction=direction,
+            period=period,
+            n_quantiles=n_quantiles,
+            index_returns=index_returns,
+        )
+        base.update(ret_metrics)
+
+    return base
 
 
 def _safe_ratio(numerator: object, denominator: object) -> object:
