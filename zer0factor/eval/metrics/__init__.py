@@ -14,6 +14,10 @@ from zer0factor.eval.metrics.ic import (
     calculate_ic_near_far_ratio,
 )
 from zer0factor.eval.metrics.returns import build_group_return_metrics, detect_direction
+from zer0factor.eval.metrics.monotonicity import (
+    calculate_monotonicity,
+    calculate_quarterly_monotonicity_stats,
+)
 from zer0factor.eval.metrics.turnover import calculate_quantile_turnover
 
 
@@ -163,6 +167,14 @@ def _build_period_summary(
             period=str(period),
         )
         base.update(to_metrics)
+
+    if mean_ret_by_date is not None:
+        q_stats = calculate_quarterly_monotonicity_stats(
+            mean_ret_by_date,
+            direction=direction,
+            period=str(period),
+        )
+        base.update(q_stats)
 
     return base
 

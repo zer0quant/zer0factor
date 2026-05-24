@@ -173,6 +173,9 @@ def _display_columns(frame: pd.DataFrame) -> pd.DataFrame:
         "IC>0 %",
         "adjusted_spread_bps",
         "monotonicity",
+        "monotonicity_q_mean",
+        "monotonicity_q_ir",
+        "monotonicity_q_pos_rate",
         "long_short_spread_bps",
         "sample_count",
     ]
