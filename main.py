@@ -26,6 +26,7 @@ from zer0factor.factors import (
     OvernightReturn,
 )
 from zer0factor.preprocess import FactorPreprocessPipeline, PreprocessConfig
+from zer0factor.registry import FactorRegistry
 from zer0factor.storage import FactorStorage
 
 RETURN_FACTORS = (
@@ -71,6 +72,77 @@ def status(ctx):
         click.echo(f"Factors ({len(factors)}):")
         for name in factors:
             click.echo(f"  {name}")
+
+
+@cli.command("factor-list")
+@click.option("--registry", "registry_path", default="config/factors.toml", show_default=True)
+@click.option("--category", default=None, help="Filter by category")
+@click.option("--enabled", is_flag=True, default=False, help="Show only enabled factors")
+@click.option("--registered", is_flag=True, default=False, help="Show only registry factors")
+@click.option("--orphan", is_flag=True, default=False, help="Show only unregistered stored factors")
+@click.pass_context
+def factor_list_command(ctx, registry_path, category, enabled, registered, orphan):
+    """List factors from registry and storage with status comparison."""
+    if registered and orphan:
+        raise click.UsageError("--registered and --orphan are mutually exclusive")
+
+    cfg = load_config(ctx.obj["config_path"])
+    storage = FactorStorage(cfg.factor_dir, cfg.db_path)
+    registry = FactorRegistry(Path(registry_path))
+    validation = registry.validate(storage)
+
+    rows = []
+
+    if not orphan:
+        factors = registry.filter(
+            enabled=True if enabled else None,
+            category=category,
+        )
+        for meta in factors:
+            stats = storage.factor_stats(meta.name)
+            rows.append({
+                "NAME": meta.name,
+                "CATEGORY": meta.category,
+                "TYPE": meta.source_type,
+                "ENABLED": "Y" if meta.enabled else "N",
+                "IN_STORAGE": "Y" if stats else "N",
+                "ROWS": f"{stats.rows:,}" if stats else "-",
+                "START": stats.start_date if stats else "-",
+                "END": stats.end_date if stats else "-",
+                "SOURCE": "registry",
+            })
+
+    if not registered:
+        for name in validation.orphan_stored:
+            stats = storage.factor_stats(name)
+            rows.append({
+                "NAME": name,
+                "CATEGORY": "-",
+                "TYPE": "-",
+                "ENABLED": "-",
+                "IN_STORAGE": "Y",
+                "ROWS": f"{stats.rows:,}" if stats else "-",
+                "START": stats.start_date if stats else "-",
+                "END": stats.end_date if stats else "-",
+                "SOURCE": "storage",
+            })
+
+    if rows:
+        click.echo(pd.DataFrame(rows).to_string(index=False))
+    else:
+        click.echo("No factors found.")
+
+    if not orphan:
+        if validation.registered_missing:
+            names = ", ".join(validation.registered_missing)
+            click.echo(
+                f"\nregistered but missing in storage ({len(validation.registered_missing)}): {names}"
+            )
+        if not registered and validation.orphan_stored:
+            names = ", ".join(validation.orphan_stored)
+            click.echo(
+                f"stored but unregistered ({len(validation.orphan_stored)}): {names}"
+            )
 
 
 def configure_logging(log_path: Path) -> None:

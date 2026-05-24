@@ -644,3 +644,148 @@ def test_neutralize_stored_factor_filters_by_process_universe(tmp_path):
         "000003.SZ",
         "000004.SZ",
     ]
+
+
+def _write_settings(tmp_path, factor_dir, db_path):
+    p = tmp_path / "settings.toml"
+    p.write_text(f"""
+[zer0share]
+data_dir = "."
+
+[paths]
+factor_dir = "{factor_dir}"
+db_path = "{db_path}"
+log_path = "{tmp_path / 'factor.log'}"
+
+[factor]
+universe = "all"
+process_universe = "univ_trade_base"
+start_date = "20240101"
+end_date = ""
+""")
+    return p
+
+
+def _write_registry_toml(tmp_path, content: str):
+    p = tmp_path / "factors.toml"
+    p.write_text(content)
+    return p
+
+
+def test_factor_list_command_shows_help():
+    runner = CliRunner()
+    result = runner.invoke(cli, ["factor-list", "--help"])
+    assert result.exit_code == 0
+    assert "factor-list" in result.output or "List" in result.output
+
+
+def test_factor_list_shows_registered_and_orphan(tmp_path):
+    factor_dir = tmp_path / "factors"
+    db_path = tmp_path / "meta.duckdb"
+    settings = _write_settings(tmp_path, factor_dir, db_path)
+
+    registry_toml = _write_registry_toml(tmp_path, """
+[[factors]]
+name = "z_neu_daily_return"
+category = "price"
+source_type = "neutralized"
+enabled = true
+description = ""
+
+[[factors]]
+name = "z_neu_open_return"
+category = "price"
+source_type = "neutralized"
+enabled = true
+description = ""
+""")
+
+    storage = FactorStorage(factor_dir, db_path)
+    df = pd.DataFrame({
+        "trade_date": ["20240102", "20240103"],
+        "ts_code": ["000001.SZ", "000001.SZ"],
+        "value": [0.1, 0.2],
+    })
+    storage.write("z_neu_daily_return", df)
+    storage.write("z_orphan_factor", df)
+
+    runner = CliRunner()
+    result = runner.invoke(cli, [
+        "--config", str(settings),
+        "factor-list",
+        "--registry", str(registry_toml),
+    ])
+    assert result.exit_code == 0
+    assert "z_neu_daily_return" in result.output
+    assert "z_neu_open_return" in result.output
+    assert "z_orphan_factor" in result.output
+    assert "registered but missing" in result.output
+    assert "stored but unregistered" in result.output
+
+
+def test_factor_list_registered_flag_hides_orphans(tmp_path):
+    factor_dir = tmp_path / "factors"
+    db_path = tmp_path / "meta.duckdb"
+    settings = _write_settings(tmp_path, factor_dir, db_path)
+
+    registry_toml = _write_registry_toml(tmp_path, """
+[[factors]]
+name = "z_neu_daily_return"
+category = "price"
+source_type = "neutralized"
+enabled = true
+description = ""
+""")
+
+    storage = FactorStorage(factor_dir, db_path)
+    df = pd.DataFrame({
+        "trade_date": ["20240102", "20240103"],
+        "ts_code": ["000001.SZ", "000001.SZ"],
+        "value": [0.1, 0.2],
+    })
+    storage.write("z_neu_daily_return", df)
+    storage.write("z_orphan", df)
+
+    runner = CliRunner()
+    result = runner.invoke(cli, [
+        "--config", str(settings),
+        "factor-list",
+        "--registry", str(registry_toml),
+        "--registered",
+    ])
+    assert result.exit_code == 0
+    assert "z_orphan" not in result.output
+
+
+def test_factor_list_orphan_flag_shows_only_orphans(tmp_path):
+    factor_dir = tmp_path / "factors"
+    db_path = tmp_path / "meta.duckdb"
+    settings = _write_settings(tmp_path, factor_dir, db_path)
+
+    registry_toml = _write_registry_toml(tmp_path, """
+[[factors]]
+name = "z_neu_daily_return"
+category = "price"
+source_type = "neutralized"
+enabled = true
+description = ""
+""")
+
+    storage = FactorStorage(factor_dir, db_path)
+    df = pd.DataFrame({
+        "trade_date": ["20240102", "20240103"],
+        "ts_code": ["000001.SZ", "000001.SZ"],
+        "value": [0.1, 0.2],
+    })
+    storage.write("z_orphan", df)
+
+    runner = CliRunner()
+    result = runner.invoke(cli, [
+        "--config", str(settings),
+        "factor-list",
+        "--registry", str(registry_toml),
+        "--orphan",
+    ])
+    assert result.exit_code == 0
+    assert "z_orphan" in result.output
+    assert "z_neu_daily_return" not in result.output
