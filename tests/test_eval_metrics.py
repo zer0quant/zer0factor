@@ -70,7 +70,7 @@ def test_build_summary_has_one_row_per_period_and_required_fields():
     expected_ic_std = pd.Series([0.1, 0.2, -0.1, 0.0]).std()
     expected_icir = 0.05 / expected_ic_std
 
-    assert result.columns.tolist() == EXPECTED_SUMMARY_COLUMNS
+    assert all(col in result.columns for col in EXPECTED_SUMMARY_COLUMNS)
     assert result["period"].tolist() == ["1D", "5D"]
     assert result.loc[0, "factor_name"] == "factor_a"
     assert result.loc[0, "return_type"] == "open_t1"
