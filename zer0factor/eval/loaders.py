@@ -80,11 +80,17 @@ def load_index_daily(
         fields="trade_date,pct_chg",
     )
     if df.empty:
-        return pd.Series(dtype=float)
+        return pd.Series(dtype=float, name=ts_code)
 
-    df = df[["trade_date", "pct_chg"]].dropna()
-    df["date"] = pd.to_datetime(df["trade_date"], format="%Y%m%d")
-    result = df.set_index("date")["pct_chg"] / 100
+    result = (
+        df[["trade_date", "pct_chg"]]
+        .dropna(subset=["pct_chg"])
+        .drop_duplicates(subset=["trade_date"], keep="last")
+        .assign(date=lambda d: pd.to_datetime(d["trade_date"], format="%Y%m%d"))
+        .set_index("date")["pct_chg"]
+        / 100
+    )
+    result.name = ts_code
     return result.sort_index()
 
 
