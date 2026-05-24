@@ -175,26 +175,28 @@ enabled_only = true                  # 可选，默认 true
 uv run python main.py factor-list [--category CATEGORY] [--enabled] [--registered] [--orphan]
 ```
 
-默认显示所有注册因子，附带存储状态：
+默认显示已注册因子 + 孤儿因子，统一附带存储状态：
 
 ```
-NAME                    CATEGORY   TYPE          ENABLED   IN_STORAGE   ROWS        START       END
-z_neu_daily_return      price      neutralized   ✓         ✓            1,240,000   2020-01-02  2024-12-31
-z_neu_open_return       price      neutralized   ✓         ✗            —           —           —
-daily_return            price      built_in      ✓         ✓            1,240,000   2020-01-02  2024-12-31
+NAME                    CATEGORY   TYPE          ENABLED   IN_STORAGE   ROWS        START       END   SOURCE
+z_neu_daily_return      price      neutralized   ✓         ✓            1,240,000   2020-01-02  2024-12-31  registry
+z_neu_open_return       price      neutralized   ✓         ✗            —           —           —           registry
+old_momentum_raw        —          —             —         ✓            800,000     2021-03-01  2024-06-30  storage
+daily_return            price      built_in      ✓         ✓            1,240,000   2020-01-02  2024-12-31  registry
 ```
 
-末尾自动附加校验摘要（非 `--orphan` 模式）：
+末尾自动附加校验摘要：
 
 ```
-⚠  registered but missing in storage: z_neu_open_return
-⚠  stored but unregistered: old_momentum_raw
+⚠  registered but missing in storage (1): z_neu_open_return
+⚠  stored but unregistered (1): old_momentum_raw
 ```
 
 **选项：**
-- `--orphan`：只显示 storage 有但 TOML 未注册的因子
-- `--registered`：只显示已注册因子（过滤孤儿）
-- `--category`：按 category 过滤
+- `--registered`：只显示 TOML 已注册因子（隐藏孤儿行）
+- `--orphan`：只显示 storage 有但 TOML 未注册的孤儿因子
+- `--registered` 和 `--orphan` 互斥
+- `--category`：按 category 过滤（仅对注册因子有效）
 - `--enabled`：只显示 `enabled = true` 的因子
 
 ### factor-info
