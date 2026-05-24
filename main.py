@@ -8,7 +8,13 @@ from loguru import logger
 
 from zer0factor.config import load_config
 from zer0factor.core import Factor, Zer0ShareDataProvider, run_factor
-from zer0factor.eval import EvaluationConfig, evaluate_factors
+from zer0factor.eval import (
+    EvaluationConfig,
+    ReportThresholds,
+    evaluate_factors,
+    find_latest_run_dir,
+    generate_evaluation_report,
+)
 from zer0factor.exposures import build_sw_l1_industry_panel
 from zer0factor.factors import (
     DailyReturn,
@@ -660,6 +666,46 @@ def evaluate_factors_command(
         max_loss=max_loss,
         output_dir=output_dir,
     )
+
+
+@cli.command("evaluate-summary")
+@click.option("--run-dir", default=None)
+@click.option("--evaluations-dir", default="data/evaluations", show_default=True)
+@click.option("--min-ic", default=0.02, show_default=True, type=float)
+@click.option("--min-icir", default=0.3, show_default=True, type=float)
+@click.option("--min-win-rate", default=52.0, show_default=True, type=float)
+@click.option("--min-spread-bps", default=0.0, show_default=True, type=float)
+@click.option("--min-sample-count", default=1000, show_default=True, type=int)
+def evaluate_summary_command(
+    run_dir,
+    evaluations_dir,
+    min_ic,
+    min_icir,
+    min_win_rate,
+    min_spread_bps,
+    min_sample_count,
+):
+    """Summarize an evaluation run."""
+    resolved_run_dir = Path(run_dir) if run_dir else find_latest_run_dir(Path(evaluations_dir))
+    result = generate_evaluation_report(
+        run_dir=resolved_run_dir,
+        thresholds=ReportThresholds(
+            min_ic=min_ic,
+            min_icir=min_icir,
+            min_win_rate=min_win_rate,
+            min_spread_bps=min_spread_bps,
+            min_sample_count=min_sample_count,
+        ),
+    )
+    click.echo(f"Report written to {result.report_path}")
+    click.echo(f"Ranked summary written to {result.ranked_summary_path}")
+    preview_columns = [
+        "factor_name",
+        "period",
+        "score",
+        "passed",
+    ]
+    click.echo(result.ranked_summary.loc[:, preview_columns].head(10).to_string(index=False))
 
 
 if __name__ == "__main__":

@@ -164,6 +164,56 @@ def test_evaluate_factors_command_is_registered():
     assert "--output-dir" in result.output
 
 
+def test_evaluate_summary_command_is_registered():
+    runner = CliRunner()
+
+    result = runner.invoke(cli, ["evaluate-summary", "--help"])
+
+    assert result.exit_code == 0
+    assert "Summarize an evaluation run" in result.output
+    assert "--min-ic" in result.output
+    assert "--run-dir" in result.output
+
+
+def test_evaluate_summary_command_prints_report_paths(monkeypatch, tmp_path):
+    runner = CliRunner()
+
+    class FakeReport:
+        run_dir = tmp_path / "evaluations" / "run_001"
+        report_path = run_dir / "report.md"
+        ranked_summary_path = run_dir / "ranked_summary.csv"
+        ranked_summary = pd.DataFrame(
+            {
+                "factor_name": ["factor_a"],
+                "period": ["1D"],
+                "score": [3.1],
+                "passed": [True],
+            }
+        )
+
+    def fake_generate_evaluation_report(**kwargs):
+        assert kwargs["run_dir"] == tmp_path / "run_001"
+        assert kwargs["thresholds"].min_ic == 0.01
+        return FakeReport()
+
+    monkeypatch.setattr("main.generate_evaluation_report", fake_generate_evaluation_report)
+
+    result = runner.invoke(
+        cli,
+        [
+            "evaluate-summary",
+            "--run-dir",
+            str(tmp_path / "run_001"),
+            "--min-ic",
+            "0.01",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "Report written to" in result.output
+    assert "factor_a" in result.output
+
+
 def test_evaluate_factor_command_prints_progress(monkeypatch, tmp_path):
     runner = CliRunner()
 
