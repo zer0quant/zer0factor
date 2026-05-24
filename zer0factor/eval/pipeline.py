@@ -23,6 +23,7 @@ from zer0factor.eval.config import (
     FactorEvaluationResult,
 )
 from zer0factor.eval.loaders import (
+    load_index_daily,
     load_price_data,
     load_stored_factor,
     load_universe_panel,
@@ -105,14 +106,13 @@ def evaluate_factor(
         f"evaluation_metrics_finished factor={factor_name} periods={len(quantile_returns.columns)}",
     )
 
-    from zer0factor.eval.loaders import load_index_daily
     index_returns = None
     if config.benchmark_index:
         index_returns = load_index_daily(
             pro,
             ts_code=config.benchmark_index,
             start_date=config.start_date,
-            end_date=config.end_date or "",
+            end_date=config.end_date,
         )
 
     summary = build_summary(
