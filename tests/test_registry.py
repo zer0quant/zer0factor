@@ -1,8 +1,10 @@
 from pathlib import Path
 
+import pandas as pd
 import pytest
 
-from zer0factor.registry import EvaluateMeta, FactorMeta, FactorRegistry
+from zer0factor.registry import EvaluateMeta, FactorMeta, FactorRegistry, RegistryValidation
+from zer0factor.storage import FactorStorage
 
 
 def _write_registry(tmp_path: Path, content: str) -> Path:
@@ -168,3 +170,64 @@ description = ""
     reg = FactorRegistry(p)
     defaults = reg.filter(evaluate_default=True)
     assert [f.name for f in defaults] == ["z_eval_default"]
+
+
+def _make_storage_with_factors(tmp_path: Path, names: list[str]) -> FactorStorage:
+    storage = FactorStorage(tmp_path / "factors", tmp_path / "meta.duckdb")
+    df = pd.DataFrame({
+        "trade_date": ["20240102"],
+        "ts_code": ["000001.SZ"],
+        "value": [0.1],
+    })
+    for name in names:
+        storage.write(name, df)
+    return storage
+
+
+def test_validate_registered_missing(tmp_path):
+    p = _write_registry(tmp_path, """
+[[factors]]
+name = "z_registered_only"
+category = "price"
+source_type = "neutralized"
+enabled = true
+description = ""
+""")
+    storage = _make_storage_with_factors(tmp_path, [])
+    reg = FactorRegistry(p)
+    result = reg.validate(storage)
+    assert isinstance(result, RegistryValidation)
+    assert "z_registered_only" in result.registered_missing
+    assert result.orphan_stored == ()
+
+
+def test_validate_orphan_stored(tmp_path):
+    p = _write_registry(tmp_path, """
+[[factors]]
+name = "z_registered"
+category = "price"
+source_type = "neutralized"
+enabled = true
+description = ""
+""")
+    storage = _make_storage_with_factors(tmp_path, ["z_registered", "z_orphan"])
+    reg = FactorRegistry(p)
+    result = reg.validate(storage)
+    assert result.registered_missing == ()
+    assert "z_orphan" in result.orphan_stored
+
+
+def test_validate_all_clean(tmp_path):
+    p = _write_registry(tmp_path, """
+[[factors]]
+name = "z_factor_a"
+category = "price"
+source_type = "neutralized"
+enabled = true
+description = ""
+""")
+    storage = _make_storage_with_factors(tmp_path, ["z_factor_a"])
+    reg = FactorRegistry(p)
+    result = reg.validate(storage)
+    assert result.registered_missing == ()
+    assert result.orphan_stored == ()
