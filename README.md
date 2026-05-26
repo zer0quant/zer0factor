@@ -30,6 +30,8 @@
 - `zer0share` 数据适配：把本地行情转成标准宽表面板
 - 标准输出：`trade_date, ts_code, value`
 - 因子存储：Parquet 分区文件 + DuckDB 注册表
+- 因子注册表：用 `config/factors.toml` 管理待评估因子、标签和默认评估参数
+- 因子评估：基于 Alphalens / Pyfolio 生成 IC、分组收益、换手、单调性和组合绩效指标
 - `factor-research` Codex skill：从研报提取、审核、生成和归档因子
 - 已包含一轮动量研报示例和生成出的因子代码
 
@@ -40,6 +42,8 @@ zer0factor/
 ├── zer0factor/
 │   ├── config.py              # 配置读取
 │   ├── storage.py             # Parquet + DuckDB 因子存储
+│   ├── registry.py            # 因子注册表
+│   ├── eval/                  # 因子评估、summary 和 report
 │   └── factor/__init__.py     # 因子接口和 zer0share provider
 ├── docs/skills/factor-research/
 ├── workspaces/                # 每轮研究流程的产物
@@ -108,6 +112,13 @@ uv run pytest tests/test_config.py tests/test_storage.py tests/test_factor_stand
 uv run python main.py --config config/settings.toml status
 ```
 
+评估一个已落盘因子：
+
+```bash
+uv run python main.py evaluate-factor log_total_market_cap
+uv run python main.py show-summary
+```
+
 检查核心代码和 skill：
 
 ```bash
@@ -119,7 +130,100 @@ uv run ruff check zer0factor/core/__init__.py docs/skills/factor-research tests/
 | 命令 | 说明 |
 |---|---|
 | `uv run python main.py status` | 查看当前存储里有哪些已计算因子 |
+| `uv run python main.py factor-list` | 对比注册表和本地存储里的因子状态 |
+| `uv run python main.py factor-info <name>` | 查看单个因子的注册信息和存储状态 |
 | `uv run python main.py compute-returns` | 计算内置收益率因子并写入本地存储 |
+| `uv run python main.py compute-market-cap` | 计算内置市值因子并写入本地存储 |
+| `uv run python main.py standardize-factor <name>` | 对已存因子做截面去极值、填充和标准化 |
+| `uv run python main.py neutralize-factor <name>` | 对已标准化因子做行业 / 市值中性化 |
+| `uv run python main.py evaluate-factor <name>` | 评估单个已存因子 |
+| `uv run python main.py evaluate-factors <name...>` | 评估多个已存因子 |
+| `uv run python main.py evaluate-batch --file config/evaluation_batch.toml` | 按配置文件批量评估因子 |
+| `uv run python main.py show-summary` | 查看最近一次评估的完整 summary，按指标转置展示 |
+| `uv run python main.py evaluate-summary` | 生成 ranked summary 和 Markdown report |
+
+## 因子注册表
+
+因子注册表默认路径是 `config/factors.toml`，用于维护哪些因子参与批量评估：
+
+```toml
+[[factors]]
+name = "z_neu_daily_return"
+category = "price"
+source_type = "neutralized"
+source_factor = "daily_return"
+enabled = true
+tags = ["momentum", "short-term"]
+
+[factors.evaluate]
+default = true
+quantiles = 5
+periods = [1, 5, 10]
+return_type = "open_t1"
+```
+
+常用命令：
+
+```bash
+uv run python main.py factor-list --enabled
+uv run python main.py factor-info z_neu_daily_return
+```
+
+## 因子评估
+
+单因子评估：
+
+```bash
+uv run python main.py evaluate-factor log_total_market_cap \
+  --start-date 20160101 \
+  --periods 1,5,10 \
+  --quantiles 10 \
+  --return-type open_t1
+```
+
+批量评估：
+
+```bash
+uv run python main.py evaluate-batch --file config/evaluation_batch.toml
+```
+
+评估结果写入 `data/evaluations/<run_id>/`：
+
+```text
+data/evaluations/<run_id>/
+├── summary.csv
+├── summary.parquet
+└── factors/<factor_name>/
+    ├── clean_factor_data.parquet
+    ├── daily_ic.csv
+    ├── quantile_returns.csv
+    └── plots/
+```
+
+执行 `evaluate-summary` 后，会在同一个 run 目录下额外生成 `ranked_summary.csv` 和 `report.md`。
+
+查看最近一次 summary：
+
+```bash
+uv run python main.py show-summary
+uv run python main.py show-summary --period 1D
+uv run python main.py show-summary --all
+```
+
+summary 默认保留方向化后的 `adjusted_ICIR`、`adjusted_t-stat`、`directional_IC>0 %` 和 `long_short_spread`；容易误读的原始方向指标，例如 `ICIR`、`t-stat`、`raw_quantile_spread` 已不再输出。`show-summary --all` 可查看少量保留的原始诊断列。
+
+### Summary 指标口径
+
+| 指标组 | 字段示例 | 口径 |
+|---|---|---|
+| 基础信息 | `factor_name`, `period`, `sample_count`, `factor_direction` | 因子名、预测周期、有效样本量和自动识别方向 |
+| IC | `IC Mean`, `IC Std`, `adjusted_ICIR`, `adjusted_t-stat`, `directional_IC>0 %` | IC 保留原始均值符号；ICIR、t-stat、胜率按因子方向调整，便于不同方向因子横向比较 |
+| 分组收益 | `mean_return_q1`, `mean_return_qN`, `long_short_spread_bps` | q1/qN 是原始分组均值；多空 spread 按 long/short 方向计算 |
+| 单调性 | `monotonicity`, `monotonicity_q_mean`, `monotonicity_q_ir`, `monotonicity_q_gt_50_rate` | 衡量分组收益是否随分组有稳定排序关系 |
+| 换手 | `turnover_daily_long`, `turnover_annual_rebalance_long` | 日均单边换手和按调仓周期折算的年化换手 |
+| 组合绩效 | `long_*`, `short_*`, `long_exc_*`, `short_exc_*`, `ls_*`, `full_*`, `idx_exc_*` | 使用 Alphalens `create_pyfolio_input` 生成组合收益，再用 Pyfolio 计算年化、回撤、Calmar 和 Sharpe |
+
+多日预测周期（如 5D、10D）会先把 Alphalens 生成的周期收益转成日化等价收益，再计算组合指标；Sharpe 会进一步按重叠窗口的自相关做自动调整，字段名保持为 `*_sharpe`。
 
 ## 标准因子长什么样
 
