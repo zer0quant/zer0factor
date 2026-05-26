@@ -74,5 +74,7 @@ def test_build_summary_includes_ic_freq_and_ratio_columns():
         daily_ic=daily_ic,
         quantile_returns=quantile_returns,
     )
-    for col in ["IC>0 %(W)", "IC>0 %(M)", "IC_near_far_ratio"]:
+    for col in ["directional_IC>0 %(W)", "directional_IC>0 %(M)", "IC_near_far_ratio"]:
         assert col in result.columns, f"missing column: {col}"
+    assert "IC>0 %(W)" not in result.columns
+    assert "IC>0 %(M)" not in result.columns

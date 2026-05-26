@@ -11,8 +11,8 @@ REQUIRED_SUMMARY_COLUMNS = {
     "period",
     "sample_count",
     "IC Mean",
-    "ICIR",
-    "IC>0 %",
+    "adjusted_ICIR",
+    "directional_IC>0 %",
     "long_short_spread_bps",
 }
 
@@ -54,25 +54,30 @@ def build_ranked_summary(
         raise ValueError(f"summary.csv missing required columns: {missing_columns}")
 
     ranked = summary.copy()
-    ranked["direction"] = 1
-    ranked.loc[ranked["IC Mean"].lt(0), "direction"] = -1
-    ranked["adjusted_spread_bps"] = (
-        ranked["long_short_spread_bps"] * ranked["direction"]
-    )
+    if "factor_direction" in ranked.columns:
+        ranked["direction"] = ranked["factor_direction"].fillna(1).astype(int)
+    else:
+        ranked["direction"] = 1
+        ranked.loc[ranked["IC Mean"].lt(0), "direction"] = -1
+    ranked["adjusted_icir"] = ranked["adjusted_ICIR"]
+    ranked["directional_IC_win_rate"] = ranked["directional_IC>0 %"]
+    ranked["adjusted_spread_bps"] = ranked["long_short_spread_bps"]
     ranked["monotonicity"] = _align_monotonicity(ranked, monotonicity)
     ranked["score"] = (
-        ranked["IC Mean"] * 100 + ranked["ICIR"] + ranked["long_short_spread_bps"] / 10
+        ranked["IC Mean"] * 100
+        + ranked["adjusted_ICIR"]
+        + ranked["long_short_spread_bps"] / 10
     )
     ranked["adjusted_score"] = (
         ranked["IC Mean"].abs() * 100
-        + ranked["ICIR"]
+        + ranked["adjusted_icir"]
         + ranked["adjusted_spread_bps"] / 10
         + ranked["monotonicity"].fillna(0)
     )
     ranked["passed"] = (
         ranked["IC Mean"].abs().ge(thresholds.min_ic)
-        & ranked["ICIR"].ge(thresholds.min_icir)
-        & ranked["IC>0 %"].ge(thresholds.min_win_rate)
+        & ranked["adjusted_icir"].ge(thresholds.min_icir)
+        & ranked["directional_IC_win_rate"].ge(thresholds.min_win_rate)
         & ranked["adjusted_spread_bps"].gt(thresholds.min_spread_bps)
         & ranked["sample_count"].ge(thresholds.min_sample_count)
         & ranked["monotonicity"].ge(thresholds.min_monotonicity)
@@ -134,8 +139,8 @@ def render_markdown_report(
         "## Rules",
         "",
         f"- abs(IC Mean) >= {thresholds.min_ic}",
-        f"- ICIR >= {thresholds.min_icir}",
-        f"- IC>0 % >= {thresholds.min_win_rate}",
+        f"- adjusted_ICIR >= {thresholds.min_icir}",
+        f"- directional_IC>0 % >= {thresholds.min_win_rate}",
         f"- adjusted_spread_bps > {thresholds.min_spread_bps}",
         f"- sample_count >= {thresholds.min_sample_count}",
         f"- monotonicity >= {thresholds.min_monotonicity}",
@@ -169,27 +174,46 @@ def _display_columns(frame: pd.DataFrame) -> pd.DataFrame:
         "passed",
         "direction",
         "IC Mean",
-        "ICIR",
-        "IC>0 %",
+        "adjusted_ICIR",
+        "adjusted_icir",
+        "adjusted_t-stat",
+        "directional_IC>0 %",
+        "directional_IC_win_rate",
         "adjusted_spread_bps",
         "monotonicity",
         "monotonicity_q_mean",
         "monotonicity_q_ir",
         "monotonicity_q_pos_rate",
+        "monotonicity_q_gt_50_rate",
         "long_sharpe",
         "long_calmar",
         "long_ann_ret",
         "ls_sharpe",
         "ls_calmar",
         "ls_ann_ret",
+        "ls_max_dd",
+        "full_sharpe",
+        "full_calmar",
+        "full_ann_ret",
+        "full_max_dd",
         "long_exc_sharpe",
         "long_exc_calmar",
+        "long_exc_ann_ret",
+        "long_exc_max_dd",
+        "short_exc_sharpe",
+        "short_exc_calmar",
+        "short_exc_ann_ret",
+        "short_exc_max_dd",
         "idx_exc_sharpe",
         "idx_exc_calmar",
+        "idx_exc_ann_ret",
+        "idx_exc_max_dd",
         "turnover_daily_long",
-        "turnover_annual_long",
-        "IC>0 %(W)",
-        "IC>0 %(M)",
+        "turnover_annual_rebalance_long",
+        "turnover_daily_short",
+        "turnover_annual_rebalance_short",
+        "directional_IC>0 %(W)",
+        "directional_IC>0 %(M)",
         "IC_near_far_ratio",
         "ls_ann_ret_ratio",
         "long_short_spread_bps",

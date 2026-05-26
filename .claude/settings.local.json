@@ -3,7 +3,21 @@
     "allow": [
       "Bash(git add *)",
       "Bash(uv run *)",
-      "Bash(git commit *)"
+      "Bash(git commit *)",
+      "Skill(superpowers:brainstorming)",
+      "Skill(superpowers:systematic-debugging)",
+      "Bash(python *)",
+      "Bash(python3 *)",
+      "Bash(git -C /data/zer0factor log --oneline -10)",
+      "Bash(git -C /data/zer0factor add docs/superpowers/specs/2026-05-24-factor-registry-design.md)",
+      "Bash(git -C /data/zer0factor commit -m ' *)",
+      "Bash(git -C /data/zer0factor add docs/superpowers/plans/2026-05-24-factor-registry.md)",
+      "Bash(git *)",
+      "Read(//data/zer0share/**)",
+      "WebSearch",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "WebFetch(domain:github.com)",
+      "Bash(gh api *)"
     ]
   }
 }

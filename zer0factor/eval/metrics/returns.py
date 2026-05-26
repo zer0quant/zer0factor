@@ -1,9 +1,21 @@
 from __future__ import annotations
 
-import math
+import re
+import warnings
+from contextlib import contextmanager
 
 import numpy as np
 import pandas as pd
+
+warnings.filterwarnings(
+    "ignore",
+    message='Module "zipline.assets" not found.*',
+    category=UserWarning,
+    module=r"pyfolio\.pos",
+)
+
+import pyfolio as pf  # noqa: E402
+from alphalens import performance as alphalens_performance  # noqa: E402
 
 
 def detect_direction(daily_ic: pd.DataFrame) -> int:
@@ -12,109 +24,272 @@ def detect_direction(daily_ic: pd.DataFrame) -> int:
     return 1 if (pd.isna(overall) or overall >= 0) else -1
 
 
-def annualized_return(daily_returns: pd.Series) -> float:
-    clean = daily_returns.dropna()
-    if len(clean) == 0:
-        return float("nan")
-    return float((1 + clean).prod() ** (252 / len(clean)) - 1)
-
-
-def max_drawdown(daily_returns: pd.Series) -> float:
-    clean = daily_returns.dropna()
-    if len(clean) == 0:
-        return float("nan")
-    cumulative = (1 + clean).cumprod()
-    peak = cumulative.cummax()
-    drawdown = (cumulative - peak) / peak
-    return float(drawdown.min())
-
-
-def sharpe_ratio(daily_returns: pd.Series) -> float:
-    clean = daily_returns.dropna()
-    std = clean.std()
-    if pd.isna(std) or np.isclose(std, 0.0):
-        return float("nan")
-    return float(clean.mean() / std * math.sqrt(252))
-
-
-def calmar_ratio(daily_returns: pd.Series) -> float:
-    ann = annualized_return(daily_returns)
-    dd = max_drawdown(daily_returns)
-    if pd.isna(dd) or np.isclose(dd, 0.0):
-        return float("nan")
-    return float(ann / abs(dd))
-
-
-def build_group_return_metrics(
-    mean_ret_by_date: pd.DataFrame,
-    mean_ret_by_date_demeaned: pd.DataFrame | None,
+def build_pyfolio_return_metrics(
+    clean_factor_data: pd.DataFrame,
     *,
     direction: int,
     period: str,
-    n_quantiles: int,
+    long_quantile: int,
+    short_quantile: int,
     index_returns: pd.Series | None = None,
 ) -> dict[str, float]:
     """
-    mean_ret_by_date: MultiIndex (date, factor_quantile), columns=periods
-    mean_ret_by_date_demeaned: same shape, demeaned
-    direction: +1 or -1
-    period: e.g. "1D"
-    n_quantiles: total number of quantiles
-    index_returns: optional Series (DatetimeIndex -> daily return) for index excess
+    Build all portfolio performance stats from Alphalens daily returns.
+
+    Single-leg portfolios pin factor values to +1/-1 so Alphalens builds pure
+    equal-weight long and short sleeves instead of using raw factor signs.
     """
-    q_long = n_quantiles if direction == 1 else 1
-    q_short = 1 if direction == 1 else n_quantiles
+    try:
+        with _suppress_known_pyfolio_warnings():
+            long_returns, long_positions, benchmark = _create_pyfolio_returns(
+                clean_factor_data,
+                period=period,
+                quantiles=[long_quantile],
+                factor_value=1.0,
+            )
+            short_returns, short_positions, _ = _create_pyfolio_returns(
+                clean_factor_data,
+                period=period,
+                quantiles=[short_quantile],
+                factor_value=-1.0,
+            )
+            ls_returns, ls_positions, ls_benchmark = _create_long_short_pyfolio_returns(
+                clean_factor_data,
+                direction=direction,
+                period=period,
+                equal_weight=True,
+                quantiles=sorted([long_quantile, short_quantile]),
+            )
+            full_returns, full_positions, full_benchmark = (
+                _create_long_short_pyfolio_returns(
+                    clean_factor_data,
+                    direction=direction,
+                    period=period,
+                    equal_weight=False,
+                    quantiles=None,
+                )
+            )
+    except Exception:
+        return _empty_pyfolio_return_metrics(index_returns is not None)
 
-    long_daily = _extract_quantile_daily(mean_ret_by_date, q_long, period)
-    short_daily = _extract_quantile_daily(mean_ret_by_date, q_short, period)
-    ls_daily = long_daily - short_daily
-
-    if mean_ret_by_date_demeaned is not None:
-        long_exc_daily = _extract_quantile_daily(mean_ret_by_date_demeaned, q_long, period)
-        short_exc_daily = _extract_quantile_daily(mean_ret_by_date_demeaned, q_short, period)
-    else:
-        long_exc_daily = pd.Series(dtype=float)
-        short_exc_daily = pd.Series(dtype=float)
+    period_int = _parse_period_int(period)
+    long_returns = _daily_equivalent_returns(long_returns, period_int)
+    short_returns = _daily_equivalent_returns(short_returns, period_int)
+    ls_returns = _daily_equivalent_returns(ls_returns, period_int)
+    full_returns = _daily_equivalent_returns(full_returns, period_int)
+    benchmark = _daily_equivalent_returns(benchmark, period_int)
+    ls_benchmark = _daily_equivalent_returns(ls_benchmark, period_int)
+    full_benchmark = _daily_equivalent_returns(full_benchmark, period_int)
 
     result: dict[str, float] = {}
+    result.update(_portfolio_stats("long", long_returns, benchmark, long_positions, period_int))
+    result.update(_portfolio_stats("short", short_returns, benchmark, short_positions, period_int))
 
-    for prefix, series in [
-        ("long", long_daily),
-        ("short", short_daily),
-        ("ls", ls_daily),
-        ("long_exc", long_exc_daily),
-    ]:
-        result[f"{prefix}_ann_ret"] = annualized_return(series)
-        result[f"{prefix}_max_dd"] = max_drawdown(series)
-        result[f"{prefix}_calmar"] = calmar_ratio(series)
-        result[f"{prefix}_sharpe"] = sharpe_ratio(series)
-
-    long_exc_ann = result["long_exc_ann_ret"]
-    short_exc_ann = annualized_return(short_exc_daily)
-    if not pd.isna(long_exc_ann) and not pd.isna(short_exc_ann) and not np.isclose(short_exc_ann, 0.0):
-        result["ls_ann_ret_ratio"] = float(long_exc_ann / abs(short_exc_ann))
+    if benchmark is not None:
+        long_exc_returns = long_returns - benchmark.reindex(long_returns.index).fillna(0)
+        short_exc_returns = short_returns + benchmark.reindex(short_returns.index).fillna(0)
+        result.update(_portfolio_stats("long_exc", long_exc_returns, period_int=period_int))
+        result.update(_portfolio_stats("short_exc", short_exc_returns, period_int=period_int))
+        short_exc_ann = _stat_value(
+            pf.timeseries.perf_stats(short_exc_returns),
+            "Annual return",
+        )
     else:
-        result["ls_ann_ret_ratio"] = float("nan")
+        result.update(_empty_portfolio_stats("long_exc"))
+        result.update(_empty_portfolio_stats("short_exc"))
+        short_exc_ann = float("nan")
+
+    result.update(_portfolio_stats("ls", ls_returns, ls_benchmark, ls_positions, period_int))
+    result.update(
+        _portfolio_stats("full", full_returns, full_benchmark, full_positions, period_int)
+    )
 
     if index_returns is not None:
-        idx_exc_daily = long_daily - index_returns.reindex(long_daily.index).fillna(0)
-        result["idx_exc_ann_ret"] = annualized_return(idx_exc_daily)
-        result["idx_exc_max_dd"] = max_drawdown(idx_exc_daily)
-        result["idx_exc_calmar"] = calmar_ratio(idx_exc_daily)
-        result["idx_exc_sharpe"] = sharpe_ratio(idx_exc_daily)
+        aligned_index = _daily_equivalent_returns(
+            index_returns.reindex(long_returns.index).fillna(0),
+            period_int,
+        )
+        result.update(
+            _portfolio_stats("idx_exc", long_returns - aligned_index, period_int=period_int)
+        )
 
+    result["long_exc_short_exc_ann_ret_ratio"] = _ann_return_ratio(
+        result["long_exc_ann_ret"],
+        short_exc_ann,
+    )
+    result["ls_ann_ret_ratio"] = _ann_return_ratio(
+        result["ls_ann_ret"],
+        result["short_ann_ret"],
+    )
     return result
 
 
-def _extract_quantile_daily(
-    mean_ret_by_date: pd.DataFrame,
-    quantile: int,
+def _create_pyfolio_returns(
+    clean_factor_data: pd.DataFrame,
+    *,
     period: str,
-) -> pd.Series:
-    """Extract daily return Series for a single quantile from by-date quantile returns."""
-    if period not in mean_ret_by_date.columns:
-        return pd.Series(dtype=float)
-    try:
-        return mean_ret_by_date[period].xs(quantile, level="factor_quantile")
-    except KeyError:
-        return pd.Series(dtype=float)
+    quantiles: list[int],
+    factor_value: float,
+) -> tuple[pd.Series, pd.DataFrame, pd.Series | None]:
+    factor_data = clean_factor_data.copy()
+    factor_data["factor"] = factor_value
+    return alphalens_performance.create_pyfolio_input(
+        factor_data,
+        period=period,
+        capital=None,
+        long_short=False,
+        group_neutral=False,
+        equal_weight=True,
+        quantiles=quantiles,
+        groups=None,
+        benchmark_period="1D",
+    )
+
+
+def _create_long_short_pyfolio_returns(
+    clean_factor_data: pd.DataFrame,
+    *,
+    direction: int,
+    period: str,
+    equal_weight: bool,
+    quantiles: list[int] | None,
+) -> tuple[pd.Series, pd.DataFrame, pd.Series | None]:
+    factor_data = clean_factor_data.copy()
+    factor_data["factor"] = factor_data["factor"] * direction
+    return alphalens_performance.create_pyfolio_input(
+        factor_data,
+        period=period,
+        capital=None,
+        long_short=True,
+        group_neutral=False,
+        equal_weight=equal_weight,
+        quantiles=quantiles,
+        groups=None,
+        benchmark_period="1D",
+    )
+
+
+def _portfolio_stats(
+    prefix: str,
+    returns: pd.Series,
+    factor_returns: pd.Series | None = None,
+    positions: pd.DataFrame | None = None,
+    period_int: int = 1,
+) -> dict[str, float]:
+    stats = pf.timeseries.perf_stats(
+        returns,
+        factor_returns=factor_returns,
+        positions=positions,
+    )
+    return {
+        f"{prefix}_ann_ret": _stat_value(stats, "Annual return"),
+        f"{prefix}_max_dd": _stat_value(stats, "Max drawdown"),
+        f"{prefix}_calmar": _stat_value(stats, "Calmar ratio"),
+        f"{prefix}_sharpe": _adjusted_sharpe(
+            returns,
+            _stat_value(stats, "Sharpe ratio"),
+            period_int,
+        ),
+    }
+
+
+@contextmanager
+def _suppress_known_pyfolio_warnings():
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore",
+            message="'freq' not set, using business day calendar",
+            category=UserWarning,
+            module=r"alphalens\.performance",
+        )
+        warnings.filterwarnings(
+            "ignore",
+            message="Series.fillna with 'method' is deprecated.*",
+            category=FutureWarning,
+            module=r"alphalens\.performance",
+        )
+        warnings.filterwarnings(
+            "ignore",
+            message="DataFrame.fillna with 'method' is deprecated.*",
+            category=FutureWarning,
+            module=r"alphalens\.performance",
+        )
+        warnings.filterwarnings(
+            "ignore",
+            message="Downcasting object dtype arrays on \\.fillna.*",
+            category=FutureWarning,
+            module=r"alphalens\.performance",
+        )
+        warnings.filterwarnings(
+            "ignore",
+            message="Non-vectorized DateOffset being applied.*",
+            category=pd.errors.PerformanceWarning,
+            module=r"alphalens\.utils",
+        )
+        yield
+
+
+def _empty_pyfolio_return_metrics(include_idx_exc: bool) -> dict[str, float]:
+    result: dict[str, float] = {}
+    for prefix in ["long", "short", "long_exc", "short_exc", "ls", "full"]:
+        result.update(_empty_portfolio_stats(prefix))
+    if include_idx_exc:
+        result.update(_empty_portfolio_stats("idx_exc"))
+    result["long_exc_short_exc_ann_ret_ratio"] = float("nan")
+    result["ls_ann_ret_ratio"] = float("nan")
+    return result
+
+
+def _empty_portfolio_stats(prefix: str) -> dict[str, float]:
+    return {
+        f"{prefix}_ann_ret": float("nan"),
+        f"{prefix}_max_dd": float("nan"),
+        f"{prefix}_calmar": float("nan"),
+        f"{prefix}_sharpe": float("nan"),
+    }
+
+
+def _ann_return_ratio(numerator: float, denominator: float) -> float:
+    if pd.isna(numerator) or pd.isna(denominator) or np.isclose(denominator, 0.0):
+        return float("nan")
+    return float(numerator / abs(denominator))
+
+
+def _daily_equivalent_returns(
+    returns: pd.Series | None,
+    period_int: int,
+) -> pd.Series | None:
+    if returns is None or period_int <= 1:
+        return returns
+    return (1 + returns).pow(1 / period_int) - 1
+
+
+def _adjusted_sharpe(returns: pd.Series, sharpe: float, period_int: int) -> float:
+    if pd.isna(sharpe) or period_int <= 1:
+        return sharpe
+    clean = returns.dropna().astype(float)
+    lag_count = min(period_int - 1, len(clean) - 1)
+    if lag_count <= 0:
+        return sharpe
+    weighted_autocorr = 0.0
+    for lag in range(1, lag_count + 1):
+        if len(clean) <= lag + 1:
+            continue
+        autocorr = clean.autocorr(lag)
+        if pd.isna(autocorr):
+            continue
+        weighted_autocorr += (1 - lag / period_int) * autocorr
+    adjustment = np.sqrt(max(1 + 2 * weighted_autocorr, 1e-12))
+    return float(sharpe / adjustment)
+
+
+def _parse_period_int(period: str) -> int:
+    match = re.match(r"^(\d+)[Dd]$", str(period))
+    if match is None:
+        return 1
+    return int(match.group(1))
+
+
+def _stat_value(stats: pd.Series, key: str) -> float:
+    value = stats.get(key, float("nan"))
+    return float("nan") if pd.isna(value) else float(value)

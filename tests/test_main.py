@@ -230,6 +230,54 @@ def test_evaluate_summary_command_prints_report_paths(monkeypatch, tmp_path):
     assert "factor_a" in result.output
 
 
+def test_show_summary_hides_raw_ic_win_rates_by_default(tmp_path):
+    runner = CliRunner()
+    run_dir = tmp_path / "evaluations" / "run_001"
+    run_dir.mkdir(parents=True)
+    pd.DataFrame(
+        {
+            "factor_name": ["factor_a"],
+            "period": ["1D"],
+            "IC>0 %": [40.0],
+            "directional_IC>0 %": [60.0],
+            "IC>0 %(W)": [35.0],
+            "directional_IC>0 %(W)": [65.0],
+            "IC>0 %(M)": [30.0],
+            "directional_IC>0 %(M)": [70.0],
+        }
+    ).to_csv(run_dir / "summary.csv", index=False)
+
+    result = runner.invoke(cli, ["show-summary", "--run-dir", str(run_dir)])
+
+    assert result.exit_code == 0
+    assert "directional_IC>0 %" in result.output
+    assert "directional_IC>0 %(W)" in result.output
+    assert "directional_IC>0 %(M)" in result.output
+    assert "IC>0 %" not in result.output.replace("directional_IC>0 %", "")
+    assert "IC>0 %(W)" not in result.output.replace("directional_IC>0 %(W)", "")
+    assert "IC>0 %(M)" not in result.output.replace("directional_IC>0 %(M)", "")
+
+
+def test_show_summary_all_includes_raw_ic_win_rates(tmp_path):
+    runner = CliRunner()
+    run_dir = tmp_path / "evaluations" / "run_001"
+    run_dir.mkdir(parents=True)
+    pd.DataFrame(
+        {
+            "factor_name": ["factor_a"],
+            "period": ["1D"],
+            "IC>0 %": [40.0],
+            "directional_IC>0 %": [60.0],
+        }
+    ).to_csv(run_dir / "summary.csv", index=False)
+
+    result = runner.invoke(cli, ["show-summary", "--run-dir", str(run_dir), "--all"])
+
+    assert result.exit_code == 0
+    assert "IC>0 %" in result.output
+    assert "directional_IC>0 %" in result.output
+
+
 def test_evaluate_batch_command_runs_evaluation_and_report(monkeypatch, tmp_path):
     runner = CliRunner()
     batch_file = tmp_path / "batch.toml"

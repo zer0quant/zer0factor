@@ -16,9 +16,9 @@ def _summary() -> pd.DataFrame:
             "period": ["1D", "1D", "1D"],
             "sample_count": [2000, 500, 2000],
             "IC Mean": [0.03, 0.01, -0.03],
-            "ICIR": [0.5, 0.2, 0.5],
-            "IC>0 %": [55.0, 49.0, 55.0],
-            "long_short_spread_bps": [4.0, -1.0, -4.0],
+            "adjusted_ICIR": [0.5, 0.2, 0.5],
+            "directional_IC>0 %": [55.0, 49.0, 55.0],
+            "long_short_spread_bps": [4.0, -1.0, 4.0],
         }
     )
 
@@ -64,6 +64,38 @@ def test_build_ranked_summary_adjusts_reverse_factor_direction():
     assert ranked.loc[0, "adjusted_spread_bps"] == pytest.approx(4.0)
     assert ranked.loc[0, "monotonicity"] == pytest.approx(0.8)
     assert ranked.loc[0, "adjusted_score"] == pytest.approx(3.9 + 0.8)
+    assert ranked.loc[0, "passed"]
+
+
+def test_build_ranked_summary_uses_directional_metrics_from_new_summary():
+    summary = pd.DataFrame(
+        {
+            "factor_name": ["factor_reverse"],
+            "period": ["1D"],
+            "sample_count": [2000],
+            "factor_direction": [-1],
+            "IC Mean": [-0.03],
+            "adjusted_ICIR": [0.5],
+            "directional_IC>0 %": [55.0],
+            "long_short_spread_bps": [4.0],
+        }
+    )
+
+    ranked = build_ranked_summary(
+        summary,
+        ReportThresholds(min_monotonicity=0.0),
+        monotonicity=pd.Series(
+            [0.8],
+            index=pd.MultiIndex.from_tuples(
+                [("factor_reverse", "1D")], names=["factor_name", "period"]
+            ),
+        ),
+    )
+
+    assert ranked.loc[0, "direction"] == -1
+    assert ranked.loc[0, "adjusted_icir"] == pytest.approx(0.5)
+    assert ranked.loc[0, "directional_IC_win_rate"] == pytest.approx(55.0)
+    assert ranked.loc[0, "adjusted_spread_bps"] == pytest.approx(4.0)
     assert ranked.loc[0, "passed"]
 
 
@@ -141,25 +173,25 @@ def test_generate_evaluation_report_requires_summary_csv(tmp_path):
 
 
 def test_build_ranked_summary_includes_return_columns_when_present():
-    from zer0factor.eval.report import build_ranked_summary, ReportThresholds
-
-    summary = pd.DataFrame({
-        "factor_name": ["f"],
-        "period": ["1D"],
-        "sample_count": [1000],
-        "IC Mean": [0.05],
-        "ICIR": [0.5],
-        "IC>0 %": [55.0],
-        "long_short_spread_bps": [10.0],
-        "long_sharpe": [1.2],
-        "ls_calmar": [0.8],
-        "turnover_annual_long": [24.0],
-        "monotonicity_q_mean": [0.7],
-    })
+    summary = pd.DataFrame(
+        {
+            "factor_name": ["f"],
+            "period": ["1D"],
+            "sample_count": [1000],
+            "IC Mean": [0.05],
+            "adjusted_ICIR": [0.5],
+            "directional_IC>0 %": [55.0],
+            "long_short_spread_bps": [10.0],
+            "long_sharpe": [1.2],
+            "ls_calmar": [0.8],
+            "turnover_annual_rebalance_long": [24.0],
+            "monotonicity_q_mean": [0.7],
+        }
+    )
     result = build_ranked_summary(summary, ReportThresholds())
     assert "long_sharpe" in result.columns
     assert "ls_calmar" in result.columns
-    assert "turnover_annual_long" in result.columns
+    assert "turnover_annual_rebalance_long" in result.columns
 
 
 def test_display_columns_includes_new_metric_columns():
@@ -167,13 +199,13 @@ def test_display_columns_includes_new_metric_columns():
 
     frame = pd.DataFrame(columns=[
         "factor_name", "period", "sample_count",
-        "IC Mean", "ICIR", "IC>0 %", "long_short_spread_bps",
-        "long_sharpe", "ls_calmar", "turnover_annual_long",
-        "IC>0 %(W)", "IC>0 %(M)", "IC_near_far_ratio",
+        "IC Mean", "adjusted_ICIR", "directional_IC>0 %", "long_short_spread_bps",
+        "long_sharpe", "ls_calmar", "turnover_annual_rebalance_long",
+        "directional_IC>0 %(W)", "directional_IC>0 %(M)", "IC_near_far_ratio",
         "monotonicity_q_mean", "ls_ann_ret_ratio",
     ])
     displayed = _display_columns(frame)
-    for col in ["long_sharpe", "ls_calmar", "turnover_annual_long",
-                "IC>0 %(W)", "IC>0 %(M)", "IC_near_far_ratio",
+    for col in ["long_sharpe", "ls_calmar", "turnover_annual_rebalance_long",
+                "directional_IC>0 %(W)", "directional_IC>0 %(M)", "IC_near_far_ratio",
                 "monotonicity_q_mean", "ls_ann_ret_ratio"]:
         assert col in displayed, f"_display_columns missing: {col}"

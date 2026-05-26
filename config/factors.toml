@@ -1,0 +1,22 @@
+# Factor Registry — copy to config/factors.toml and edit
+# source_type: built_in | stored | derived | neutralized
+
+[registry]
+version = "1"
+
+[[factors]]
+name = "z_neu_daily_return"
+category = "price"
+source_type = "neutralized"
+source_factor = "daily_return"
+enabled = true
+tags = ["momentum", "short-term"]
+description = "Neutralized daily return factor"
+
+[factors.evaluate]
+default = true
+quantiles = 5
+periods = [1, 5, 10]
+return_type = "open_t1"
+
+

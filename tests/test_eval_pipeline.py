@@ -5,6 +5,7 @@ import pytest
 
 from zer0factor.eval import EvaluationConfig, evaluate_factor, evaluate_factors
 from zer0factor.eval.loaders import load_price_data, load_universe_panel
+from zer0factor.eval.pipeline import _calculate_period_sample_counts
 from zer0factor.storage import FactorStorage
 
 
@@ -106,6 +107,46 @@ def patch_empty_clean_factor_data(monkeypatch):
         "zer0factor.eval.pipeline.get_clean_factor_and_forward_returns",
         fake_clean_factor_and_forward_returns,
     )
+
+
+def test_calculate_period_sample_counts_cleans_each_period_independently(monkeypatch):
+    index_1d = pd.MultiIndex.from_tuples(
+        [
+            (pd.Timestamp("2024-01-01"), "000001.SZ"),
+            (pd.Timestamp("2024-01-02"), "000001.SZ"),
+            (pd.Timestamp("2024-01-03"), "000001.SZ"),
+        ],
+        names=["date", "asset"],
+    )
+    index_5d = index_1d[:2]
+
+    def fake_clean_factor_and_forward_returns(*args, **kwargs):
+        periods = kwargs["periods"]
+        period = periods[0]
+        index = index_1d if period == 1 else index_5d
+        return pd.DataFrame(
+            {
+                "factor": [1.0] * len(index),
+                "factor_quantile": [1] * len(index),
+                f"{period}D": [0.01] * len(index),
+            },
+            index=index,
+        )
+
+    monkeypatch.setattr(
+        "zer0factor.eval.pipeline.get_clean_factor_and_forward_returns",
+        fake_clean_factor_and_forward_returns,
+    )
+
+    counts = _calculate_period_sample_counts(
+        pd.Series(dtype=float),
+        pd.DataFrame(),
+        quantiles=2,
+        periods=(1, 5),
+        max_loss=0.35,
+    )
+
+    assert counts == {"1D": 3, "5D": 2}
 
 
 def make_config(tmp_path, **overrides):
@@ -546,9 +587,6 @@ def test_load_universe_panel_returns_empty_bool_frame_when_all_rows_drop():
 
 
 def test_evaluate_factors_summary_contains_ic_freq_columns(tmp_path, monkeypatch):
-    from zer0factor.eval import EvaluationConfig, evaluate_factors
-    from zer0factor.storage import FactorStorage
-
     storage = FactorStorage(tmp_path / "factors", tmp_path / "factor.duckdb")
     write_factor_a(storage)
 
@@ -577,5 +615,7 @@ def test_evaluate_factors_summary_contains_ic_freq_columns(tmp_path, monkeypatch
         run_id="run_ext",
     )
 
-    for col in ["IC>0 %(W)", "IC>0 %(M)", "IC_near_far_ratio"]:
+    for col in ["directional_IC>0 %(W)", "directional_IC>0 %(M)", "IC_near_far_ratio"]:
         assert col in result.summary.columns, f"missing: {col}"
+    assert "IC>0 %(W)" not in result.summary.columns
+    assert "IC>0 %(M)" not in result.summary.columns

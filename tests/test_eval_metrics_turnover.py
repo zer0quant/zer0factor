@@ -22,9 +22,20 @@ def make_clean_factor_data():
 def test_calculate_quantile_turnover_returns_expected_keys():
     cfd = make_clean_factor_data()
     result = calculate_quantile_turnover(cfd, long_quantile=4, short_quantile=1, period="1D")
-    for key in ["turnover_daily_long", "turnover_annual_long",
-                "turnover_daily_short", "turnover_annual_short"]:
+    for key in [
+        "turnover_daily_long",
+        "turnover_annual_rebalance_long",
+        "turnover_daily_short",
+        "turnover_annual_rebalance_short",
+    ]:
         assert key in result, f"missing key: {key}"
+    for key in [
+        "turnover_annual_long",
+        "turnover_annual_daily_long",
+        "turnover_annual_short",
+        "turnover_annual_daily_short",
+    ]:
+        assert key not in result, f"unexpected key: {key}"
 
 
 def test_calculate_quantile_turnover_zero_when_holdings_unchanged():
@@ -35,11 +46,37 @@ def test_calculate_quantile_turnover_zero_when_holdings_unchanged():
     assert result["turnover_daily_short"] == pytest.approx(0.0)
 
 
-def test_calculate_quantile_turnover_annual_equals_daily_times_252_over_period():
+def test_calculate_quantile_turnover_annual_equals_rebalance_annual_turnover():
     cfd = make_clean_factor_data()
     result = calculate_quantile_turnover(cfd, long_quantile=4, short_quantile=1, period="1D")
-    expected_annual = result["turnover_daily_long"] * 252 / 1
-    assert result["turnover_annual_long"] == pytest.approx(expected_annual)
+    expected_annual = result["turnover_daily_long"] * 252
+    assert result["turnover_annual_rebalance_long"] == pytest.approx(expected_annual)
+
+
+def test_calculate_quantile_turnover_reports_daily_and_rebalance_annual_turnover():
+    dates = pd.date_range("2024-01-02", periods=2, freq="B")
+    index = pd.MultiIndex.from_tuples(
+        [
+            (dates[0], "A"),
+            (dates[0], "B"),
+            (dates[1], "C"),
+            (dates[1], "D"),
+        ],
+        names=["date", "asset"],
+    )
+    cfd = pd.DataFrame(
+        {
+            "factor": [1.0, 2.0, 3.0, 4.0],
+            "factor_quantile": [4, 4, 4, 4],
+            "5D": [0.01] * 4,
+        },
+        index=index,
+    )
+
+    result = calculate_quantile_turnover(cfd, long_quantile=4, short_quantile=1, period="5D")
+
+    assert result["turnover_daily_long"] == pytest.approx(1.0)
+    assert result["turnover_annual_rebalance_long"] == pytest.approx(252.0 / 5)
 
 
 def test_calculate_quantile_turnover_full_turnover_when_all_stocks_change():

@@ -932,5 +932,51 @@ def evaluate_summary_command(
     click.echo(result.ranked_summary.loc[:, preview_columns].head(10).to_string(index=False))
 
 
+@cli.command("show-summary")
+@click.option("--run-dir", default=None, help="Evaluation run directory (defaults to latest)")
+@click.option("--evaluations-dir", default="data/evaluations", show_default=True)
+@click.option("--period", default=None, help="Filter to a specific period, e.g. 1D")
+@click.option(
+    "--all",
+    "show_all",
+    is_flag=True,
+    default=False,
+    help="Show all raw diagnostic columns",
+)
+def show_summary_command(run_dir, evaluations_dir, period, show_all):
+    """Show all metrics for an evaluation run, transposed (metrics as rows)."""
+    resolved_run_dir = Path(run_dir) if run_dir else find_latest_run_dir(Path(evaluations_dir))
+    summary_path = resolved_run_dir / "summary.csv"
+    if not summary_path.exists():
+        raise click.ClickException(f"summary.csv not found in {resolved_run_dir}")
+
+    df = pd.read_csv(summary_path)
+    if period:
+        df = df[df["period"] == period]
+        if df.empty:
+            raise click.ClickException(f"No rows found for period={period}")
+    if not show_all:
+        df = df.drop(
+            columns=[
+                "IC>0 %",
+                "IC>0 %(W)",
+                "IC>0 %(M)",
+            ],
+            errors="ignore",
+        )
+
+    df = df.reset_index(drop=True)
+    col_labels = (df["factor_name"] + "_" + df["period"]).tolist()
+    transposed = df.T.copy()
+    transposed.columns = col_labels
+
+    pd.set_option("display.max_rows", 500)
+    pd.set_option("display.max_colwidth", 40)
+    pd.set_option("display.width", 0)
+
+    click.echo(f"Run: {resolved_run_dir}")
+    click.echo(transposed.to_string())
+
+
 if __name__ == "__main__":
     cli()

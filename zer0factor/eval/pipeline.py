@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import io
 import warnings
 from collections.abc import Callable
+from contextlib import contextmanager, redirect_stdout
 from pathlib import Path
 
 import pandas as pd
@@ -126,6 +128,13 @@ def evaluate_factor(
         quantile_returns=quantile_returns,
         clean_factor_data=clean_factor_data,
         index_returns=index_returns,
+        period_sample_counts=_calculate_period_sample_counts(
+            factor,
+            prices,
+            quantiles=config.quantiles,
+            periods=config.periods,
+            max_loss=config.max_loss,
+        ),
     )
 
     factor_dir = Path(run_dir) / "factors" / factor_name
@@ -215,20 +224,21 @@ def evaluate_factors(
     )
 
     factor_results = []
-    for factor_name in resolved_config.factor_names:
-        _log(log_info, f"evaluation_factor_started factor={factor_name}")
-        factor_results.append(
-            evaluate_factor(
-                factor_name=factor_name,
-                storage=storage,
-                pro=pro,
-                config=resolved_config,
-                run_dir=run_dir,
-                price_data=price_data,
-                universe_panel=universe_panel,
-                log_info=log_info,
+    with _suppress_known_evaluation_warnings():
+        for factor_name in resolved_config.factor_names:
+            _log(log_info, f"evaluation_factor_started factor={factor_name}")
+            factor_results.append(
+                evaluate_factor(
+                    factor_name=factor_name,
+                    storage=storage,
+                    pro=pro,
+                    config=resolved_config,
+                    run_dir=run_dir,
+                    price_data=price_data,
+                    universe_panel=universe_panel,
+                    log_info=log_info,
+                )
             )
-        )
     factor_results = tuple(factor_results)
     summary = pd.concat(
         [factor_result.summary for factor_result in factor_results],
@@ -268,6 +278,18 @@ def _get_clean_factor_and_forward_returns(
     periods: tuple[int, ...],
     max_loss: float,
 ) -> pd.DataFrame:
+    with _suppress_known_evaluation_warnings(), redirect_stdout(io.StringIO()):
+        return get_clean_factor_and_forward_returns(
+            factor,
+            prices,
+            quantiles=quantiles,
+            periods=periods,
+            max_loss=max_loss,
+        )
+
+
+@contextmanager
+def _suppress_known_evaluation_warnings():
     with warnings.catch_warnings():
         warnings.filterwarnings(
             "ignore",
@@ -277,13 +299,53 @@ def _get_clean_factor_and_forward_returns(
             ),
             category=FutureWarning,
         )
-        return get_clean_factor_and_forward_returns(
+        warnings.filterwarnings(
+            "ignore",
+            message="Series.fillna with 'method' is deprecated.*",
+            category=FutureWarning,
+            module=r"alphalens\.performance",
+        )
+        warnings.filterwarnings(
+            "ignore",
+            message="DataFrame.fillna with 'method' is deprecated.*",
+            category=FutureWarning,
+            module=r"alphalens\.performance",
+        )
+        warnings.filterwarnings(
+            "ignore",
+            message="Downcasting object dtype arrays on \\.fillna.*",
+            category=FutureWarning,
+            module=r"alphalens\.performance",
+        )
+        warnings.filterwarnings(
+            "ignore",
+            message="Non-vectorized DateOffset being applied.*",
+            category=pd.errors.PerformanceWarning,
+            module=r"alphalens\.utils",
+        )
+        yield
+
+
+def _calculate_period_sample_counts(
+    factor: pd.Series,
+    prices: pd.DataFrame,
+    *,
+    quantiles: int,
+    periods: tuple[int, ...],
+    max_loss: float,
+) -> dict[str, int]:
+    counts = {}
+    for period in periods:
+        period_label = f"{period}D"
+        clean = _get_clean_factor_and_forward_returns(
             factor,
             prices,
             quantiles=quantiles,
-            periods=periods,
+            periods=(period,),
             max_loss=max_loss,
         )
+        counts[period_label] = int(clean[period_label].count()) if period_label in clean else 0
+    return counts
 
 
 def _max_stored_factor_trade_date(

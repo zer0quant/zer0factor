@@ -26,11 +26,18 @@ def calculate_quantile_turnover(
     long_mean = float(long_daily.mean()) if len(long_daily) > 0 else float("nan")
     short_mean = float(short_daily.mean()) if len(short_daily) > 0 else float("nan")
 
+    long_annual_rebalance = (
+        long_mean * 252 / period_int if not math.isnan(long_mean) else float("nan")
+    )
+    short_annual_rebalance = (
+        short_mean * 252 / period_int if not math.isnan(short_mean) else float("nan")
+    )
+
     return {
         "turnover_daily_long": long_mean,
-        "turnover_annual_long": long_mean * 252 / period_int if not math.isnan(long_mean) else float("nan"),
+        "turnover_annual_rebalance_long": long_annual_rebalance,
         "turnover_daily_short": short_mean,
-        "turnover_annual_short": short_mean * 252 / period_int if not math.isnan(short_mean) else float("nan"),
+        "turnover_annual_rebalance_short": short_annual_rebalance,
     }
 
 

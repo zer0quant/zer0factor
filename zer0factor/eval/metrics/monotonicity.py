@@ -73,11 +73,13 @@ def calculate_quarterly_monotonicity_stats(
     std = float(s.std())
     ir = mean / std if not np.isclose(std, 0.0) else float("nan")
     pos_rate = float((s > 0).mean() * 100)
+    gt_50_rate = float((s > 0.5).mean() * 100)
 
     return {
         "monotonicity_q_mean": mean,
         "monotonicity_q_ir": ir,
         "monotonicity_q_pos_rate": pos_rate,
+        "monotonicity_q_gt_50_rate": gt_50_rate,
     }
 
 
@@ -86,4 +88,5 @@ def _nan_stats() -> dict[str, float]:
         "monotonicity_q_mean": float("nan"),
         "monotonicity_q_ir": float("nan"),
         "monotonicity_q_pos_rate": float("nan"),
+        "monotonicity_q_gt_50_rate": float("nan"),
     }
