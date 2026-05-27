@@ -14,7 +14,7 @@ from zer0factor.preprocess.winsorize import winsorize
 WinsorizeMethod = Literal["mad", "quantile", "none"]
 ImputeMethod = Literal["cross_section_median", "industry_median", "none"]
 StandardizeMethod = Literal["zscore", "rank_pct", "none"]
-NeutralizeMethod = Literal["size_industry", "none"]
+NeutralizeMethod = Literal["size", "industry", "size_industry", "none"]
 
 _LONG_COLUMNS = {"trade_date", "ts_code", "value"}
 
@@ -48,7 +48,7 @@ class PreprocessConfig:
         if self.neutralize_method is not None:
             _validate_choice(
                 self.neutralize_method,
-                {"size_industry", "none"},
+                {"size", "industry", "size_industry", "none"},
                 "neutralize_method",
             )
         if self.winsorize_n <= 0:
