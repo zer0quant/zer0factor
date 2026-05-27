@@ -235,6 +235,67 @@ def test_size_industry_neutralization_removes_size_and_industry_exposure():
     assert np.abs(design.T.to_numpy() @ valid.to_numpy()).max() < 1e-10
 
 
+def test_size_neutralization_removes_size_exposure():
+    factor = pd.DataFrame(
+        [[2.0, 4.0, 6.0, 8.0]],
+        index=pd.to_datetime(["2024-01-01"]),
+        columns=["000001.SZ", "000002.SZ", "000003.SZ", "000004.SZ"],
+    )
+    size = pd.DataFrame(
+        [[1.0, 2.0, 3.0, 4.0]],
+        index=factor.index,
+        columns=factor.columns,
+    )
+
+    result = neutralize(factor, method="size", exposures={"size": size})
+
+    valid = result.loc[pd.Timestamp("2024-01-01")].dropna()
+    design = pd.DataFrame(
+        {
+            "intercept": 1.0,
+            "size": size.loc[pd.Timestamp("2024-01-01"), valid.index],
+        },
+        index=valid.index,
+    )
+    assert abs(valid.sum()) < 1e-10
+    assert np.abs(design.T.to_numpy() @ valid.to_numpy()).max() < 1e-10
+
+
+def test_industry_neutralization_removes_industry_exposure():
+    factor = pd.DataFrame(
+        [[1.0, 2.0, 4.0, 5.0, 8.0, 9.0]],
+        index=pd.to_datetime(["2024-01-01"]),
+        columns=[
+            "000001.SZ",
+            "000002.SZ",
+            "000003.SZ",
+            "000004.SZ",
+            "000005.SZ",
+            "000006.SZ",
+        ],
+    )
+    industry = pd.DataFrame(
+        [["bank", "bank", "tech", "tech", "energy", "energy"]],
+        index=factor.index,
+        columns=factor.columns,
+    )
+
+    result = neutralize(factor, method="industry", exposures={"industry": industry})
+
+    valid = result.loc[pd.Timestamp("2024-01-01")].dropna()
+    dummies = pd.get_dummies(
+        industry.loc[pd.Timestamp("2024-01-01"), valid.index],
+        drop_first=True,
+        dtype=float,
+    )
+    design = pd.concat(
+        [pd.Series(1.0, index=valid.index, name="intercept"), dummies],
+        axis=1,
+    )
+    assert abs(valid.sum()) < 1e-10
+    assert np.abs(design.T.to_numpy() @ valid.to_numpy()).max() < 1e-10
+
+
 def test_size_industry_neutralization_requires_exposures():
     factor = _panel([[1.0, 2.0, 3.0]])
     size = _panel([[1.0, 2.0, 3.0]])
@@ -244,6 +305,29 @@ def test_size_industry_neutralization_requires_exposures():
         match="size_industry neutralization requires size and industry",
     ):
         neutralize(factor, method="size_industry", exposures={"size": size})
+
+
+def test_size_neutralization_requires_size_exposure():
+    factor = _panel([[1.0, 2.0, 3.0]])
+
+    with pytest.raises(ValueError, match="size neutralization requires size"):
+        neutralize(factor, method="size", exposures={})
+
+
+def test_industry_neutralization_requires_industry_exposure():
+    factor = _panel([[1.0, 2.0, 3.0]])
+
+    with pytest.raises(ValueError, match="industry neutralization requires industry"):
+        neutralize(factor, method="industry", exposures={})
+
+
+def test_preprocess_config_accepts_neutralization_methods():
+    assert PreprocessConfig(neutralize_method="size").neutralize_method == "size"
+    assert PreprocessConfig(neutralize_method="industry").neutralize_method == "industry"
+    assert (
+        PreprocessConfig(neutralize_method="size_industry").neutralize_method
+        == "size_industry"
+    )
 
 
 def test_size_industry_neutralization_returns_nan_when_rows_are_insufficient():
