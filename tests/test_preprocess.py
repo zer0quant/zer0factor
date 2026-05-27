@@ -237,7 +237,7 @@ def test_size_industry_neutralization_removes_size_and_industry_exposure():
 
 def test_size_neutralization_removes_size_exposure():
     factor = pd.DataFrame(
-        [[2.0, 4.0, 6.0, 8.0]],
+        [[2.0, 5.0, 5.0, 8.0]],
         index=pd.to_datetime(["2024-01-01"]),
         columns=["000001.SZ", "000002.SZ", "000003.SZ", "000004.SZ"],
     )
@@ -259,6 +259,14 @@ def test_size_neutralization_removes_size_exposure():
     )
     assert abs(valid.sum()) < 1e-10
     assert np.abs(design.T.to_numpy() @ valid.to_numpy()).max() < 1e-10
+    assert valid.to_dict() == pytest.approx(
+        {
+            "000001.SZ": -0.3,
+            "000002.SZ": 0.9,
+            "000003.SZ": -0.9,
+            "000004.SZ": 0.3,
+        }
+    )
 
 
 def test_industry_neutralization_removes_industry_exposure():
@@ -294,6 +302,16 @@ def test_industry_neutralization_removes_industry_exposure():
     )
     assert abs(valid.sum()) < 1e-10
     assert np.abs(design.T.to_numpy() @ valid.to_numpy()).max() < 1e-10
+    assert valid.to_dict() == pytest.approx(
+        {
+            "000001.SZ": -0.5,
+            "000002.SZ": 0.5,
+            "000003.SZ": -0.5,
+            "000004.SZ": 0.5,
+            "000005.SZ": -0.5,
+            "000006.SZ": 0.5,
+        }
+    )
 
 
 def test_size_industry_neutralization_requires_exposures():
