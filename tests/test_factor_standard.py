@@ -62,6 +62,17 @@ def test_factor_spec_accepts_market_cap_fields():
     assert spec.inputs == ("total_mv", "circ_mv")
 
 
+def test_factor_spec_accepts_turnover_rate_field():
+    spec = FactorSpec(
+        name="turnover_rate_demo",
+        inputs=["turnover_rate"],
+        min_window=1,
+        adjust=None,
+    )
+
+    assert spec.inputs == ("turnover_rate",)
+
+
 def test_factor_frame_exposes_only_declared_standard_fields():
     close = _wide_frame()
     volume = _wide_frame() * 100
@@ -80,6 +91,13 @@ def test_factor_frame_exposes_market_cap_fields():
 
     assert frame.total_mv.equals(total_mv)
     assert frame.circ_mv.equals(circ_mv)
+
+
+def test_factor_frame_exposes_turnover_rate_field():
+    turnover_rate = _wide_frame()
+    frame = FactorFrame({"turnover_rate": turnover_rate})
+
+    assert frame.turnover_rate.equals(turnover_rate)
 
 
 def test_to_factor_output_converts_wide_panel_to_storage_schema():
@@ -157,6 +175,7 @@ class FakeLocalPro:
                         "trade_date": dates,
                         "total_mv": [total_base, total_base + 100],
                         "circ_mv": [circ_base, circ_base + 50],
+                        "turnover_rate": [1.0, 1.5],
                     }
                 )
             )
@@ -233,6 +252,24 @@ def test_zer0share_provider_uses_stable_daily_basic_field_order():
     assert pro.daily_basic_calls == 1
     assert frame.circ_mv.loc[pd.Timestamp("2024-01-01"), "000001.SZ"] == 500
     assert frame.total_mv.loc[pd.Timestamp("2024-01-01"), "000002.SZ"] == 2000
+
+
+def test_zer0share_provider_loads_turnover_rate_from_daily_basic():
+    pro = FakeLocalPro()
+    pro.expected_daily_basic_fields = "ts_code,trade_date,turnover_rate"
+    provider = Zer0ShareDataProvider(pro)
+
+    frame = provider.history(
+        fields=["turnover_rate"],
+        start_date="20240101",
+        end_date="20240102",
+        universe="all",
+        adjust="hfq",
+    )
+
+    assert pro.pro_bar_calls == 0
+    assert pro.daily_basic_calls == 1
+    assert frame.turnover_rate.loc[pd.Timestamp("2024-01-02"), "000002.SZ"] == 1.5
 
 
 class EmptyUniverseLocalPro(FakeLocalPro):

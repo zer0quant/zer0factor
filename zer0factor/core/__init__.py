@@ -19,6 +19,7 @@ STANDARD_FIELDS = frozenset(
         "return_",
         "total_mv",
         "circ_mv",
+        "turnover_rate",
     }
 )
 OUTPUT_SCHEMA = ("trade_date", "ts_code", "value")
@@ -150,8 +151,9 @@ class Zer0ShareDataProvider:
     _DAILY_BASIC_SOURCE_COLUMNS = {
         "total_mv": "total_mv",
         "circ_mv": "circ_mv",
+        "turnover_rate": "turnover_rate",
     }
-    _DAILY_BASIC_FIELD_ORDER = ("total_mv", "circ_mv")
+    _DAILY_BASIC_FIELD_ORDER = ("total_mv", "circ_mv", "turnover_rate")
 
     def __init__(self, pro):
         self._pro = pro
