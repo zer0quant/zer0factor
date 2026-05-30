@@ -100,6 +100,24 @@ def test_factor_frame_exposes_turnover_rate_field():
     assert frame.turnover_rate.equals(turnover_rate)
 
 
+def test_factor_spec_accepts_pre_close_field():
+    spec = FactorSpec(
+        name="pre_close_demo",
+        inputs=["pre_close"],
+        min_window=1,
+        adjust="hfq",
+    )
+
+    assert spec.inputs == ("pre_close",)
+
+
+def test_factor_frame_exposes_pre_close_field():
+    pre_close = _wide_frame()
+    frame = FactorFrame({"pre_close": pre_close})
+
+    assert frame.pre_close.equals(pre_close)
+
+
 def test_to_factor_output_converts_wide_panel_to_storage_schema():
     value = _wide_frame(rows=2).astype(float)
     result = to_factor_output(value, "demo")
