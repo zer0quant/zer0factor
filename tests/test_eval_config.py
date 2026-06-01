@@ -20,6 +20,7 @@ def test_evaluation_config_defaults_to_open_t1_and_evaluations_dir():
     assert config.universe is None
     assert config.output_dir == Path("data/evaluations")
     assert config.rolling_ic_window == 63
+    assert config.transaction_cost_bps == 10.0
 
 
 def test_evaluation_config_normalizes_periods_and_output_dir():
@@ -105,3 +106,13 @@ def test_evaluation_config_benchmark_index_defaults_to_none():
         end_date="20240131",
     )
     assert config.benchmark_index is None
+
+
+def test_evaluation_config_rejects_negative_transaction_cost():
+    with pytest.raises(ValueError, match="transaction_cost_bps must be >= 0"):
+        EvaluationConfig(
+            factor_names=("f",),
+            start_date="20240101",
+            end_date="20240131",
+            transaction_cost_bps=-1.0,
+        )

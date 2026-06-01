@@ -333,3 +333,75 @@ def test_build_pyfolio_return_metrics_adjusts_sharpe_for_overlapping_period(monk
 
     assert result["long_sharpe"] < 10.0
     assert result["ls_sharpe"] < 10.0
+
+
+def test_build_pyfolio_return_metrics_applies_transaction_costs(monkeypatch):
+    clean_factor_data = pd.DataFrame(
+        {
+            "factor": [1.0, 2.0],
+            "factor_quantile": [1, 10],
+            "1D": [0.01, -0.01],
+        },
+        index=pd.MultiIndex.from_tuples(
+            [
+                (pd.Timestamp("2024-01-02"), "A"),
+                (pd.Timestamp("2024-01-02"), "B"),
+            ],
+            names=["date", "asset"],
+        ),
+    )
+    dates = pd.date_range("2024-01-02", periods=2)
+    captured_returns = []
+
+    def fake_create_pyfolio_input(
+        factor_data,
+        period,
+        capital,
+        long_short,
+        group_neutral,
+        equal_weight,
+        quantiles,
+        groups,
+        benchmark_period,
+    ):
+        key = (long_short, tuple(quantiles) if quantiles is not None else None)
+        if key == (False, (1,)):
+            returns = pd.Series([0.02, 0.03], index=dates)
+            positions = pd.DataFrame({"A": [1.0, -1.0]}, index=dates)
+        else:
+            returns = pd.Series([0.01, 0.02], index=dates)
+            positions = pd.DataFrame(index=dates)
+        benchmark = pd.Series([0.0, 0.0], index=dates)
+        return returns, positions, benchmark
+
+    def fake_perf_stats(returns, factor_returns=None, positions=None):
+        captured_returns.append(returns.copy())
+        return pd.Series(
+            {
+                "Annual return": float(returns.iloc[-1]),
+                "Max drawdown": -0.01,
+                "Calmar ratio": 1.0,
+                "Sharpe ratio": 1.0,
+            }
+        )
+
+    monkeypatch.setattr(
+        "zer0factor.eval.metrics.returns.alphalens_performance.create_pyfolio_input",
+        fake_create_pyfolio_input,
+    )
+    monkeypatch.setattr(
+        "zer0factor.eval.metrics.returns.pf.timeseries.perf_stats",
+        fake_perf_stats,
+    )
+
+    result = build_pyfolio_return_metrics(
+        clean_factor_data,
+        direction=1,
+        period="1D",
+        long_quantile=1,
+        short_quantile=10,
+        transaction_cost_bps=10.0,
+    )
+
+    assert captured_returns[0].tolist() == pytest.approx([0.02, 0.029])
+    assert result["long_ann_ret"] == pytest.approx(0.029)

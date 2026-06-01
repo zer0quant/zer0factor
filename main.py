@@ -670,6 +670,7 @@ def _run_evaluation_command(
     universe: str | None,
     max_loss: float,
     output_dir: str,
+    transaction_cost_bps: float,
     benchmark_index: str | None = None,
 ) -> None:
     result = _run_evaluation_job(
@@ -683,6 +684,7 @@ def _run_evaluation_command(
         universe=universe,
         max_loss=max_loss,
         output_dir=Path(output_dir),
+        transaction_cost_bps=transaction_cost_bps,
         benchmark_index=benchmark_index,
     )
     click.echo(f"Evaluation run {result.run_id} written to {result.output_dir}")
@@ -700,6 +702,7 @@ def _run_evaluation_job(
     universe: str | None,
     max_loss: float,
     output_dir: Path,
+    transaction_cost_bps: float,
     benchmark_index: str | None = None,
 ):
     from zer0share.api import LocalPro
@@ -719,6 +722,7 @@ def _run_evaluation_job(
         universe=universe,
         output_dir=output_dir,
         benchmark_index=benchmark_index,
+        transaction_cost_bps=transaction_cost_bps,
     )
     storage = FactorStorage(cfg.factor_dir, cfg.db_path)
 
@@ -756,6 +760,13 @@ def _run_evaluation_job(
 @click.option("--universe", default=None)
 @click.option("--max-loss", default=0.35, show_default=True)
 @click.option("--output-dir", default="data/evaluations", show_default=True)
+@click.option(
+    "--transaction-cost-bps",
+    default=10.0,
+    show_default=True,
+    type=float,
+    help="单边交易成本，单位 bps；按估算换手从收益中扣除",
+)
 @click.option("--benchmark-index", default=None, help="指数代码，如 000300.SH，用于计算多头指数超额收益")
 @click.pass_context
 def evaluate_factor_command(
@@ -769,6 +780,7 @@ def evaluate_factor_command(
     universe,
     max_loss,
     output_dir,
+    transaction_cost_bps,
     benchmark_index,
 ):
     """Evaluate one stored factor."""
@@ -783,6 +795,7 @@ def evaluate_factor_command(
         universe=universe,
         max_loss=max_loss,
         output_dir=output_dir,
+        transaction_cost_bps=transaction_cost_bps,
         benchmark_index=benchmark_index,
     )
 
@@ -802,6 +815,13 @@ def evaluate_factor_command(
 @click.option("--universe", default=None)
 @click.option("--max-loss", default=0.35, show_default=True)
 @click.option("--output-dir", default="data/evaluations", show_default=True)
+@click.option(
+    "--transaction-cost-bps",
+    default=10.0,
+    show_default=True,
+    type=float,
+    help="单边交易成本，单位 bps；按估算换手从收益中扣除",
+)
 @click.option("--benchmark-index", default=None, help="指数代码，如 000300.SH，用于计算多头指数超额收益")
 @click.pass_context
 def evaluate_factors_command(
@@ -815,6 +835,7 @@ def evaluate_factors_command(
     universe,
     max_loss,
     output_dir,
+    transaction_cost_bps,
     benchmark_index,
 ):
     """Evaluate one or more stored factors."""
@@ -829,6 +850,7 @@ def evaluate_factors_command(
         universe=universe,
         max_loss=max_loss,
         output_dir=output_dir,
+        transaction_cost_bps=transaction_cost_bps,
         benchmark_index=benchmark_index,
     )
 
@@ -856,6 +878,7 @@ def evaluate_batch_command(ctx, batch_file, benchmark_index):
         universe=batch.universe,
         max_loss=batch.max_loss,
         output_dir=batch.output_dir,
+        transaction_cost_bps=batch.transaction_cost_bps,
         benchmark_index=benchmark_index,
     )
     click.echo(f"Evaluation run {result.run_id} written to {result.output_dir}")

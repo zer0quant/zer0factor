@@ -97,6 +97,7 @@ def test_write_run_summary_creates_summary_and_metadata(tmp_path):
     assert metadata["run_id"] == "run_a"
     assert metadata["factor_names"] == ["factor_a"]
     assert metadata["return_type"] == "open_t1"
+    assert metadata["transaction_cost_bps"] == 10.0
 
 
 def test_write_run_summary_serializes_tuple_periods_and_none_values(tmp_path):

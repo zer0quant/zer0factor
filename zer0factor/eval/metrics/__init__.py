@@ -52,6 +52,7 @@ def build_summary(
     quantile_returns: pd.DataFrame,
     clean_factor_data: pd.DataFrame | None = None,
     index_returns: "pd.Series | None" = None,
+    transaction_cost_bps: float = 0.0,
     period_sample_counts: dict[str, int] | None = None,
 ) -> pd.DataFrame:
     lowest_quantile = quantile_returns.index.min()
@@ -92,6 +93,7 @@ def build_summary(
             n_quantiles=quantiles,
             mean_ret_by_date=_mean_ret_by_date,
             index_returns=index_returns,
+            transaction_cost_bps=transaction_cost_bps,
             clean_factor_data=clean_factor_data,
         )
         for period in daily_ic.columns
@@ -120,6 +122,7 @@ def _build_period_summary(
     n_quantiles: int,
     mean_ret_by_date: pd.DataFrame | None,
     index_returns: pd.Series | None,
+    transaction_cost_bps: float,
     clean_factor_data: pd.DataFrame | None = None,
 ) -> dict[str, object]:
     ic_mean = ic_values.mean()
@@ -159,6 +162,7 @@ def _build_period_summary(
         "mean_return_qN": quantile_returns.loc[highest_quantile, period],
         "long_short_spread": spread,
         "long_short_spread_bps": spread * 10000,
+        "transaction_cost_bps": transaction_cost_bps,
         "directional_IC>0 %(W)": _direction_adjust_win_rate(ic_weekly_win_rate, direction),
         "directional_IC>0 %(M)": _direction_adjust_win_rate(ic_monthly_win_rate, direction),
         "IC_near_far_ratio": _get_near_far_ratio(ic_near_far_ratio, period),
@@ -184,6 +188,7 @@ def _build_period_summary(
                 long_quantile=int(long_quantile),
                 short_quantile=int(short_quantile),
                 index_returns=index_returns,
+                transaction_cost_bps=transaction_cost_bps,
             )
         )
 

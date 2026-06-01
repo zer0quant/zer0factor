@@ -76,4 +76,5 @@ def _build_metadata(*, config: EvaluationConfig, run_id: str) -> dict[str, objec
         "max_loss": config.max_loss,
         "universe": config.universe,
         "rolling_ic_window": config.rolling_ic_window,
+        "transaction_cost_bps": config.transaction_cost_bps,
     }

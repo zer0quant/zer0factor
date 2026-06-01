@@ -128,6 +128,7 @@ def evaluate_factor(
         quantile_returns=quantile_returns,
         clean_factor_data=clean_factor_data,
         index_returns=index_returns,
+        transaction_cost_bps=config.transaction_cost_bps,
         period_sample_counts=_calculate_period_sample_counts(
             factor,
             prices,
@@ -188,6 +189,7 @@ def evaluate_factors(
         output_dir=config.output_dir,
         rolling_ic_window=config.rolling_ic_window,
         benchmark_index=config.benchmark_index,
+        transaction_cost_bps=config.transaction_cost_bps,
     )
     run_id, run_dir = create_run_directory(resolved_config, run_id=run_id)
     _log(

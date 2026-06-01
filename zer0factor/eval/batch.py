@@ -20,6 +20,7 @@ class BatchEvaluationConfig:
     universe: str | None = None
     max_loss: float = 0.35
     output_dir: Path = Path("data/evaluations")
+    transaction_cost_bps: float = 10.0
     report_thresholds: ReportThresholds = ReportThresholds()
 
 
@@ -66,6 +67,7 @@ def load_batch_evaluation_config(path: Path | str) -> BatchEvaluationConfig:
         universe=evaluation.get("universe"),
         max_loss=float(evaluation.get("max_loss", 0.35)),
         output_dir=Path(evaluation.get("output_dir", "data/evaluations")),
+        transaction_cost_bps=_optional_float(evaluation.get("transaction_cost_bps"), 10.0),
         report_thresholds=_load_report_thresholds(raw.get("report", {})),
     )
 
@@ -74,6 +76,12 @@ def _optional_string(value: object) -> str | None:
     if value in (None, ""):
         return None
     return str(value)
+
+
+def _optional_float(value: object, default: float) -> float:
+    if value in (None, ""):
+        return default
+    return float(value)
 
 
 def _load_report_thresholds(report: dict[str, object]) -> ReportThresholds:

@@ -37,6 +37,7 @@ class EvaluationConfig:
     output_dir: Path = Path("data/evaluations")
     rolling_ic_window: int = 63
     benchmark_index: str | None = None
+    transaction_cost_bps: float = 10.0
 
     def __post_init__(self) -> None:
         if isinstance(self.factor_names, (str, bytes)):
@@ -60,6 +61,8 @@ class EvaluationConfig:
             raise ValueError("max_loss must satisfy 0 <= max_loss < 1")
         if self.rolling_ic_window < 2:
             raise ValueError("rolling_ic_window must be >= 2")
+        if self.transaction_cost_bps < 0:
+            raise ValueError("transaction_cost_bps must be >= 0")
 
         object.__setattr__(self, "factor_names", factor_names)
         object.__setattr__(self, "periods", periods)

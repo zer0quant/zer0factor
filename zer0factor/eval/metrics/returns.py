@@ -32,12 +32,15 @@ def build_pyfolio_return_metrics(
     long_quantile: int,
     short_quantile: int,
     index_returns: pd.Series | None = None,
+    transaction_cost_bps: float = 0.0,
 ) -> dict[str, float]:
     """
     Build all portfolio performance stats from Alphalens daily returns.
 
     Single-leg portfolios pin factor values to +1/-1 so Alphalens builds pure
     equal-weight long and short sleeves instead of using raw factor signs.
+    transaction_cost_bps is applied as a simple proportional cost on estimated
+    daily turnover before Pyfolio metrics are computed.
     """
     try:
         with _suppress_known_pyfolio_warnings():
@@ -80,6 +83,28 @@ def build_pyfolio_return_metrics(
     benchmark = _daily_equivalent_returns(benchmark, period_int)
     ls_benchmark = _daily_equivalent_returns(ls_benchmark, period_int)
     full_benchmark = _daily_equivalent_returns(full_benchmark, period_int)
+
+    if transaction_cost_bps > 0:
+        long_returns = _apply_transaction_costs(
+            long_returns,
+            long_positions,
+            transaction_cost_bps,
+        )
+        short_returns = _apply_transaction_costs(
+            short_returns,
+            short_positions,
+            transaction_cost_bps,
+        )
+        ls_returns = _apply_transaction_costs(
+            ls_returns,
+            ls_positions,
+            transaction_cost_bps,
+        )
+        full_returns = _apply_transaction_costs(
+            full_returns,
+            full_positions,
+            transaction_cost_bps,
+        )
 
     result: dict[str, float] = {}
     result.update(_portfolio_stats("long", long_returns, benchmark, long_positions, period_int))
@@ -262,6 +287,36 @@ def _daily_equivalent_returns(
     if returns is None or period_int <= 1:
         return returns
     return (1 + returns).pow(1 / period_int) - 1
+
+
+def _apply_transaction_costs(
+    returns: pd.Series,
+    positions: pd.DataFrame | None,
+    transaction_cost_bps: float,
+) -> pd.Series:
+    if positions is None or positions.empty:
+        return returns
+
+    turnover = _estimate_daily_turnover(positions)
+    if turnover.empty:
+        return returns
+
+    cost_rate = transaction_cost_bps / 10000.0
+    daily_cost = turnover.reindex(returns.index).fillna(0.0) * cost_rate
+    return returns - daily_cost
+
+
+def _estimate_daily_turnover(positions: pd.DataFrame) -> pd.Series:
+    weights = positions.drop(columns=["cash"], errors="ignore").copy()
+    if weights.empty or len(weights.index) < 2:
+        return pd.Series(dtype=float)
+
+    weights = weights.apply(pd.to_numeric, errors="coerce").fillna(0.0)
+    gross = weights.abs().sum(axis=1)
+    weights = weights.div(gross.replace(0.0, np.nan), axis=0).fillna(0.0)
+    turnover = 0.5 * weights.diff().abs().sum(axis=1).iloc[1:]
+    turnover.name = "turnover"
+    return turnover
 
 
 def _adjusted_sharpe(returns: pd.Series, sharpe: float, period_int: int) -> float:

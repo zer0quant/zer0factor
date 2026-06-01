@@ -20,6 +20,17 @@ return_type = "open_t1"
 """)
     cfg = load_batch_evaluation_config(p)
     assert cfg.factor_names == ("z_neu_daily_return", "z_neu_open_return")
+    assert cfg.transaction_cost_bps == 10.0
+
+
+def test_load_batch_reads_transaction_cost_bps(tmp_path):
+    p = _write_toml(tmp_path, """
+[evaluation]
+factors = ["z_neu_daily_return"]
+transaction_cost_bps = 8.5
+""")
+    cfg = load_batch_evaluation_config(p)
+    assert cfg.transaction_cost_bps == pytest.approx(8.5)
 
 
 def test_load_batch_registry_mode_resolves_factors(tmp_path):
