@@ -63,3 +63,5 @@ def test_parse_rolling_return_name_rejects_unknown_names() -> None:
         parse_rolling_return_name("ma_bias_20d")
     with pytest.raises(ValueError, match="factor name does not end with _ma<window>"):
         parse_rolling_return_name("daily_return_mean20")
+    with pytest.raises(ValueError, match="unsupported rolling return window"):
+        parse_rolling_return_name("daily_return_ma999")

@@ -50,11 +50,14 @@ def parse_rolling_return_name(factor_name: str) -> dict[str, int | str]:
     suffix = raw_name.removeprefix(f"{base_factor}_ma")
     if suffix == raw_name or not suffix.isdigit():
         raise ValueError(f"factor name does not end with _ma<window>: {factor_name}")
+    window = int(suffix)
+    if window not in WINDOWS:
+        raise ValueError(f"unsupported rolling return window: {factor_name}")
 
     return {
         "base_factor": base_factor,
         "preprocess": preprocess,
-        "window": int(suffix),
+        "window": window,
     }
 
 
