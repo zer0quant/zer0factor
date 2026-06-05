@@ -14,8 +14,10 @@ from zer0factor.factors.rolling_returns import (
     derive_rolling_mean_panel,
     raw_factor_names,
 )
+from zer0factor.preprocess import impute_missing, neutralize, standardize, winsorize
 
 LOGGER = logging.getLogger(__name__)
+SIZE_FACTOR_NAME = "z_log_circulating_market_cap"
 
 
 @dataclass(frozen=True)
@@ -89,6 +91,48 @@ def compute_raw_rolling_return_factors(
     return rows
 
 
+def preprocess_one_factor(
+    raw_factor_name: str,
+    *,
+    storage: Any,
+    industry_panel: pd.DataFrame,
+    start_date: str | None = None,
+    end_date: str | None = None,
+    universe: pd.DataFrame | None = None,
+    profiles: tuple[PreprocessProfile, ...] = PROFILES,
+) -> dict[str, int]:
+    raw = _read_required_factor(storage, raw_factor_name, start_date, end_date)
+    size = _read_required_factor(storage, SIZE_FACTOR_NAME, start_date, end_date)
+
+    raw_panel = _filter_panel_by_universe(_long_to_wide(raw), universe)
+    size_panel = _long_to_wide(size).reindex(
+        index=raw_panel.index,
+        columns=raw_panel.columns,
+    )
+    aligned_industry = industry_panel.reindex(
+        index=raw_panel.index,
+        columns=raw_panel.columns,
+    )
+
+    base = _winsorize_impute_zscore(raw_panel)
+    rows: dict[str, int] = {}
+    for profile in profiles:
+        output_name = profile.output_name(raw_factor_name)
+        if profile.neutralize_method is None:
+            output_panel = base
+        else:
+            output_panel = _neutralize_then_zscore(
+                base,
+                method=profile.neutralize_method,
+                size=size_panel,
+                industry=aligned_industry,
+            )
+        output = _wide_to_long(output_panel)
+        storage.write(output_name, output)
+        rows[output_name] = len(output)
+    return rows
+
+
 def _read_required_factor(
     storage: Any,
     factor_name: str,
@@ -121,6 +165,34 @@ def _wide_to_long(df: pd.DataFrame) -> pd.DataFrame:
     return to_factor_output(df)
 
 
+def _winsorize_impute_zscore(panel: pd.DataFrame) -> pd.DataFrame:
+    processed = winsorize(panel, method="mad", n=5.0)
+    processed = impute_missing(processed, method="cross_section_median")
+    return standardize(processed, method="zscore")
+
+
+def _neutralize_then_zscore(
+    panel: pd.DataFrame,
+    *,
+    method: str,
+    size: pd.DataFrame,
+    industry: pd.DataFrame,
+) -> pd.DataFrame:
+    exposures = {"size": size, "industry": industry}
+    neutralized = neutralize(panel, method=method, exposures=exposures)
+    return standardize(neutralized, method="zscore")
+
+
+def _filter_panel_by_universe(
+    panel: pd.DataFrame,
+    universe: pd.DataFrame | None,
+) -> pd.DataFrame:
+    if universe is None:
+        return panel
+    aligned = universe.reindex(index=panel.index, columns=panel.columns).fillna(False)
+    return panel.where(aligned.astype(bool)).dropna(axis=1, how="all")
+
+
 def _filter_long_by_date(
     df: pd.DataFrame,
     start_date: str | None,
@@ -143,8 +215,10 @@ def _parse_trade_dates(values: pd.Series) -> pd.Series:
 __all__ = [
     "FAMILIES",
     "PROFILES",
+    "SIZE_FACTOR_NAME",
     "FactorFamily",
     "PreprocessProfile",
     "compute_raw_rolling_return_factors",
     "get_family",
+    "preprocess_one_factor",
 ]

@@ -4,8 +4,10 @@ import pandas as pd
 import pytest
 
 from zer0factor.pipeline import (
+    SIZE_FACTOR_NAME,
     _long_to_wide,
     compute_raw_rolling_return_factors,
+    preprocess_one_factor,
 )
 
 
@@ -116,3 +118,87 @@ def test_long_to_wide_rejects_duplicate_trade_date_code_pairs() -> None:
 
     with pytest.raises(ValueError, match="factor data contains duplicate trade_date/ts_code"):
         _long_to_wide(frame)
+
+
+def _cross_section_factor() -> pd.DataFrame:
+    codes = [
+        "000001.SZ",
+        "000002.SZ",
+        "000003.SZ",
+        "000004.SZ",
+        "000005.SZ",
+        "000006.SZ",
+    ]
+    return pd.DataFrame({
+        "trade_date": ["20240101"] * 6,
+        "ts_code": codes,
+        "value": [1.0, 2.0, 4.0, 6.0, 8.0, 10.0],
+    })
+
+
+def _size_factor() -> pd.DataFrame:
+    codes = [
+        "000001.SZ",
+        "000002.SZ",
+        "000003.SZ",
+        "000004.SZ",
+        "000005.SZ",
+        "000006.SZ",
+    ]
+    return pd.DataFrame({
+        "trade_date": ["20240101"] * 6,
+        "ts_code": codes,
+        "value": [1.0, 2.0, 3.0, 4.0, 5.0, 6.0],
+    })
+
+
+def _industry_panel() -> pd.DataFrame:
+    return pd.DataFrame(
+        [["bank", "bank", "tech", "tech", "energy", "energy"]],
+        index=pd.to_datetime(["2024-01-01"]),
+        columns=[
+            "000001.SZ",
+            "000002.SZ",
+            "000003.SZ",
+            "000004.SZ",
+            "000005.SZ",
+            "000006.SZ",
+        ],
+    )
+
+
+def test_preprocess_one_factor_writes_four_profiles() -> None:
+    storage = FakeStorage({
+        "daily_return_ma5": _cross_section_factor(),
+        SIZE_FACTOR_NAME: _size_factor(),
+    })
+
+    rows = preprocess_one_factor(
+        "daily_return_ma5",
+        storage=storage,
+        industry_panel=_industry_panel(),
+    )
+
+    assert set(rows) == {
+        "z_daily_return_ma5",
+        "z_size_neu_daily_return_ma5",
+        "z_industry_neu_daily_return_ma5",
+        "z_size_industry_neu_daily_return_ma5",
+    }
+    assert set(storage.writes) == set(rows)
+    assert all(
+        list(frame.columns) == ["trade_date", "ts_code", "value"]
+        for frame in storage.writes.values()
+    )
+    assert all(not frame.empty for frame in storage.writes.values())
+
+
+def test_preprocess_one_factor_fails_when_raw_factor_missing() -> None:
+    storage = FakeStorage({SIZE_FACTOR_NAME: _size_factor()})
+
+    with pytest.raises(FileNotFoundError, match="required factor missing: daily_return_ma5"):
+        preprocess_one_factor(
+            "daily_return_ma5",
+            storage=storage,
+            industry_panel=_industry_panel(),
+        )
