@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import pandas as pd
 import pytest
 
 from zer0factor.factors.rolling_returns import (
     BASE_RETURN_FACTORS,
     WINDOWS,
+    derive_rolling_mean_output,
+    derive_rolling_mean_panel,
     parse_rolling_return_name,
     raw_factor_names,
 )
@@ -58,6 +61,19 @@ def test_parse_rolling_return_name_handles_profiles() -> None:
     }
 
 
+def test_parse_rolling_return_name_round_trips_family_profiles() -> None:
+    family = get_family("rolling_return")
+
+    for profile in family.profiles:
+        factor_name = profile.output_name("daily_return_ma20")
+
+        assert parse_rolling_return_name(factor_name) == {
+            "base_factor": "daily_return",
+            "preprocess": profile.key,
+            "window": 20,
+        }
+
+
 def test_parse_rolling_return_name_rejects_unknown_names() -> None:
     with pytest.raises(ValueError, match="unknown rolling return factor name"):
         parse_rolling_return_name("ma_bias_20d")
@@ -65,3 +81,62 @@ def test_parse_rolling_return_name_rejects_unknown_names() -> None:
         parse_rolling_return_name("daily_return_mean20")
     with pytest.raises(ValueError, match="unsupported rolling return window"):
         parse_rolling_return_name("daily_return_ma999")
+
+
+def test_derive_rolling_mean_panel_uses_half_window_min_periods() -> None:
+    panel = pd.DataFrame(
+        {
+            "000001.SZ": [1.0, 2.0, 3.0, 4.0, 5.0],
+            "000002.SZ": [10.0, 20.0, 30.0, 40.0, 50.0],
+        },
+        index=pd.to_datetime(
+            ["2024-01-01", "2024-01-02", "2024-01-03", "2024-01-04", "2024-01-05"]
+        ),
+    )
+
+    result = derive_rolling_mean_panel(panel, window=4)
+
+    expected = pd.DataFrame(
+        {
+            "000001.SZ": [float("nan"), 1.5, 2.0, 2.5, 3.5],
+            "000002.SZ": [float("nan"), 15.0, 20.0, 25.0, 35.0],
+        },
+        index=panel.index,
+    )
+    pd.testing.assert_frame_equal(result, expected)
+
+
+def test_derive_rolling_mean_output_returns_standard_sorted_long_schema() -> None:
+    panel = pd.DataFrame(
+        {
+            "000002.SZ": [1.0, 3.0, 5.0],
+            "000001.SZ": [2.0, 4.0, 6.0],
+        },
+        index=pd.to_datetime(["2024-01-01", "2024-01-02", "2024-01-03"]),
+    )
+
+    result = derive_rolling_mean_output(panel, base_factor="daily_return", window=2)
+
+    expected = pd.DataFrame(
+        {
+            "trade_date": [
+                "20240101",
+                "20240101",
+                "20240102",
+                "20240102",
+                "20240103",
+                "20240103",
+            ],
+            "ts_code": [
+                "000001.SZ",
+                "000002.SZ",
+                "000001.SZ",
+                "000002.SZ",
+                "000001.SZ",
+                "000002.SZ",
+            ],
+            "value": [2.0, 1.0, 3.0, 2.0, 5.0, 4.0],
+        }
+    )
+    assert tuple(result.columns) == ("trade_date", "ts_code", "value")
+    pd.testing.assert_frame_equal(result, expected)
