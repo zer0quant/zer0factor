@@ -5,6 +5,7 @@ from __future__ import annotations
 import pandas as pd
 
 from zer0factor.core import to_factor_output
+from zer0factor.core.protocols import UniverseSource
 
 LONG_COLUMNS = ("trade_date", "ts_code", "value")
 
@@ -52,7 +53,7 @@ def filter_long_by_universe(
 
 
 def read_universe_panel(
-    pro,
+    pro: UniverseSource,
     *,
     universe_name: str,
     start_date: str | None = None,

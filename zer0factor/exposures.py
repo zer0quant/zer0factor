@@ -4,11 +4,13 @@ from collections.abc import Iterable
 
 import pandas as pd
 
+from zer0factor.core.protocols import IndustrySource
+
 SW_L1_INDUSTRY_FIELDS = "l1_code,l1_name,ts_code,in_date,out_date,is_new"
 
 
 def build_sw_l1_industry_panel(
-    pro,
+    pro: IndustrySource,
     *,
     dates: Iterable[pd.Timestamp | str],
     ts_codes: Iterable[str],
