@@ -116,8 +116,7 @@ def test_read_universe_panel_empty_result_returns_empty_bool_frame():
         start_date="20240101",
         end_date="20240102",
     )
-    assert panel.empty
-    assert panel.dtypes.empty or panel.dtypes.unique().tolist() == [bool]
+    assert panel.shape == (0, 0)
 
 
 def test_filter_long_by_universe_none_is_identity():

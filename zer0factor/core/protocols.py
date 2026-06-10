@@ -23,7 +23,7 @@ class DataProvider(Protocol):
         universe: str | Iterable[str] = "all",
         adjust: str | None = "hfq",
         progress: Callable[[int, int, str], None] | None = None,
-    ) -> "FactorFrame": ...
+    ) -> FactorFrame: ...
 
 
 @runtime_checkable
@@ -44,4 +44,4 @@ class UniverseSource(Protocol):
 class IndustrySource(Protocol):
     """Yields industry membership rows for exposure construction."""
 
-    def index_member_all(self, fields: str) -> pd.DataFrame: ...
+    def index_member_all(self, *, fields: str) -> pd.DataFrame: ...
