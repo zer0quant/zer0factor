@@ -25,6 +25,14 @@ from zer0factor.factors import (
     OpenReturn,
     OvernightReturn,
 )
+from zer0factor.panel import (
+    filter_long_by_universe,
+    filter_panel_by_universe,
+    long_to_wide,
+    parse_trade_dates,  # noqa: F401  (re-exported for CLI/test consumers)
+    read_universe_panel,
+    wide_to_long,
+)
 from zer0factor.preprocess import FactorPreprocessPipeline, PreprocessConfig
 from zer0factor.registry import FactorRegistry
 from zer0factor.storage import FactorStorage
@@ -324,13 +332,13 @@ def neutralize_stored_factor(
     source_name = _standardized_factor_name(factor_name)
     source = storage.read(source_name, start_date=start_date, end_date=end_date)
     size = storage.read(size_factor_name, start_date=start_date, end_date=end_date)
-    source_panel = _factor_long_to_wide(source)
-    size_panel = _factor_long_to_wide(size)
+    source_panel = long_to_wide(source)
+    size_panel = long_to_wide(size)
     dates = source_panel.index.intersection(size_panel.index)
     ts_codes = source_panel.columns.intersection(size_panel.columns)
     source_panel = source_panel.reindex(index=dates, columns=ts_codes)
     size_panel = size_panel.reindex(index=dates, columns=ts_codes)
-    source_panel = _filter_panel_by_universe(source_panel, universe)
+    source_panel = filter_panel_by_universe(source_panel, universe)
     size_panel = size_panel.reindex(index=source_panel.index, columns=source_panel.columns)
     industry_panel = build_sw_l1_industry_panel(pro, dates=dates, ts_codes=ts_codes)
     industry_panel = industry_panel.reindex(index=source_panel.index, columns=source_panel.columns)
@@ -348,7 +356,7 @@ def neutralize_stored_factor(
         exposures={"size": size_panel, "industry": industry_panel},
     )
     standardized = standardize_stored_panel(result)
-    output = _factor_wide_to_long(standardized)
+    output = wide_to_long(standardized)
     storage.write(output_name, output)
     return len(output)
 
@@ -364,7 +372,7 @@ def standardize_stored_factor(
     universe: pd.DataFrame | None = None,
 ) -> int:
     source = storage.read(factor_name, start_date=start_date, end_date=end_date)
-    source = _filter_long_by_universe(source, universe)
+    source = filter_long_by_universe(source, universe)
     pipeline = FactorPreprocessPipeline(config)
     output = pipeline.transform(source)
     storage.write(output_name, output)
@@ -391,83 +399,6 @@ def _standardized_factor_name(factor_name: str) -> str:
     if factor_name.startswith("z_"):
         return factor_name
     return f"z_{factor_name}"
-
-
-def read_universe_panel(
-    pro,
-    *,
-    universe_name: str,
-    start_date: str | None = None,
-    end_date: str | None = None,
-) -> pd.DataFrame:
-    rows = pro.universe(
-        universe=universe_name,
-        start_date=start_date,
-        end_date=end_date,
-        fields="trade_date,universe,ts_code",
-    )
-    if rows.empty:
-        return pd.DataFrame(dtype=bool)
-
-    frame = rows.loc[:, ["trade_date", "ts_code"]].copy()
-    frame["trade_date"] = _parse_trade_dates(frame["trade_date"])
-    frame["in_universe"] = True
-    return (
-        frame.drop_duplicates(["trade_date", "ts_code"])
-        .pivot(index="trade_date", columns="ts_code", values="in_universe")
-        .pipe(lambda df: df.where(df.notna(), False))
-        .astype(bool)
-        .sort_index()
-        .sort_index(axis=1)
-    )
-
-
-def _filter_long_by_universe(
-    factor: pd.DataFrame,
-    universe: pd.DataFrame | None,
-) -> pd.DataFrame:
-    if universe is None:
-        return factor
-    panel = _factor_long_to_wide(factor)
-    return _factor_wide_to_long(_filter_panel_by_universe(panel, universe))
-
-
-def _filter_panel_by_universe(
-    panel: pd.DataFrame,
-    universe: pd.DataFrame | None,
-) -> pd.DataFrame:
-    if universe is None:
-        return panel
-    aligned = universe.reindex(index=panel.index, columns=panel.columns, fill_value=False)
-    aligned = aligned.astype(bool)
-    return panel.where(aligned).dropna(axis=1, how="all")
-
-
-def _factor_long_to_wide(df: pd.DataFrame) -> pd.DataFrame:
-    frame = df.loc[:, ["trade_date", "ts_code", "value"]].copy()
-    frame["trade_date"] = _parse_trade_dates(frame["trade_date"])
-    if frame.duplicated(["trade_date", "ts_code"]).any():
-        raise ValueError("factor data contains duplicate trade_date/ts_code")
-    return (
-        frame.pivot(index="trade_date", columns="ts_code", values="value")
-        .sort_index()
-        .sort_index(axis=1)
-    )
-
-
-def _parse_trade_dates(values: pd.Series) -> pd.Series:
-    if pd.api.types.is_numeric_dtype(values):
-        return pd.to_datetime(values.astype("Int64").astype(str), format="%Y%m%d")
-    return pd.to_datetime(values)
-
-
-def _factor_wide_to_long(df: pd.DataFrame) -> pd.DataFrame:
-    result = df.copy()
-    result.index = pd.to_datetime(result.index)
-    long = result.stack(future_stack=True).dropna().rename("value").reset_index()
-    long.columns = ["trade_date", "ts_code", "value"]
-    long["trade_date"] = pd.to_datetime(long["trade_date"]).dt.strftime("%Y%m%d")
-    return long.sort_values(["trade_date", "ts_code"]).reset_index(drop=True)
 
 
 @cli.command("compute-returns")
