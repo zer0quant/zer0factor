@@ -5,8 +5,6 @@ import pytest
 from click.testing import CliRunner
 
 from main import (
-    MARKET_CAP_FACTORS,
-    RETURN_FACTORS,
     cli,
     compute_and_store_factors,
     compute_and_store_market_cap_factors,
@@ -16,6 +14,7 @@ from main import (
     standardize_stored_factor,
 )
 from zer0factor.core import FactorFrame
+from zer0factor.factors.builtin import MARKET_CAP_FACTORS, RETURN_FACTORS
 from zer0factor.storage import FactorStorage
 
 

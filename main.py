@@ -17,14 +17,7 @@ from zer0factor.eval import (
     load_batch_evaluation_config,
 )
 from zer0factor.exposures import build_sw_l1_industry_panel
-from zer0factor.factors import (
-    DailyReturn,
-    IntradayReturn,
-    LogCirculatingMarketCap,
-    LogTotalMarketCap,
-    OpenReturn,
-    OvernightReturn,
-)
+from zer0factor.factors.builtin import MARKET_CAP_FACTORS, RETURN_FACTORS
 from zer0factor.panel import (
     filter_long_by_universe,
     filter_panel_by_universe,
@@ -37,16 +30,6 @@ from zer0factor.preprocess import FactorPreprocessPipeline, PreprocessConfig
 from zer0factor.registry import FactorRegistry
 from zer0factor.storage import FactorStorage
 
-RETURN_FACTORS = (
-    DailyReturn(),
-    OpenReturn(),
-    IntradayReturn(),
-    OvernightReturn(),
-)
-MARKET_CAP_FACTORS = (
-    LogTotalMarketCap(),
-    LogCirculatingMarketCap(),
-)
 MARKET_CAP_PREPROCESS_CONFIG = PreprocessConfig(
     winsorize_method="mad",
     winsorize_n=5.0,
