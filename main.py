@@ -9,7 +9,6 @@ from zer0factor.context import AppContext
 from zer0factor.eval import (
     EvaluationConfig,
     ReportThresholds,
-    evaluate_factors,
     find_latest_run_dir,
     generate_evaluation_report,
     load_batch_evaluation_config,
@@ -19,6 +18,7 @@ from zer0factor.naming import FactorName
 from zer0factor.panel import read_universe_panel
 from zer0factor.registry import FactorRegistry
 from zer0factor.services.compute import FactorComputeService, ZScorePostProcess
+from zer0factor.services.evaluate import EvaluationService
 from zer0factor.services.preprocess import (
     NEUTRALIZATION_SIZE_FACTOR,
     FactorPreprocessService,
@@ -423,13 +423,8 @@ def _run_evaluation_job(
     def log_progress(message: str) -> None:
         logger.info(message)
 
-    result = evaluate_factors(
-        factor_names=factor_names,
-        storage=app.storage,
-        pro=app.pro,
-        config=config,
-        log_info=log_progress,
-    )
+    service = EvaluationService(app.storage, app.pro, log_info=log_progress)
+    result = service.run(config)
     logger.info(
         "factor_evaluation_job_finished run_id={} output_dir={} factors={}",
         result.run_id,

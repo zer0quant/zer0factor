@@ -239,7 +239,9 @@ min_monotonicity = 0.4
         return FakeReport()
 
     monkeypatch.setattr("main.load_config", fake_load_config)
-    monkeypatch.setattr("main.evaluate_factors", fake_evaluate_factors)
+    monkeypatch.setattr(
+        "zer0factor.services.evaluate.evaluate_factors", fake_evaluate_factors
+    )
     monkeypatch.setattr("main.generate_evaluation_report", fake_generate_evaluation_report)
     import zer0share.api
 
@@ -295,7 +297,9 @@ def test_evaluate_factor_command_prints_progress(monkeypatch, tmp_path):
         return FakeRunResult()
 
     monkeypatch.setattr("main.load_config", fake_load_config)
-    monkeypatch.setattr("main.evaluate_factors", fake_evaluate_factors)
+    monkeypatch.setattr(
+        "zer0factor.services.evaluate.evaluate_factors", fake_evaluate_factors
+    )
     import zer0share.api
 
     monkeypatch.setattr(zer0share.api, "LocalPro", FakeLocalPro)
