@@ -1,4 +1,3 @@
-from collections.abc import Callable
 from pathlib import Path
 
 import click
@@ -7,7 +6,6 @@ from loguru import logger
 
 from zer0factor.config import load_config
 from zer0factor.context import AppContext
-from zer0factor.core import Factor, Zer0ShareDataProvider, run_factor
 from zer0factor.eval import (
     EvaluationConfig,
     ReportThresholds,
@@ -28,16 +26,10 @@ from zer0factor.panel import (
 )
 from zer0factor.preprocess import FactorPreprocessPipeline, PreprocessConfig
 from zer0factor.registry import FactorRegistry
+from zer0factor.services.compute import FactorComputeService, ZScorePostProcess
 from zer0factor.storage import FactorStorage
 
-MARKET_CAP_PREPROCESS_CONFIG = PreprocessConfig(
-    winsorize_method="mad",
-    winsorize_n=5.0,
-    impute_method="cross_section_median",
-    standardize_method="zscore",
-    neutralize_method=None,
-)
-STANDARD_PREPROCESS_CONFIG = MARKET_CAP_PREPROCESS_CONFIG
+STANDARD_PREPROCESS_CONFIG = PreprocessConfig()
 NEUTRALIZATION_SIZE_FACTOR = "z_log_circulating_market_cap"
 
 
@@ -200,92 +192,6 @@ def _parse_periods(value: str) -> tuple[int, ...]:
     return periods
 
 
-def compute_and_store_factors(
-    factors: tuple[Factor, ...],
-    provider: Zer0ShareDataProvider,
-    storage: FactorStorage,
-    start_date: str,
-    end_date: str | None,
-    universe: str,
-    progress: Callable[[int, int, str], None] | None = None,
-    log_info: Callable[[str], None] | None = None,
-) -> dict[str, int]:
-    fields = sorted({field for factor in factors for field in factor.spec.inputs})
-    adjust_values = {factor.spec.adjust for factor in factors}
-    if len(adjust_values) != 1:
-        raise ValueError("factors with mixed adjust settings cannot share one data load")
-
-    if log_info is not None:
-        log_info(f"market_data_load_started fields={','.join(fields)}")
-    data = provider.history(
-        fields=fields,
-        start_date=start_date,
-        end_date=end_date,
-        universe=universe,
-        adjust=adjust_values.pop(),
-        progress=progress,
-    )
-    if log_info is not None:
-        log_info("market_data_load_finished")
-    if log_info is not None:
-        log_info("factor_write_stage_started")
-    row_counts = {}
-    for factor in factors:
-        if log_info is not None:
-            log_info(f"factor_write_started factor={factor.spec.name}")
-        result = run_factor(factor, data, storage=storage)
-        row_counts[factor.spec.name] = len(result)
-        if log_info is not None:
-            log_info(f"factor_write_finished factor={factor.spec.name} rows={len(result)}")
-    return row_counts
-
-
-def compute_and_store_market_cap_factors(
-    factors: tuple[Factor, ...],
-    provider: Zer0ShareDataProvider,
-    storage: FactorStorage,
-    start_date: str,
-    end_date: str | None,
-    universe: str,
-    progress: Callable[[int, int, str], None] | None = None,
-    log_info: Callable[[str], None] | None = None,
-) -> dict[str, int]:
-    fields = sorted({field for factor in factors for field in factor.spec.inputs})
-
-    if log_info is not None:
-        log_info(f"market_cap_data_load_started fields={','.join(fields)}")
-    data = provider.history(
-        fields=fields,
-        start_date=start_date,
-        end_date=end_date,
-        universe=universe,
-        adjust=None,
-        progress=progress,
-    )
-    if log_info is not None:
-        log_info("market_cap_data_load_finished")
-
-    pipeline = FactorPreprocessPipeline(MARKET_CAP_PREPROCESS_CONFIG)
-    row_counts = {}
-    for factor in factors:
-        if log_info is not None:
-            log_info(f"market_cap_factor_write_started factor={factor.spec.name}")
-        raw = run_factor(factor, data, storage=storage)
-        row_counts[factor.spec.name] = len(raw)
-
-        z_name = f"z_{factor.spec.name}"
-        z_scored = pipeline.transform(raw)
-        storage.write(z_name, z_scored)
-        row_counts[z_name] = len(z_scored)
-        if log_info is not None:
-            log_info(
-                "market_cap_factor_write_finished "
-                f"factor={factor.spec.name} rows={len(raw)} "
-                f"z_factor={z_name} z_rows={len(z_scored)}"
-            )
-    return row_counts
-
-
 def neutralize_stored_factor(
     *,
     factor_name: str,
@@ -391,15 +297,13 @@ def compute_returns(ctx):
         elif index == total or index % 100 == 0:
             logger.info("market_data_load_progress loaded={} total={} code={}", index, total, code)
 
-    row_counts = compute_and_store_factors(
-        factors=RETURN_FACTORS,
-        provider=app.provider,
-        storage=app.storage,
+    service = FactorComputeService(app.provider, app.storage, log_info=logger.info)
+    row_counts = service.compute_and_store(
+        RETURN_FACTORS,
         start_date=cfg.start_date,
         end_date=end_date,
         universe=cfg.universe,
         progress=show_progress,
-        log_info=logger.info,
     )
     for factor_name, row_count in row_counts.items():
         logger.info("return_factor_rows factor={} rows={}", factor_name, row_count)
@@ -433,15 +337,14 @@ def compute_market_cap(ctx):
                 code,
             )
 
-    row_counts = compute_and_store_market_cap_factors(
-        factors=MARKET_CAP_FACTORS,
-        provider=app.provider,
-        storage=app.storage,
+    service = FactorComputeService(app.provider, app.storage, log_info=logger.info)
+    row_counts = service.compute_and_store(
+        MARKET_CAP_FACTORS,
         start_date=cfg.start_date,
         end_date=end_date,
         universe=cfg.universe,
         progress=show_progress,
-        log_info=logger.info,
+        postprocess=ZScorePostProcess(app.storage),
     )
     for factor_name, row_count in row_counts.items():
         logger.info("market_cap_factor_rows factor={} rows={}", factor_name, row_count)
