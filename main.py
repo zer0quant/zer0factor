@@ -1,4 +1,3 @@
-import sys
 from collections.abc import Callable
 from pathlib import Path
 
@@ -7,6 +6,7 @@ import pandas as pd
 from loguru import logger
 
 from zer0factor.config import load_config
+from zer0factor.context import AppContext
 from zer0factor.core import Factor, Zer0ShareDataProvider, run_factor
 from zer0factor.eval import (
     EvaluationConfig,
@@ -56,7 +56,6 @@ MARKET_CAP_PREPROCESS_CONFIG = PreprocessConfig(
 )
 STANDARD_PREPROCESS_CONFIG = MARKET_CAP_PREPROCESS_CONFIG
 NEUTRALIZATION_SIZE_FACTOR = "z_log_circulating_market_cap"
-LOG_FORMAT = "{time:YYYY-MM-DD HH:mm:ss.SSS} | {level:<8} | {message}"
 
 
 @click.group()
@@ -71,8 +70,8 @@ def cli(ctx, config):
 @click.pass_context
 def status(ctx):
     """Show factor library status."""
-    cfg = load_config(ctx.obj["config_path"])
-    storage = FactorStorage(cfg.factor_dir, cfg.db_path)
+    app = AppContext(load_config(ctx.obj["config_path"]))
+    storage = app.storage
     factors = storage.list_factors()
     if not factors:
         click.echo("No factors computed yet.")
@@ -94,8 +93,8 @@ def factor_list_command(ctx, registry_path, category, enabled, registered, orpha
     if registered and orphan:
         raise click.UsageError("--registered and --orphan are mutually exclusive")
 
-    cfg = load_config(ctx.obj["config_path"])
-    storage = FactorStorage(cfg.factor_dir, cfg.db_path)
+    app = AppContext(load_config(ctx.obj["config_path"]))
+    storage = app.storage
     try:
         registry = FactorRegistry(Path(registry_path))
     except FileNotFoundError:
@@ -163,8 +162,8 @@ def factor_list_command(ctx, registry_path, category, enabled, registered, orpha
 @click.pass_context
 def factor_info_command(ctx, name, registry_path):
     """Show registry metadata and storage status for a single factor."""
-    cfg = load_config(ctx.obj["config_path"])
-    storage = FactorStorage(cfg.factor_dir, cfg.db_path)
+    app = AppContext(load_config(ctx.obj["config_path"]))
+    storage = app.storage
     try:
         registry = FactorRegistry(Path(registry_path))
     except FileNotFoundError:
@@ -205,20 +204,6 @@ def factor_info_command(ctx, name, registry_path):
         click.echo(f"end_date:      {stats.end_date}")
     else:
         click.echo("status:        not found in storage")
-
-
-def configure_logging(log_path: Path) -> None:
-    log_path.parent.mkdir(parents=True, exist_ok=True)
-    logger.remove()
-    logger.add(sys.stderr, level="INFO", format=LOG_FORMAT)
-    logger.add(
-        log_path,
-        level="INFO",
-        format=LOG_FORMAT,
-        rotation="100 MB",
-        retention=10,
-        enqueue=True,
-    )
 
 
 def _parse_periods(value: str) -> tuple[int, ...]:
@@ -405,11 +390,10 @@ def _standardized_factor_name(factor_name: str) -> str:
 @click.pass_context
 def compute_returns(ctx):
     """Compute built-in return factors and store them locally."""
-    from zer0share.api import LocalPro
-
     cfg = load_config(ctx.obj["config_path"])
+    app = AppContext(cfg)
     end_date = cfg.end_date or None
-    configure_logging(cfg.log_path)
+    app.configure_logging()
     logger.info(
         "return_factor_job_started universe={} start_date={} end_date={} fields={}",
         cfg.universe,
@@ -424,12 +408,10 @@ def compute_returns(ctx):
         elif index == total or index % 100 == 0:
             logger.info("market_data_load_progress loaded={} total={} code={}", index, total, code)
 
-    provider = Zer0ShareDataProvider(LocalPro(cfg.zer0share_data_dir))
-    storage = FactorStorage(cfg.factor_dir, cfg.db_path)
     row_counts = compute_and_store_factors(
         factors=RETURN_FACTORS,
-        provider=provider,
-        storage=storage,
+        provider=app.provider,
+        storage=app.storage,
         start_date=cfg.start_date,
         end_date=end_date,
         universe=cfg.universe,
@@ -445,10 +427,9 @@ def compute_returns(ctx):
 @click.pass_context
 def compute_market_cap(ctx):
     """Compute built-in market cap factors and store raw plus z-scored values."""
-    from zer0share.api import LocalPro
-
     cfg = load_config(ctx.obj["config_path"])
-    configure_logging(cfg.log_path)
+    app = AppContext(cfg)
+    app.configure_logging()
     end_date = cfg.end_date or None
     logger.info(
         "market_cap_factor_job_started universe={} start_date={} end_date={} fields={}",
@@ -469,12 +450,10 @@ def compute_market_cap(ctx):
                 code,
             )
 
-    provider = Zer0ShareDataProvider(LocalPro(cfg.zer0share_data_dir))
-    storage = FactorStorage(cfg.factor_dir, cfg.db_path)
     row_counts = compute_and_store_market_cap_factors(
         factors=MARKET_CAP_FACTORS,
-        provider=provider,
-        storage=storage,
+        provider=app.provider,
+        storage=app.storage,
         start_date=cfg.start_date,
         end_date=end_date,
         universe=cfg.universe,
@@ -494,10 +473,9 @@ def compute_market_cap(ctx):
 @click.pass_context
 def standardize_factor(ctx, factor_name, output_name, start_date, end_date):
     """Standardize a stored factor with winsorization, imputation, and z-score."""
-    from zer0share.api import LocalPro
-
     cfg = load_config(ctx.obj["config_path"])
-    configure_logging(cfg.log_path)
+    app = AppContext(cfg)
+    app.configure_logging()
     resolved_start = start_date or cfg.start_date
     resolved_end = end_date if end_date is not None else (cfg.end_date or None)
     resolved_output = output_name or f"z_{factor_name}"
@@ -508,10 +486,8 @@ def standardize_factor(ctx, factor_name, output_name, start_date, end_date):
         resolved_start,
         resolved_end or "latest",
     )
-    storage = FactorStorage(cfg.factor_dir, cfg.db_path)
-    pro = LocalPro(cfg.zer0share_data_dir)
     universe = read_universe_panel(
-        pro,
+        app.pro,
         universe_name=cfg.process_universe,
         start_date=resolved_start,
         end_date=resolved_end,
@@ -519,7 +495,7 @@ def standardize_factor(ctx, factor_name, output_name, start_date, end_date):
     rows = standardize_stored_factor(
         factor_name=factor_name,
         output_name=resolved_output,
-        storage=storage,
+        storage=app.storage,
         start_date=resolved_start,
         end_date=resolved_end,
         universe=universe,
@@ -545,10 +521,9 @@ def standardize_factor(ctx, factor_name, output_name, start_date, end_date):
 @click.pass_context
 def neutralize_factor(ctx, factor_name, output_name, size_factor_name, start_date, end_date):
     """Neutralize a standardized factor and standardize the residual."""
-    from zer0share.api import LocalPro
-
     cfg = load_config(ctx.obj["config_path"])
-    configure_logging(cfg.log_path)
+    app = AppContext(cfg)
+    app.configure_logging()
     resolved_start = start_date or cfg.start_date
     resolved_end = end_date if end_date is not None else (cfg.end_date or None)
     raw_factor_name = factor_name[2:] if factor_name.startswith("z_") else factor_name
@@ -563,10 +538,8 @@ def neutralize_factor(ctx, factor_name, output_name, size_factor_name, start_dat
         resolved_start,
         resolved_end or "latest",
     )
-    storage = FactorStorage(cfg.factor_dir, cfg.db_path)
-    pro = LocalPro(cfg.zer0share_data_dir)
     universe = read_universe_panel(
-        pro,
+        app.pro,
         universe_name=cfg.process_universe,
         start_date=resolved_start,
         end_date=resolved_end,
@@ -574,8 +547,8 @@ def neutralize_factor(ctx, factor_name, output_name, size_factor_name, start_dat
     rows = neutralize_stored_factor(
         factor_name=factor_name,
         output_name=resolved_output,
-        storage=storage,
-        pro=pro,
+        storage=app.storage,
+        pro=app.pro,
         start_date=resolved_start,
         end_date=resolved_end,
         size_factor_name=size_factor_name,
@@ -636,10 +609,9 @@ def _run_evaluation_job(
     transaction_cost_bps: float,
     benchmark_index: str | None = None,
 ):
-    from zer0share.api import LocalPro
-
     cfg = load_config(ctx.obj["config_path"])
-    configure_logging(cfg.log_path)
+    app = AppContext(cfg)
+    app.configure_logging()
     resolved_start = start_date or cfg.start_date
     resolved_end = end_date if end_date is not None else (cfg.end_date or None)
     config = EvaluationConfig(
@@ -655,15 +627,13 @@ def _run_evaluation_job(
         benchmark_index=benchmark_index,
         transaction_cost_bps=transaction_cost_bps,
     )
-    storage = FactorStorage(cfg.factor_dir, cfg.db_path)
-
     def log_progress(message: str) -> None:
         logger.info(message)
 
     result = evaluate_factors(
         factor_names=factor_names,
-        storage=storage,
-        pro=LocalPro(cfg.zer0share_data_dir),
+        storage=app.storage,
+        pro=app.pro,
         config=config,
         log_info=log_progress,
     )
