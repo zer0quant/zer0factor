@@ -3,7 +3,7 @@ from pathlib import Path
 import pandas as pd
 from click.testing import CliRunner
 
-from main import cli
+from zer0factor.cli import cli
 from zer0factor.storage import FactorStorage
 
 
@@ -92,7 +92,10 @@ def test_evaluate_summary_command_prints_report_paths(monkeypatch, tmp_path):
         assert kwargs["thresholds"].min_monotonicity == 0.4
         return FakeReport()
 
-    monkeypatch.setattr("main.generate_evaluation_report", fake_generate_evaluation_report)
+    monkeypatch.setattr(
+        "zer0factor.cli.evaluate_cmds.generate_evaluation_report",
+        fake_generate_evaluation_report,
+    )
 
     result = runner.invoke(
         cli,
@@ -238,11 +241,14 @@ min_monotonicity = 0.4
         assert kwargs["thresholds"].min_monotonicity == 0.4
         return FakeReport()
 
-    monkeypatch.setattr("main.load_config", fake_load_config)
+    monkeypatch.setattr("zer0factor.cli.evaluate_cmds.load_config", fake_load_config)
     monkeypatch.setattr(
         "zer0factor.services.evaluate.evaluate_factors", fake_evaluate_factors
     )
-    monkeypatch.setattr("main.generate_evaluation_report", fake_generate_evaluation_report)
+    monkeypatch.setattr(
+        "zer0factor.cli.evaluate_cmds.generate_evaluation_report",
+        fake_generate_evaluation_report,
+    )
     import zer0share.api
 
     monkeypatch.setattr(zer0share.api, "LocalPro", FakeLocalPro)
@@ -296,7 +302,7 @@ def test_evaluate_factor_command_prints_progress(monkeypatch, tmp_path):
         log_info("evaluation_price_load_started start_date=20240101 end_date=20240115")
         return FakeRunResult()
 
-    monkeypatch.setattr("main.load_config", fake_load_config)
+    monkeypatch.setattr("zer0factor.cli.evaluate_cmds.load_config", fake_load_config)
     monkeypatch.setattr(
         "zer0factor.services.evaluate.evaluate_factors", fake_evaluate_factors
     )
