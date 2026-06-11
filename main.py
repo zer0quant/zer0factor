@@ -14,23 +14,15 @@ from zer0factor.eval import (
     generate_evaluation_report,
     load_batch_evaluation_config,
 )
-from zer0factor.exposures import build_sw_l1_industry_panel
 from zer0factor.factors.builtin import MARKET_CAP_FACTORS, RETURN_FACTORS
-from zer0factor.panel import (
-    filter_long_by_universe,
-    filter_panel_by_universe,
-    long_to_wide,
-    parse_trade_dates,  # noqa: F401  (re-exported for CLI/test consumers)
-    read_universe_panel,
-    wide_to_long,
-)
-from zer0factor.preprocess import FactorPreprocessPipeline, PreprocessConfig
+from zer0factor.naming import FactorName
+from zer0factor.panel import read_universe_panel
 from zer0factor.registry import FactorRegistry
 from zer0factor.services.compute import FactorComputeService, ZScorePostProcess
-from zer0factor.storage import FactorStorage
-
-STANDARD_PREPROCESS_CONFIG = PreprocessConfig()
-NEUTRALIZATION_SIZE_FACTOR = "z_log_circulating_market_cap"
+from zer0factor.services.preprocess import (
+    NEUTRALIZATION_SIZE_FACTOR,
+    FactorPreprocessService,
+)
 
 
 @click.group()
@@ -192,89 +184,6 @@ def _parse_periods(value: str) -> tuple[int, ...]:
     return periods
 
 
-def neutralize_stored_factor(
-    *,
-    factor_name: str,
-    output_name: str,
-    storage: FactorStorage,
-    pro,
-    start_date: str | None = None,
-    end_date: str | None = None,
-    size_factor_name: str = NEUTRALIZATION_SIZE_FACTOR,
-    universe: pd.DataFrame | None = None,
-) -> int:
-    source_name = _standardized_factor_name(factor_name)
-    source = storage.read(source_name, start_date=start_date, end_date=end_date)
-    size = storage.read(size_factor_name, start_date=start_date, end_date=end_date)
-    source_panel = long_to_wide(source)
-    size_panel = long_to_wide(size)
-    dates = source_panel.index.intersection(size_panel.index)
-    ts_codes = source_panel.columns.intersection(size_panel.columns)
-    source_panel = source_panel.reindex(index=dates, columns=ts_codes)
-    size_panel = size_panel.reindex(index=dates, columns=ts_codes)
-    source_panel = filter_panel_by_universe(source_panel, universe)
-    size_panel = size_panel.reindex(index=source_panel.index, columns=source_panel.columns)
-    industry_panel = build_sw_l1_industry_panel(pro, dates=dates, ts_codes=ts_codes)
-    industry_panel = industry_panel.reindex(index=source_panel.index, columns=source_panel.columns)
-
-    pipeline = FactorPreprocessPipeline(
-        PreprocessConfig(
-            winsorize_method="none",
-            impute_method="none",
-            standardize_method="none",
-            neutralize_method="size_industry",
-        )
-    )
-    result = pipeline.transform(
-        source_panel,
-        exposures={"size": size_panel, "industry": industry_panel},
-    )
-    standardized = standardize_stored_panel(result)
-    output = wide_to_long(standardized)
-    storage.write(output_name, output)
-    return len(output)
-
-
-def standardize_stored_factor(
-    *,
-    factor_name: str,
-    output_name: str,
-    storage: FactorStorage,
-    start_date: str | None = None,
-    end_date: str | None = None,
-    config: PreprocessConfig = STANDARD_PREPROCESS_CONFIG,
-    universe: pd.DataFrame | None = None,
-) -> int:
-    source = storage.read(factor_name, start_date=start_date, end_date=end_date)
-    source = filter_long_by_universe(source, universe)
-    pipeline = FactorPreprocessPipeline(config)
-    output = pipeline.transform(source)
-    storage.write(output_name, output)
-    return len(output)
-
-
-def preprocess_stored_factor(**kwargs) -> int:
-    return standardize_stored_factor(**kwargs)
-
-
-def standardize_stored_panel(panel: pd.DataFrame) -> pd.DataFrame:
-    pipeline = FactorPreprocessPipeline(
-        PreprocessConfig(
-            winsorize_method="none",
-            impute_method="none",
-            standardize_method="zscore",
-            neutralize_method=None,
-        )
-    )
-    return pipeline.transform(panel)
-
-
-def _standardized_factor_name(factor_name: str) -> str:
-    if factor_name.startswith("z_"):
-        return factor_name
-    return f"z_{factor_name}"
-
-
 @cli.command("compute-returns")
 @click.pass_context
 def compute_returns(ctx):
@@ -364,7 +273,7 @@ def standardize_factor(ctx, factor_name, output_name, start_date, end_date):
     app.configure_logging()
     resolved_start = start_date or cfg.start_date
     resolved_end = end_date if end_date is not None else (cfg.end_date or None)
-    resolved_output = output_name or f"z_{factor_name}"
+    resolved_output = output_name or FactorName.parse(factor_name).standardized
     logger.info(
         "standardize_factor_job_started factor={} output={} start_date={} end_date={}",
         factor_name,
@@ -378,10 +287,10 @@ def standardize_factor(ctx, factor_name, output_name, start_date, end_date):
         start_date=resolved_start,
         end_date=resolved_end,
     )
-    rows = standardize_stored_factor(
-        factor_name=factor_name,
+    service = FactorPreprocessService(app.storage)
+    rows = service.standardize(
+        factor_name,
         output_name=resolved_output,
-        storage=app.storage,
         start_date=resolved_start,
         end_date=resolved_end,
         universe=universe,
@@ -412,13 +321,12 @@ def neutralize_factor(ctx, factor_name, output_name, size_factor_name, start_dat
     app.configure_logging()
     resolved_start = start_date or cfg.start_date
     resolved_end = end_date if end_date is not None else (cfg.end_date or None)
-    raw_factor_name = factor_name[2:] if factor_name.startswith("z_") else factor_name
-    resolved_output = output_name or f"z_neu_{raw_factor_name}"
+    resolved_output = output_name or FactorName.parse(factor_name).neutralized
     logger.info(
         "neutralize_factor_job_started "
         "factor={} source={} output={} size_factor={} start_date={} end_date={}",
         factor_name,
-        _standardized_factor_name(factor_name),
+        FactorName.parse(factor_name).standardized,
         resolved_output,
         size_factor_name,
         resolved_start,
@@ -430,14 +338,13 @@ def neutralize_factor(ctx, factor_name, output_name, size_factor_name, start_dat
         start_date=resolved_start,
         end_date=resolved_end,
     )
-    rows = neutralize_stored_factor(
-        factor_name=factor_name,
+    service = FactorPreprocessService(app.storage, industry_source=app.pro)
+    rows = service.neutralize(
+        factor_name,
         output_name=resolved_output,
-        storage=app.storage,
-        pro=app.pro,
+        size_factor_name=size_factor_name,
         start_date=resolved_start,
         end_date=resolved_end,
-        size_factor_name=size_factor_name,
         universe=universe,
     )
     logger.info(
