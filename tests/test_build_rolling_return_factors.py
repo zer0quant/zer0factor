@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import pandas as pd
 import pytest
 
@@ -11,6 +13,7 @@ from zer0factor.pipeline import (
     compute_raw_rolling_return_factors,
     preprocess_one_factor,
     run_build_stage,
+    update_factor_registry,
 )
 
 
@@ -278,6 +281,49 @@ def test_run_build_stage_rejects_unknown_family() -> None:
             start_date=None,
             end_date=None,
         )
+
+
+def test_update_factor_registry_appends_missing_entries_without_overwriting(tmp_path: Path) -> None:
+    registry = tmp_path / "factors.toml"
+    registry.write_text(
+        """
+[registry]
+version = "1"
+
+[[factors]]
+name = "z_daily_return_ma5"
+category = "custom"
+source_type = "derived"
+source_factor = "daily_return_ma5"
+enabled = false
+tags = ["custom"]
+description = "User customized entry"
+""".lstrip(),
+        encoding="utf-8",
+    )
+
+    added = update_factor_registry(registry, family_name="rolling_return")
+    content = registry.read_text(encoding="utf-8")
+
+    assert "User customized entry" in content
+    assert content.count('name = "z_daily_return_ma5"') == 1
+    assert "daily_return_ma5" in added
+    assert "z_size_industry_neu_overnight_return_ma180" in added
+    assert 'name = "z_size_industry_neu_overnight_return_ma180"' in content
+
+
+def test_update_factor_registry_creates_registry_header(tmp_path: Path) -> None:
+    registry = tmp_path / "factors.toml"
+
+    update_factor_registry(registry, family_name="rolling_return")
+    content = registry.read_text(encoding="utf-8")
+
+    assert '[registry]' in content
+    assert 'version = "1"' in content
+    assert 'name = "daily_return_ma5"' in content
+    assert 'enabled = false' in content
+    assert 'name = "z_daily_return_ma5"' in content
+    assert 'enabled = true' in content
 
 
 def test_preprocess_one_factor_fails_when_raw_factor_missing() -> None:

@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import logging
+import tomllib
 from collections.abc import Callable
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 import pandas as pd
@@ -260,6 +262,83 @@ def run_build_stage(
     return rows
 
 
+def update_factor_registry(registry_path: Path, *, family_name: str) -> list[str]:
+    family = get_family(family_name)
+    existing = _read_registry_names(registry_path)
+    entries = _registry_entries_for_family(family)
+    missing = [entry for entry in entries if entry["name"] not in existing]
+    if not missing:
+        return []
+
+    if registry_path.exists():
+        prefix = registry_path.read_text(encoding="utf-8").rstrip() + "\n\n"
+    else:
+        registry_path.parent.mkdir(parents=True, exist_ok=True)
+        prefix = '# Factor Registry\n\n[registry]\nversion = "1"\n\n'
+
+    body = "\n\n".join(_format_registry_entry(entry) for entry in missing)
+    registry_path.write_text(prefix + body + "\n", encoding="utf-8")
+    return [entry["name"] for entry in missing]
+
+
+def _read_registry_names(registry_path: Path) -> set[str]:
+    if not registry_path.exists():
+        return set()
+    with open(registry_path, "rb") as f:
+        raw = tomllib.load(f)
+    return {str(entry["name"]) for entry in raw.get("factors", [])}
+
+
+def _registry_entries_for_family(family: FactorFamily) -> list[dict[str, object]]:
+    entries: list[dict[str, object]] = []
+    for base_factor in family.base_factors:
+        for window in family.windows:
+            raw_name = family.raw_name(base_factor, window)
+            window_tags = [family.name, base_factor, "ma", f"ma{window}"]
+            entries.append({
+                "name": raw_name,
+                "category": "price",
+                "source_type": "derived",
+                "source_factor": base_factor,
+                "enabled": False,
+                "tags": [*window_tags, "raw"],
+                "description": f"Rolling mean of {base_factor} over {window} trading days",
+                "evaluate_default": False,
+            })
+            for profile in family.profiles:
+                entries.append({
+                    "name": profile.output_name(raw_name),
+                    "category": "price",
+                    "source_type": "derived" if profile.neutralize_method is None else "neutralized",
+                    "source_factor": raw_name,
+                    "enabled": True,
+                    "tags": [*window_tags, profile.key],
+                    "description": f"{profile.key} profile for {raw_name}",
+                    "evaluate_default": True,
+                })
+    return entries
+
+
+def _format_registry_entry(entry: dict[str, object]) -> str:
+    lines = [
+        "[[factors]]",
+        f'name = "{entry["name"]}"',
+        f'category = "{entry["category"]}"',
+        f'source_type = "{entry["source_type"]}"',
+        f'source_factor = "{entry["source_factor"]}"',
+        f'enabled = {str(entry["enabled"]).lower()}',
+        "tags = [" + ", ".join(f'"{tag}"' for tag in entry["tags"]) + "]",
+        f'description = "{entry["description"]}"',
+        "",
+        "[factors.evaluate]",
+        f'default = {str(entry["evaluate_default"]).lower()}',
+        "quantiles = 5",
+        "periods = [1, 5, 10]",
+        'return_type = "open_t1"',
+    ]
+    return "\n".join(lines)
+
+
 def _read_universe_panel(
     pro: Any,
     *,
@@ -379,4 +458,5 @@ __all__ = [
     "preprocess_all_factors",
     "preprocess_one_factor",
     "run_build_stage",
+    "update_factor_registry",
 ]

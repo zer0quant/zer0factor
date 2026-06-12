@@ -33,3 +33,33 @@ default = true
 quantiles = 5
 periods = [1, 5, 10]
 return_type = "open_t1"
+
+[[factors]]
+name = "daily_return_ma5"
+category = "price"
+source_type = "derived"
+source_factor = "daily_return"
+enabled = false
+tags = ["rolling_return", "daily_return", "ma", "ma5", "raw"]
+description = "Rolling mean of daily_return over 5 trading days"
+
+[factors.evaluate]
+default = false
+quantiles = 5
+periods = [1, 5, 10]
+return_type = "open_t1"
+
+[[factors]]
+name = "z_size_industry_neu_daily_return_ma5"
+category = "price"
+source_type = "neutralized"
+source_factor = "daily_return_ma5"
+enabled = true
+tags = ["rolling_return", "daily_return", "ma", "ma5", "z_size_industry_neu"]
+description = "z_size_industry_neu profile for daily_return_ma5"
+
+[factors.evaluate]
+default = true
+quantiles = 5
+periods = [1, 5, 10]
+return_type = "open_t1"
