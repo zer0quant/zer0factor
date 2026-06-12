@@ -19,9 +19,13 @@ PROFILE_PREFIXES = (
 )
 
 
+def raw_factor_name(base_factor: str, window: int) -> str:
+    return f"{base_factor}_ma{window}"
+
+
 def raw_factor_names() -> tuple[str, ...]:
     return tuple(
-        f"{base_factor}_ma{window}"
+        raw_factor_name(base_factor, window)
         for base_factor in BASE_RETURN_FACTORS
         for window in WINDOWS
     )
@@ -84,5 +88,6 @@ __all__ = [
     "derive_rolling_mean_output",
     "derive_rolling_mean_panel",
     "parse_rolling_return_name",
+    "raw_factor_name",
     "raw_factor_names",
 ]

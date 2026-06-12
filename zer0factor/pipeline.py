@@ -12,7 +12,7 @@ from zer0factor.factors.rolling_returns import (
     BASE_RETURN_FACTORS,
     WINDOWS,
     derive_rolling_mean_panel,
-    raw_factor_names,
+    raw_factor_name,
 )
 from zer0factor.preprocess import impute_missing, neutralize, standardize, winsorize
 
@@ -41,8 +41,18 @@ PROFILES = (
 @dataclass(frozen=True)
 class FactorFamily:
     name: str
-    raw_names: Callable[[], tuple[str, ...]]
+    base_factors: tuple[str, ...]
+    windows: tuple[int, ...]
+    raw_name: Callable[[str, int], str]
+    derive: Callable[[pd.DataFrame, int], pd.DataFrame]
     profiles: tuple[PreprocessProfile, ...] = PROFILES
+
+    def raw_names(self) -> tuple[str, ...]:
+        return tuple(
+            self.raw_name(base_factor, window)
+            for base_factor in self.base_factors
+            for window in self.windows
+        )
 
     def preprocess_output_names(self) -> list[str]:
         return [
@@ -56,7 +66,13 @@ class FactorFamily:
 
 
 FAMILIES = {
-    "rolling_return": FactorFamily("rolling_return", raw_factor_names),
+    "rolling_return": FactorFamily(
+        name="rolling_return",
+        base_factors=BASE_RETURN_FACTORS,
+        windows=WINDOWS,
+        raw_name=raw_factor_name,
+        derive=derive_rolling_mean_panel,
+    ),
 }
 
 
@@ -68,6 +84,31 @@ def get_family(name: str) -> FactorFamily:
         raise ValueError(f"unknown factor family: {name}; known families: {known}") from exc
 
 
+def compute_raw_family_factors(
+    family: FactorFamily,
+    *,
+    storage: Any,
+    start_date: str | None,
+    end_date: str | None,
+    windows: tuple[int, ...] | None = None,
+) -> dict[str, int]:
+    windows = family.windows if windows is None else windows
+    rows: dict[str, int] = {}
+    for base_factor in family.base_factors:
+        source = _read_required_factor(storage, base_factor, None, end_date)
+        panel = _long_to_wide(source)
+        for window in windows:
+            output_name = family.raw_name(base_factor, window)
+            output_panel = family.derive(panel, window)
+            output = to_factor_output(output_panel, output_name)
+            output = _filter_long_by_date(output, start_date, end_date)
+            if output.empty:
+                LOGGER.warning("raw factor output is empty: %s", output_name)
+            storage.write(output_name, output)
+            rows[output_name] = len(output)
+    return rows
+
+
 def compute_raw_rolling_return_factors(
     *,
     storage: Any,
@@ -75,20 +116,13 @@ def compute_raw_rolling_return_factors(
     end_date: str | None,
     windows: tuple[int, ...] = WINDOWS,
 ) -> dict[str, int]:
-    rows: dict[str, int] = {}
-    for base_factor in BASE_RETURN_FACTORS:
-        source = _read_required_factor(storage, base_factor, None, end_date)
-        panel = _long_to_wide(source)
-        for window in windows:
-            output_name = f"{base_factor}_ma{window}"
-            output_panel = derive_rolling_mean_panel(panel, window)
-            output = to_factor_output(output_panel, output_name)
-            output = _filter_long_by_date(output, start_date, end_date)
-            if output.empty:
-                LOGGER.warning("rolling factor output is empty: %s", output_name)
-            storage.write(output_name, output)
-            rows[output_name] = len(output)
-    return rows
+    return compute_raw_family_factors(
+        get_family("rolling_return"),
+        storage=storage,
+        start_date=start_date,
+        end_date=end_date,
+        windows=windows,
+    )
 
 
 def preprocess_one_factor(
@@ -218,6 +252,7 @@ __all__ = [
     "SIZE_FACTOR_NAME",
     "FactorFamily",
     "PreprocessProfile",
+    "compute_raw_family_factors",
     "compute_raw_rolling_return_factors",
     "get_family",
     "preprocess_one_factor",

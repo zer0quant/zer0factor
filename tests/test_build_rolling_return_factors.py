@@ -5,7 +5,9 @@ import pytest
 
 from zer0factor.pipeline import (
     SIZE_FACTOR_NAME,
+    FactorFamily,
     _long_to_wide,
+    compute_raw_family_factors,
     compute_raw_rolling_return_factors,
     preprocess_one_factor,
 )
@@ -107,6 +109,30 @@ def test_compute_raw_rolling_return_factors_fails_when_base_factor_missing() -> 
             end_date=None,
             windows=(5,),
         )
+
+
+def test_compute_raw_family_factors_uses_family_derive_and_naming() -> None:
+    storage = FakeStorage({
+        "daily_return": _base_factor([1.0, 2.0, 3.0, 4.0, 5.0]),
+    })
+    family = FactorFamily(
+        name="rolling_max",
+        base_factors=("daily_return",),
+        windows=(2,),
+        raw_name=lambda base_factor, window: f"{base_factor}_max{window}",
+        derive=lambda panel, window: panel.rolling(window=window).max(),
+    )
+
+    rows = compute_raw_family_factors(
+        family,
+        storage=storage,
+        start_date=None,
+        end_date=None,
+    )
+
+    assert set(rows) == {"daily_return_max2"}
+    output = storage.writes["daily_return_max2"]
+    assert output["value"].tolist() == [2.0, 3.0, 4.0, 5.0]
 
 
 def test_long_to_wide_rejects_duplicate_trade_date_code_pairs() -> None:
