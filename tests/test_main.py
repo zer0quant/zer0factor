@@ -1014,10 +1014,11 @@ end_date = ""
     registry_calls = []
 
     monkeypatch.setattr("main.run_build_stage", lambda **kwargs: {"daily_return_ma5": 3})
-    monkeypatch.setattr(
-        "main.update_factor_registry",
-        lambda path, family_name: registry_calls.append((path, family_name)) or ["daily_return_ma5"],
-    )
+    def fake_update_registry(path, family_name):
+        registry_calls.append((path, family_name))
+        return ["daily_return_ma5"]
+
+    monkeypatch.setattr("main.update_factor_registry", fake_update_registry)
 
     result = CliRunner().invoke(
         cli,

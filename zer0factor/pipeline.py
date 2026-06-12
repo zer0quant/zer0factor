@@ -306,10 +306,11 @@ def _registry_entries_for_family(family: FactorFamily) -> list[dict[str, object]
                 "evaluate_default": False,
             })
             for profile in family.profiles:
+                neutralized = profile.neutralize_method is not None
                 entries.append({
                     "name": profile.output_name(raw_name),
                     "category": "price",
-                    "source_type": "derived" if profile.neutralize_method is None else "neutralized",
+                    "source_type": "neutralized" if neutralized else "derived",
                     "source_factor": raw_name,
                     "enabled": True,
                     "tags": [*window_tags, profile.key],
