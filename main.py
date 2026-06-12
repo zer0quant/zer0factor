@@ -568,6 +568,8 @@ def compute_market_cap(ctx):
 @click.option("--end-date", default=None)
 @click.option("--registry", "registry_path", default="config/factors.toml", show_default=True)
 @click.option("--update-registry", is_flag=True, default=False)
+@click.option("--workers", type=int, default=1, show_default=True,
+              help="Parallel worker processes (1 = serial)")
 @click.pass_context
 def build_factors_command(
     ctx,
@@ -577,6 +579,7 @@ def build_factors_command(
     end_date,
     registry_path,
     update_registry,
+    workers,
 ):
     """Build a registered factor family."""
     from zer0share.api import LocalPro
@@ -596,6 +599,7 @@ def build_factors_command(
         start_date=resolved_start,
         end_date=resolved_end,
         process_universe=cfg.process_universe,
+        workers=workers,
     )
     for factor_name, row_count in rows.items():
         click.echo(f"{factor_name}: {row_count}")

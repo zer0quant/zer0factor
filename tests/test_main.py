@@ -1039,3 +1039,44 @@ end_date = ""
     assert result.exit_code == 0
     assert registry_calls == [(registry_path, "rolling_return")]
     assert "registry entries added: 1" in result.output
+
+
+def test_build_factors_command_passes_workers(monkeypatch, tmp_path):
+    config_path = tmp_path / "settings.toml"
+    config_path.write_text(
+        f"""
+[zer0share]
+data_dir = "{tmp_path / 'share'}"
+
+[paths]
+factor_dir = "{tmp_path / 'factors'}"
+db_path = "{tmp_path / 'factor.duckdb'}"
+log_path = "{tmp_path / 'factor.log'}"
+
+[factor]
+universe = "all"
+process_universe = "univ_trade_base"
+start_date = "20240101"
+end_date = ""
+""".lstrip(),
+        encoding="utf-8",
+    )
+    calls = []
+
+    def fake_run_build_stage(**kwargs):
+        calls.append(kwargs)
+        return {}
+
+    monkeypatch.setattr("main.run_build_stage", fake_run_build_stage)
+
+    result = CliRunner().invoke(
+        cli,
+        [
+            "--config", str(config_path),
+            "build-factors", "--family", "rolling_return",
+            "--stage", "raw", "--workers", "16",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert calls[0]["workers"] == 16

@@ -387,6 +387,7 @@ def run_build_stage(
     start_date: str | None,
     end_date: str | None,
     process_universe: str | None = None,
+    workers: int = 1,
 ) -> dict[str, int]:
     family = get_family(family_name)
     if stage not in {"raw", "preprocess", "all"}:
@@ -400,6 +401,7 @@ def run_build_stage(
                 storage=storage,
                 start_date=start_date,
                 end_date=end_date,
+                workers=workers,
             )
         )
     if stage in {"preprocess", "all"}:
@@ -416,6 +418,7 @@ def run_build_stage(
                 end_date=end_date,
                 process_universe=process_universe,
                 profiles=family.profiles,
+                workers=workers,
             )
         )
     return rows
