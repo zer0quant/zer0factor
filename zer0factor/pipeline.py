@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import logging
+import multiprocessing
 import tomllib
 from collections.abc import Callable
+from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -11,6 +13,7 @@ import pandas as pd
 
 from zer0factor.core import to_factor_output
 from zer0factor.exposures import build_sw_l1_industry_panel
+from zer0factor.storage import FactorStorage
 from zer0factor.factors.rolling_returns import (
     BASE_RETURN_FACTORS,
     WINDOWS,
@@ -94,8 +97,20 @@ def compute_raw_family_factors(
     start_date: str | None,
     end_date: str | None,
     windows: tuple[int, ...] | None = None,
+    workers: int = 1,
 ) -> dict[str, int]:
+    if workers < 1:
+        raise ValueError(f"workers must be >= 1, got {workers}")
     windows = family.windows if windows is None else windows
+    if workers > 1:
+        return _compute_raw_parallel(
+            family,
+            storage=storage,
+            start_date=start_date,
+            end_date=end_date,
+            windows=windows,
+            workers=workers,
+        )
     rows: dict[str, int] = {}
     for base_factor in family.base_factors:
         source = _read_required_factor(storage, base_factor, None, end_date)
@@ -109,6 +124,59 @@ def compute_raw_family_factors(
                 LOGGER.warning("raw factor output is empty: %s", output_name)
             storage.write(output_name, output)
             rows[output_name] = len(output)
+    return rows
+
+
+def _storage_paths(storage: Any) -> tuple[Path, Path]:
+    factor_dir = getattr(storage, "_factor_dir", None)
+    db_path = getattr(storage, "_db_path", None)
+    if factor_dir is None or db_path is None:
+        raise TypeError("parallel build requires a FactorStorage")
+    return Path(factor_dir), Path(db_path)
+
+
+def _compute_raw_parallel(
+    family: FactorFamily,
+    *,
+    storage: Any,
+    start_date: str | None,
+    end_date: str | None,
+    windows: tuple[int, ...],
+    workers: int,
+) -> dict[str, int]:
+    factor_dir, db_path = _storage_paths(storage)
+    tasks = [
+        (family.name, base_factor, windows, str(factor_dir), str(db_path), start_date, end_date)
+        for base_factor in family.base_factors
+    ]
+    rows: dict[str, int] = {}
+    ctx = multiprocessing.get_context("spawn")
+    max_workers = min(workers, len(tasks))
+    with ProcessPoolExecutor(max_workers=max_workers, mp_context=ctx) as pool:
+        for task_rows in pool.map(_compute_raw_base_factor_task, tasks):
+            rows.update(task_rows)
+    for output_name in rows:
+        storage.register(output_name)
+    return rows
+
+
+def _compute_raw_base_factor_task(
+    args: tuple[str, str, tuple[int, ...], str, str, str | None, str | None],
+) -> dict[str, int]:
+    family_name, base_factor, windows, factor_dir, db_path, start_date, end_date = args
+    family = get_family(family_name)
+    storage = FactorStorage(Path(factor_dir), Path(db_path), init_db=False)
+    source = _read_required_factor(storage, base_factor, None, end_date)
+    panel = _long_to_wide(source)
+    rows: dict[str, int] = {}
+    for window in windows:
+        output_name = family.raw_name(base_factor, window)
+        output = to_factor_output(family.derive(panel, window), output_name)
+        output = _filter_long_by_date(output, start_date, end_date)
+        if output.empty:
+            LOGGER.warning("raw factor output is empty: %s", output_name)
+        storage.write_partitions(output_name, output)
+        rows[output_name] = len(output)
     return rows
 
 

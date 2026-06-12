@@ -6,6 +6,7 @@ import pandas as pd
 import pytest
 
 from zer0factor.pipeline import (
+    FAMILIES,
     SIZE_FACTOR_NAME,
     FactorFamily,
     _long_to_wide,
@@ -15,6 +16,7 @@ from zer0factor.pipeline import (
     run_build_stage,
     update_factor_registry,
 )
+from zer0factor.storage import FactorStorage
 
 
 class FakeStorage:
@@ -112,6 +114,49 @@ def test_compute_raw_rolling_return_factors_fails_when_base_factor_missing() -> 
             start_date=None,
             end_date=None,
             windows=(5,),
+        )
+
+
+def _seed_base_factors(storage) -> None:
+    values = {
+        "daily_return": [1.0, 2.0, 3.0, 4.0, 5.0],
+        "open_return": [10.0, 20.0, 30.0, 40.0, 50.0],
+        "intraday_return": [2.0, 4.0, 6.0, 8.0, 10.0],
+        "overnight_return": [5.0, 4.0, 3.0, 2.0, 1.0],
+    }
+    for name, series in values.items():
+        storage.write(name, _base_factor(series))
+
+
+def test_compute_raw_family_factors_parallel_matches_serial(tmp_path) -> None:
+    family = FAMILIES["rolling_return"]
+    serial_storage = FactorStorage(tmp_path / "serial", tmp_path / "serial.duckdb")
+    parallel_storage = FactorStorage(tmp_path / "parallel", tmp_path / "parallel.duckdb")
+    _seed_base_factors(serial_storage)
+    _seed_base_factors(parallel_storage)
+
+    serial_rows = compute_raw_family_factors(
+        family, storage=serial_storage,
+        start_date=None, end_date=None, windows=(5,),
+    )
+    parallel_rows = compute_raw_family_factors(
+        family, storage=parallel_storage,
+        start_date=None, end_date=None, windows=(5,), workers=2,
+    )
+
+    assert parallel_rows == serial_rows
+    for name in serial_rows:
+        pd.testing.assert_frame_equal(
+            parallel_storage.read(name), serial_storage.read(name)
+        )
+        assert name in parallel_storage.list_factors()
+
+
+def test_compute_raw_family_factors_rejects_bad_workers() -> None:
+    with pytest.raises(ValueError, match="workers must be >= 1"):
+        compute_raw_family_factors(
+            FAMILIES["rolling_return"], storage=FakeStorage(),
+            start_date=None, end_date=None, workers=0,
         )
 
 
