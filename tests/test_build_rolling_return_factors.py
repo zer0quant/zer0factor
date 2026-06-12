@@ -10,6 +10,7 @@ from zer0factor.pipeline import (
     compute_raw_family_factors,
     compute_raw_rolling_return_factors,
     preprocess_one_factor,
+    run_build_stage,
 )
 
 
@@ -217,6 +218,66 @@ def test_preprocess_one_factor_writes_four_profiles() -> None:
         for frame in storage.writes.values()
     )
     assert all(not frame.empty for frame in storage.writes.values())
+
+
+def test_run_build_stage_raw_dispatches_raw_builder(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[str] = []
+
+    def fake_raw(family, **kwargs):
+        calls.append(family.name)
+        return {"daily_return_ma5": 3}
+
+    monkeypatch.setattr("zer0factor.pipeline.compute_raw_family_factors", fake_raw)
+
+    rows = run_build_stage(
+        "rolling_return",
+        "raw",
+        storage=FakeStorage(),
+        start_date="20240101",
+        end_date="20240105",
+    )
+
+    assert calls == ["rolling_return"]
+    assert rows == {"daily_return_ma5": 3}
+
+
+def test_run_build_stage_all_runs_raw_then_preprocess(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[str] = []
+
+    def fake_raw(family, **kwargs):
+        calls.append("raw")
+        return {"daily_return_ma5": 3}
+
+    def fake_preprocess_all(raw_names, **kwargs):
+        calls.append("preprocess")
+        return {"z_daily_return_ma5": 3}
+
+    monkeypatch.setattr("zer0factor.pipeline.compute_raw_family_factors", fake_raw)
+    monkeypatch.setattr("zer0factor.pipeline.preprocess_all_factors", fake_preprocess_all)
+
+    rows = run_build_stage(
+        "rolling_return",
+        "all",
+        storage=FakeStorage(),
+        pro=object(),
+        start_date="20240101",
+        end_date="20240105",
+        process_universe="univ_trade_base",
+    )
+
+    assert calls == ["raw", "preprocess"]
+    assert rows == {"daily_return_ma5": 3, "z_daily_return_ma5": 3}
+
+
+def test_run_build_stage_rejects_unknown_family() -> None:
+    with pytest.raises(ValueError, match="unknown factor family"):
+        run_build_stage(
+            "unknown",
+            "raw",
+            storage=FakeStorage(),
+            start_date=None,
+            end_date=None,
+        )
 
 
 def test_preprocess_one_factor_fails_when_raw_factor_missing() -> None:

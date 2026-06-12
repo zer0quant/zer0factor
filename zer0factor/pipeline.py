@@ -8,6 +8,7 @@ from typing import Any
 import pandas as pd
 
 from zer0factor.core import to_factor_output
+from zer0factor.exposures import build_sw_l1_industry_panel
 from zer0factor.factors.rolling_returns import (
     BASE_RETURN_FACTORS,
     WINDOWS,
@@ -167,6 +168,126 @@ def preprocess_one_factor(
     return rows
 
 
+def preprocess_all_factors(
+    raw_names: list[str],
+    *,
+    storage: Any,
+    pro: Any,
+    start_date: str | None,
+    end_date: str | None,
+    process_universe: str,
+    profiles: tuple[PreprocessProfile, ...] = PROFILES,
+) -> dict[str, int]:
+    universe = _read_universe_panel(
+        pro,
+        universe_name=process_universe,
+        start_date=start_date,
+        end_date=end_date,
+    )
+    if universe.empty:
+        raise ValueError("process universe returned no rows")
+
+    raw_panels = [
+        _filter_panel_by_universe(
+            _long_to_wide(_read_required_factor(storage, name, start_date, end_date)),
+            universe,
+        )
+        for name in raw_names
+    ]
+    raw_dates = raw_panels[0].index
+    raw_codes = raw_panels[0].columns
+    for panel in raw_panels[1:]:
+        raw_dates = raw_dates.union(panel.index)
+        raw_codes = raw_codes.union(panel.columns)
+
+    industry_panel = build_sw_l1_industry_panel(pro, dates=raw_dates, ts_codes=raw_codes)
+    rows: dict[str, int] = {}
+    for raw_name in raw_names:
+        rows.update(
+            preprocess_one_factor(
+                raw_name,
+                storage=storage,
+                industry_panel=industry_panel,
+                start_date=start_date,
+                end_date=end_date,
+                universe=universe,
+                profiles=profiles,
+            )
+        )
+    return rows
+
+
+def run_build_stage(
+    family_name: str,
+    stage: str,
+    *,
+    storage: Any,
+    pro: Any | None = None,
+    start_date: str | None,
+    end_date: str | None,
+    process_universe: str | None = None,
+) -> dict[str, int]:
+    family = get_family(family_name)
+    if stage not in {"raw", "preprocess", "all"}:
+        raise ValueError(f"unknown build stage: {stage}")
+
+    rows: dict[str, int] = {}
+    if stage in {"raw", "all"}:
+        rows.update(
+            compute_raw_family_factors(
+                family,
+                storage=storage,
+                start_date=start_date,
+                end_date=end_date,
+            )
+        )
+    if stage in {"preprocess", "all"}:
+        if pro is None:
+            raise ValueError("pro is required for preprocess stage")
+        if process_universe is None:
+            raise ValueError("process_universe is required for preprocess stage")
+        rows.update(
+            preprocess_all_factors(
+                list(family.raw_names()),
+                storage=storage,
+                pro=pro,
+                start_date=start_date,
+                end_date=end_date,
+                process_universe=process_universe,
+                profiles=family.profiles,
+            )
+        )
+    return rows
+
+
+def _read_universe_panel(
+    pro: Any,
+    *,
+    universe_name: str,
+    start_date: str | None,
+    end_date: str | None,
+) -> pd.DataFrame:
+    rows = pro.universe(
+        universe=universe_name,
+        start_date=start_date,
+        end_date=end_date,
+        fields="trade_date,universe,ts_code",
+    )
+    if rows.empty:
+        return pd.DataFrame(dtype=bool)
+    frame = rows.loc[:, ["trade_date", "ts_code"]].copy()
+    frame["trade_date"] = _parse_trade_dates(frame["trade_date"])
+    frame["in_universe"] = True
+    return (
+        frame.drop_duplicates(["trade_date", "ts_code"])
+        .pivot(index="trade_date", columns="ts_code", values="in_universe")
+        .pipe(lambda df: df.where(df.notna(), False))
+        .astype(bool)
+        .sort_index()
+        .sort_index(axis=1)
+    )
+
+
 def _read_required_factor(
     storage: Any,
     factor_name: str,
@@ -255,5 +376,7 @@ __all__ = [
     "compute_raw_family_factors",
     "compute_raw_rolling_return_factors",
     "get_family",
+    "preprocess_all_factors",
     "preprocess_one_factor",
+    "run_build_stage",
 ]
