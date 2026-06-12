@@ -1080,3 +1080,97 @@ end_date = ""
 
     assert result.exit_code == 0
     assert calls[0]["workers"] == 16
+
+
+def _write_eval_settings(tmp_path):
+    config_path = tmp_path / "settings.toml"
+    config_path.write_text(
+        f"""
+[zer0share]
+data_dir = "{tmp_path / 'share'}"
+
+[paths]
+factor_dir = "{tmp_path / 'factors'}"
+db_path = "{tmp_path / 'factor.duckdb'}"
+log_path = "{tmp_path / 'factor.log'}"
+
+[factor]
+universe = "all"
+process_universe = "univ_trade_base"
+start_date = "20240101"
+end_date = ""
+""".lstrip(),
+        encoding="utf-8",
+    )
+    return config_path
+
+
+def test_evaluate_factors_command_passes_workers(monkeypatch, tmp_path):
+    config_path = _write_eval_settings(tmp_path)
+    calls = []
+
+    class FakeResult:
+        run_id = "run_001"
+        output_dir = tmp_path / "evaluations" / "run_001"
+        factor_results = ()
+
+    def fake_evaluate_factors(**kwargs):
+        calls.append(kwargs)
+        return FakeResult()
+
+    monkeypatch.setattr("main.evaluate_factors", fake_evaluate_factors)
+
+    result = CliRunner().invoke(
+        cli,
+        [
+            "--config", str(config_path),
+            "evaluate-factors", "factor_a", "factor_b",
+            "--workers", "8",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert calls[0]["workers"] == 8
+
+
+def test_evaluate_batch_command_passes_workers(monkeypatch, tmp_path):
+    config_path = _write_eval_settings(tmp_path)
+    batch_file = tmp_path / "batch.toml"
+    batch_file.write_text(
+        """
+[evaluation]
+factors = ["factor_a"]
+start_date = "20240101"
+""".lstrip(),
+        encoding="utf-8",
+    )
+    calls = []
+
+    class FakeResult:
+        run_id = "run_001"
+        output_dir = tmp_path / "evaluations" / "run_001"
+        factor_results = ()
+
+    def fake_evaluate_factors(**kwargs):
+        calls.append(kwargs)
+        return FakeResult()
+
+    class FakeReport:
+        report_path = tmp_path / "report.md"
+        ranked_summary_path = tmp_path / "ranked.csv"
+        ranked_summary = pd.DataFrame({"factor_name": ["factor_a"]})
+
+    monkeypatch.setattr("main.evaluate_factors", fake_evaluate_factors)
+    monkeypatch.setattr("main.generate_evaluation_report", lambda **kwargs: FakeReport())
+
+    result = CliRunner().invoke(
+        cli,
+        [
+            "--config", str(config_path),
+            "evaluate-batch", "--file", str(batch_file),
+            "--workers", "8",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert calls[0]["workers"] == 8

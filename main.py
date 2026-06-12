@@ -726,6 +726,7 @@ def _run_evaluation_command(
     output_dir: str,
     transaction_cost_bps: float,
     benchmark_index: str | None = None,
+    workers: int = 1,
 ) -> None:
     result = _run_evaluation_job(
         ctx,
@@ -740,6 +741,7 @@ def _run_evaluation_command(
         output_dir=Path(output_dir),
         transaction_cost_bps=transaction_cost_bps,
         benchmark_index=benchmark_index,
+        workers=workers,
     )
     click.echo(f"Evaluation run {result.run_id} written to {result.output_dir}")
 
@@ -758,6 +760,7 @@ def _run_evaluation_job(
     output_dir: Path,
     transaction_cost_bps: float,
     benchmark_index: str | None = None,
+    workers: int = 1,
 ):
     from zer0share.api import LocalPro
 
@@ -789,6 +792,7 @@ def _run_evaluation_job(
         pro=LocalPro(cfg.zer0share_data_dir),
         config=config,
         log_info=log_progress,
+        workers=workers,
     )
     logger.info(
         "factor_evaluation_job_finished run_id={} output_dir={} factors={}",
@@ -877,6 +881,8 @@ def evaluate_factor_command(
     help="单边交易成本，单位 bps；按估算换手从收益中扣除",
 )
 @click.option("--benchmark-index", default=None, help="指数代码，如 000300.SH，用于计算多头指数超额收益")
+@click.option("--workers", type=int, default=1, show_default=True,
+              help="Parallel worker processes (1 = serial)")
 @click.pass_context
 def evaluate_factors_command(
     ctx,
@@ -891,6 +897,7 @@ def evaluate_factors_command(
     output_dir,
     transaction_cost_bps,
     benchmark_index,
+    workers,
 ):
     """Evaluate one or more stored factors."""
     _run_evaluation_command(
@@ -906,6 +913,7 @@ def evaluate_factors_command(
         output_dir=output_dir,
         transaction_cost_bps=transaction_cost_bps,
         benchmark_index=benchmark_index,
+        workers=workers,
     )
 
 
@@ -917,8 +925,10 @@ def evaluate_factors_command(
     type=click.Path(exists=True, dir_okay=False, path_type=Path),
 )
 @click.option("--benchmark-index", default=None, help="指数代码，如 000300.SH，用于计算多头指数超额收益")
+@click.option("--workers", type=int, default=1, show_default=True,
+              help="Parallel worker processes (1 = serial)")
 @click.pass_context
-def evaluate_batch_command(ctx, batch_file, benchmark_index):
+def evaluate_batch_command(ctx, batch_file, benchmark_index, workers):
     """Evaluate factors from a TOML batch file."""
     batch = load_batch_evaluation_config(batch_file)
     result = _run_evaluation_job(
@@ -934,6 +944,7 @@ def evaluate_batch_command(ctx, batch_file, benchmark_index):
         output_dir=batch.output_dir,
         transaction_cost_bps=batch.transaction_cost_bps,
         benchmark_index=benchmark_index,
+        workers=workers,
     )
     click.echo(f"Evaluation run {result.run_id} written to {result.output_dir}")
 
