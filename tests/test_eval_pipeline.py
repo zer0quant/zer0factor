@@ -685,10 +685,11 @@ def test_evaluate_factors_parallel_matches_serial(tmp_path):
         parallel.summary.reset_index(drop=True),
         serial.summary.reset_index(drop=True),
     )
+    artifacts = ("clean_factor_data.parquet", "daily_ic.parquet", "quantile_returns.parquet")
     for factor_name in ("factor_x", "factor_y"):
         serial_dir = serial.output_dir / "factors" / factor_name
         parallel_dir = parallel.output_dir / "factors" / factor_name
-        for artifact in ("clean_factor_data.parquet", "daily_ic.parquet", "quantile_returns.parquet"):
+        for artifact in artifacts:
             pd.testing.assert_frame_equal(
                 pd.read_parquet(parallel_dir / artifact),
                 pd.read_parquet(serial_dir / artifact),
