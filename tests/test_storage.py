@@ -134,3 +134,34 @@ def test_read_supports_legacy_data_parquet_files(tmp_path):
     stats = storage.factor_stats("legacy_factor")
     assert stats is not None
     assert stats.rows == 1
+
+def test_write_partitions_skips_registry_and_register_adds_it(tmp_path):
+    db_path = tmp_path / "meta.duckdb"
+    storage = FactorStorage(tmp_path / "factors", db_path)
+    df = pd.DataFrame({
+        "trade_date": ["20240101"],
+        "ts_code": ["000001.SZ"],
+        "value": [1.0],
+    })
+
+    storage.write_partitions("split_check", df)
+    assert storage.read("split_check")["value"].tolist() == [1.0]
+    assert "split_check" not in storage.list_factors()
+
+    storage.register("split_check")
+    assert "split_check" in storage.list_factors()
+
+
+def test_init_db_false_never_touches_duckdb(tmp_path):
+    db_path = tmp_path / "meta.duckdb"
+    worker_storage = FactorStorage(tmp_path / "factors", db_path, init_db=False)
+    df = pd.DataFrame({
+        "trade_date": ["20240101"],
+        "ts_code": ["000001.SZ"],
+        "value": [2.0],
+    })
+
+    worker_storage.write_partitions("worker_factor", df)
+
+    assert worker_storage.read("worker_factor")["value"].tolist() == [2.0]
+    assert not db_path.exists()

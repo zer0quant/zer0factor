@@ -15,12 +15,13 @@ class FactorStats:
 
 
 class FactorStorage:
-    def __init__(self, factor_dir: Path, db_path: Path):
+    def __init__(self, factor_dir: Path, db_path: Path, init_db: bool = True):
         self._factor_dir = Path(factor_dir)
         self._db_path = Path(db_path)
         self._factor_dir.mkdir(parents=True, exist_ok=True)
-        self._db_path.parent.mkdir(parents=True, exist_ok=True)
-        self._init_db()
+        if init_db:
+            self._db_path.parent.mkdir(parents=True, exist_ok=True)
+            self._init_db()
 
     def _init_db(self):
         with duckdb.connect(str(self._db_path)) as con:
@@ -31,32 +32,38 @@ class FactorStorage:
                 )
             """)
 
-    def write(self, factor_name: str, df: pd.DataFrame) -> None:
+    def write_partitions(self, factor_name: str, df: pd.DataFrame) -> None:
         required = {"trade_date", "ts_code", "value"}
         if not required.issubset(df.columns):
             raise ValueError(f"DataFrame must have columns: {required}")
 
         factor_path = self._factor_dir / factor_name
         factor_path.mkdir(parents=True, exist_ok=True)
-        if not df.empty:
-            frame = df[["ts_code", "value"]].reset_index(drop=True)
-            frame["date"] = df["trade_date"].astype(str).to_numpy()
-            ds.write_dataset(
-                pa.Table.from_pandas(frame, preserve_index=False),
-                base_dir=str(factor_path),
-                format="parquet",
-                partitioning=ds.partitioning(
-                    pa.schema([("date", pa.string())]), flavor="hive"
-                ),
-                existing_data_behavior="delete_matching",
-                basename_template="data-{i}.parquet",
-            )
+        if df.empty:
+            return
+        frame = df[["ts_code", "value"]].reset_index(drop=True)
+        frame["date"] = df["trade_date"].astype(str).to_numpy()
+        ds.write_dataset(
+            pa.Table.from_pandas(frame, preserve_index=False),
+            base_dir=str(factor_path),
+            format="parquet",
+            partitioning=ds.partitioning(
+                pa.schema([("date", pa.string())]), flavor="hive"
+            ),
+            existing_data_behavior="delete_matching",
+            basename_template="data-{i}.parquet",
+        )
 
+    def register(self, factor_name: str) -> None:
         with duckdb.connect(str(self._db_path)) as con:
             con.execute("""
                 INSERT INTO factor_registry (factor_name) VALUES (?)
                 ON CONFLICT (factor_name) DO UPDATE SET last_updated = now()
             """, [factor_name])
+
+    def write(self, factor_name: str, df: pd.DataFrame) -> None:
+        self.write_partitions(factor_name, df)
+        self.register(factor_name)
 
     def read(
         self,
