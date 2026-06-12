@@ -371,6 +371,66 @@ def test_update_factor_registry_creates_registry_header(tmp_path: Path) -> None:
     assert 'enabled = true' in content
 
 
+class FakePro:
+    """Parent-process-only stub; workers never see it."""
+
+    def universe(self, *, universe, start_date, end_date, fields):
+        codes = ["000001.SZ", "000002.SZ", "000003.SZ", "000004.SZ", "000005.SZ", "000006.SZ"]
+        return pd.DataFrame({
+            "trade_date": ["20240101"] * 6,
+            "universe": [universe] * 6,
+            "ts_code": codes,
+        })
+
+    def index_member_all(self, *, fields):
+        codes = ["000001.SZ", "000002.SZ", "000003.SZ", "000004.SZ", "000005.SZ", "000006.SZ"]
+        industries = ["801780.SI", "801780.SI", "801750.SI", "801750.SI", "801950.SI", "801950.SI"]
+        return pd.DataFrame({
+            "l1_code": industries,
+            "ts_code": codes,
+            "in_date": ["20200101"] * 6,
+            "out_date": [None] * 6,
+        })
+
+
+def _seed_preprocess_inputs(storage) -> None:
+    storage.write("daily_return_ma5", _cross_section_factor())
+    storage.write(SIZE_FACTOR_NAME, _size_factor())
+
+
+def test_preprocess_all_factors_parallel_matches_serial(tmp_path) -> None:
+    from zer0factor.pipeline import preprocess_all_factors
+
+    serial_storage = FactorStorage(tmp_path / "serial", tmp_path / "serial.duckdb")
+    parallel_storage = FactorStorage(tmp_path / "parallel", tmp_path / "parallel.duckdb")
+    _seed_preprocess_inputs(serial_storage)
+    serial_storage.write("open_return_ma5", _cross_section_factor())
+    _seed_preprocess_inputs(parallel_storage)
+    parallel_storage.write("open_return_ma5", _cross_section_factor())
+
+    serial_rows = preprocess_all_factors(
+        ["daily_return_ma5", "open_return_ma5"],
+        storage=serial_storage, pro=FakePro(),
+        start_date=None, end_date=None,
+        process_universe="univ_trade_base",
+    )
+    parallel_rows = preprocess_all_factors(
+        ["daily_return_ma5", "open_return_ma5"],
+        storage=parallel_storage, pro=FakePro(),
+        start_date=None, end_date=None,
+        process_universe="univ_trade_base",
+        workers=2,
+    )
+
+    assert len(serial_rows) == 8
+    assert parallel_rows == serial_rows
+    for name in serial_rows:
+        pd.testing.assert_frame_equal(
+            parallel_storage.read(name), serial_storage.read(name)
+        )
+        assert name in parallel_storage.list_factors()
+
+
 def test_preprocess_one_factor_fails_when_raw_factor_missing() -> None:
     storage = FakeStorage({SIZE_FACTOR_NAME: _size_factor()})
 

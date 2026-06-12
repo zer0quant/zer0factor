@@ -247,7 +247,10 @@ def preprocess_all_factors(
     end_date: str | None,
     process_universe: str,
     profiles: tuple[PreprocessProfile, ...] = PROFILES,
+    workers: int = 1,
 ) -> dict[str, int]:
+    if workers < 1:
+        raise ValueError(f"workers must be >= 1, got {workers}")
     universe = _read_universe_panel(
         pro,
         universe_name=process_universe,
@@ -271,6 +274,19 @@ def preprocess_all_factors(
         raw_codes = raw_codes.union(panel.columns)
 
     industry_panel = build_sw_l1_industry_panel(pro, dates=raw_dates, ts_codes=raw_codes)
+
+    if workers > 1 and len(raw_names) > 1:
+        return _run_preprocess_parallel(
+            raw_names,
+            storage=storage,
+            universe=universe,
+            industry_panel=industry_panel,
+            start_date=start_date,
+            end_date=end_date,
+            profiles=profiles,
+            workers=workers,
+        )
+
     rows: dict[str, int] = {}
     for raw_name in raw_names:
         rows.update(
@@ -285,6 +301,81 @@ def preprocess_all_factors(
             )
         )
     return rows
+
+
+_WORKER_UNIVERSE: pd.DataFrame | None = None
+_WORKER_INDUSTRY_PANEL: pd.DataFrame | None = None
+
+
+def _init_preprocess_worker(universe: pd.DataFrame, industry_panel: pd.DataFrame) -> None:
+    global _WORKER_UNIVERSE, _WORKER_INDUSTRY_PANEL
+    _WORKER_UNIVERSE = universe
+    _WORKER_INDUSTRY_PANEL = industry_panel
+
+
+class _PartitionOnlyStorage:
+    """Routes writes to write_partitions so workers never open DuckDB."""
+
+    def __init__(self, storage: FactorStorage):
+        self._storage = storage
+
+    def read(self, factor_name, start_date=None, end_date=None):
+        return self._storage.read(factor_name, start_date=start_date, end_date=end_date)
+
+    def write(self, factor_name, df):
+        self._storage.write_partitions(factor_name, df)
+
+
+def _run_preprocess_parallel(
+    raw_names: list[str],
+    *,
+    storage: Any,
+    universe: pd.DataFrame,
+    industry_panel: pd.DataFrame,
+    start_date: str | None,
+    end_date: str | None,
+    profiles: tuple[PreprocessProfile, ...],
+    workers: int,
+) -> dict[str, int]:
+    factor_dir, db_path = _storage_paths(storage)
+    tasks = [
+        (raw_name, str(factor_dir), str(db_path), start_date, end_date, profiles)
+        for raw_name in raw_names
+    ]
+    rows: dict[str, int] = {}
+    ctx = multiprocessing.get_context("spawn")
+    max_workers = min(workers, len(tasks))
+    with ProcessPoolExecutor(
+        max_workers=max_workers,
+        mp_context=ctx,
+        initializer=_init_preprocess_worker,
+        initargs=(universe, industry_panel),
+    ) as pool:
+        for task_rows in pool.map(_preprocess_factor_task, tasks):
+            rows.update(task_rows)
+    for output_name in rows:
+        storage.register(output_name)
+    return rows
+
+
+def _preprocess_factor_task(
+    args: tuple[str, str, str, str | None, str | None, tuple[PreprocessProfile, ...]],
+) -> dict[str, int]:
+    raw_name, factor_dir, db_path, start_date, end_date, profiles = args
+    if _WORKER_UNIVERSE is None or _WORKER_INDUSTRY_PANEL is None:
+        raise RuntimeError("preprocess worker is not initialized")
+    storage = _PartitionOnlyStorage(
+        FactorStorage(Path(factor_dir), Path(db_path), init_db=False)
+    )
+    return preprocess_one_factor(
+        raw_name,
+        storage=storage,
+        industry_panel=_WORKER_INDUSTRY_PANEL,
+        start_date=start_date,
+        end_date=end_date,
+        universe=_WORKER_UNIVERSE,
+        profiles=profiles,
+    )
 
 
 def run_build_stage(
