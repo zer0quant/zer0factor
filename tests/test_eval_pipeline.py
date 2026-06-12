@@ -619,3 +619,90 @@ def test_evaluate_factors_summary_contains_ic_freq_columns(tmp_path, monkeypatch
         assert col in result.summary.columns, f"missing: {col}"
     assert "IC>0 %(W)" not in result.summary.columns
     assert "IC>0 %(M)" not in result.summary.columns
+
+
+class ParallelFakePro:
+    """Module-level so spawn workers can unpickle it."""
+
+    def __init__(self, price_rows):
+        self.price_rows = price_rows
+
+    def pro_bar(self, ts_code=None, start_date=None, end_date=None, adj=None):
+        return pd.DataFrame(self.price_rows)
+
+
+def _parallel_eval_inputs(tmp_path):
+    codes = [f"00000{i}.SZ" for i in range(1, 7)]
+    dates = pd.bdate_range("2024-01-01", periods=30).strftime("%Y%m%d").tolist()
+
+    price_rows = {
+        "trade_date": [],
+        "ts_code": [],
+        "open": [],
+        "close": [],
+    }
+    factor_x_rows = {"trade_date": [], "ts_code": [], "value": []}
+    factor_y_rows = {"trade_date": [], "ts_code": [], "value": []}
+    for day_index, date in enumerate(dates):
+        for code_index, code in enumerate(codes):
+            price = 10.0 + code_index + 0.1 * day_index + 0.05 * ((day_index + code_index) % 3)
+            price_rows["trade_date"].append(date)
+            price_rows["ts_code"].append(code)
+            price_rows["open"].append(price)
+            price_rows["close"].append(price + 0.2)
+            factor_x_rows["trade_date"].append(date)
+            factor_x_rows["ts_code"].append(code)
+            factor_x_rows["value"].append(float(code_index + day_index % 5))
+            factor_y_rows["trade_date"].append(date)
+            factor_y_rows["ts_code"].append(code)
+            factor_y_rows["value"].append(float(-code_index + day_index % 7))
+
+    storage = FactorStorage(tmp_path / "factors", tmp_path / "factor.duckdb")
+    storage.write("factor_x", pd.DataFrame(factor_x_rows))
+    storage.write("factor_y", pd.DataFrame(factor_y_rows))
+    return storage, ParallelFakePro(price_rows), dates
+
+
+def test_evaluate_factors_parallel_matches_serial(tmp_path):
+    storage, pro, dates = _parallel_eval_inputs(tmp_path)
+    config = make_config(
+        tmp_path,
+        factor_names=("factor_x", "factor_y"),
+        end_date=dates[-1],
+    )
+
+    serial = evaluate_factors(
+        factor_names=("factor_x", "factor_y"),
+        storage=storage, pro=pro, config=config, run_id="serial",
+    )
+    parallel = evaluate_factors(
+        factor_names=("factor_x", "factor_y"),
+        storage=storage, pro=pro, config=config, run_id="parallel",
+        workers=2,
+    )
+
+    pd.testing.assert_frame_equal(
+        parallel.summary.reset_index(drop=True),
+        serial.summary.reset_index(drop=True),
+    )
+    for factor_name in ("factor_x", "factor_y"):
+        serial_dir = serial.output_dir / "factors" / factor_name
+        parallel_dir = parallel.output_dir / "factors" / factor_name
+        for artifact in ("clean_factor_data.parquet", "daily_ic.parquet", "quantile_returns.parquet"):
+            pd.testing.assert_frame_equal(
+                pd.read_parquet(parallel_dir / artifact),
+                pd.read_parquet(serial_dir / artifact),
+            )
+        assert (parallel_dir / "figures" / "quantile_returns_1D.png").exists()
+
+
+def test_evaluate_factors_rejects_bad_workers(tmp_path):
+    storage = FactorStorage(tmp_path / "factors", tmp_path / "factor.duckdb")
+    write_factor_a(storage)
+
+    with pytest.raises(ValueError, match="workers must be >= 1"):
+        evaluate_factors(
+            factor_names=("factor_a",),
+            storage=storage, pro=FakePro(), config=make_config(tmp_path),
+            workers=0,
+        )

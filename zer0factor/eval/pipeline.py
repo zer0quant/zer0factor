@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import io
+import multiprocessing
 import warnings
 from collections.abc import Callable
+from concurrent.futures import ProcessPoolExecutor
 from contextlib import contextmanager, redirect_stdout
 from pathlib import Path
 
@@ -176,7 +178,18 @@ def evaluate_factors(
     config: EvaluationConfig,
     run_id: str | None = None,
     log_info: Callable[[str], None] | None = None,
+    workers: int = 1,
 ) -> EvaluationRunResult:
+    """Evaluate stored factors and write run artifacts.
+
+    With ``workers > 1`` factors are evaluated in parallel spawn processes;
+    ``storage`` and ``pro`` must then be picklable. Disk artifacts are identical
+    to the serial run, but the returned ``factor_results`` carry only the
+    summary frames — ``clean_factor_data``, ``daily_ic`` and ``quantile_returns``
+    are empty placeholders (read them from ``output_dir`` if needed).
+    """
+    if workers < 1:
+        raise ValueError(f"workers must be >= 1, got {workers}")
     resolved_config = EvaluationConfig(
         factor_names=tuple(factor_names),
         start_date=config.start_date,
@@ -225,23 +238,35 @@ def evaluate_factors(
         end_date=resolved_config.end_date,
     )
 
-    factor_results = []
-    with _suppress_known_evaluation_warnings():
-        for factor_name in resolved_config.factor_names:
-            _log(log_info, f"evaluation_factor_started factor={factor_name}")
-            factor_results.append(
-                evaluate_factor(
-                    factor_name=factor_name,
-                    storage=storage,
-                    pro=pro,
-                    config=resolved_config,
-                    run_dir=run_dir,
-                    price_data=price_data,
-                    universe_panel=universe_panel,
-                    log_info=log_info,
+    if workers > 1 and len(resolved_config.factor_names) > 1:
+        factor_results = _evaluate_factors_parallel(
+            resolved_config,
+            storage=storage,
+            pro=pro,
+            run_dir=run_dir,
+            price_data=price_data,
+            universe_panel=universe_panel,
+            workers=workers,
+            log_info=log_info,
+        )
+    else:
+        factor_results = []
+        with _suppress_known_evaluation_warnings():
+            for factor_name in resolved_config.factor_names:
+                _log(log_info, f"evaluation_factor_started factor={factor_name}")
+                factor_results.append(
+                    evaluate_factor(
+                        factor_name=factor_name,
+                        storage=storage,
+                        pro=pro,
+                        config=resolved_config,
+                        run_dir=run_dir,
+                        price_data=price_data,
+                        universe_panel=universe_panel,
+                        log_info=log_info,
+                    )
                 )
-            )
-    factor_results = tuple(factor_results)
+        factor_results = tuple(factor_results)
     summary = pd.concat(
         [factor_result.summary for factor_result in factor_results],
         ignore_index=True,
@@ -264,6 +289,79 @@ def evaluate_factors(
         factor_results=factor_results,
         summary=summary,
         metadata_path=run_paths["metadata"],
+    )
+
+
+_WORKER_EVAL_CONTEXT: dict | None = None
+
+
+def _init_evaluation_worker(context: dict) -> None:
+    global _WORKER_EVAL_CONTEXT
+    _WORKER_EVAL_CONTEXT = context
+
+
+def _evaluate_factor_task(factor_name: str) -> tuple[str, pd.DataFrame]:
+    context = _WORKER_EVAL_CONTEXT
+    if context is None:
+        raise RuntimeError("evaluation worker is not initialized")
+    with _suppress_known_evaluation_warnings():
+        result = evaluate_factor(
+            factor_name=factor_name,
+            storage=context["storage"],
+            pro=context["pro"],
+            config=context["config"],
+            run_dir=context["run_dir"],
+            price_data=context["price_data"],
+            universe_panel=context["universe_panel"],
+        )
+    return factor_name, result.summary
+
+
+def _evaluate_factors_parallel(
+    config: EvaluationConfig,
+    *,
+    storage,
+    pro,
+    run_dir: str | Path,
+    price_data: pd.DataFrame,
+    universe_panel: pd.DataFrame | None,
+    workers: int,
+    log_info: Callable[[str], None] | None,
+) -> tuple[FactorEvaluationResult, ...]:
+    context = {
+        "storage": storage,
+        "pro": pro,
+        "config": config,
+        "run_dir": run_dir,
+        "price_data": price_data,
+        "universe_panel": universe_panel,
+    }
+    summaries: dict[str, pd.DataFrame] = {}
+    ctx = multiprocessing.get_context("spawn")
+    max_workers = min(workers, len(config.factor_names))
+    with ProcessPoolExecutor(
+        max_workers=max_workers,
+        mp_context=ctx,
+        initializer=_init_evaluation_worker,
+        initargs=(context,),
+    ) as pool:
+        for factor_name, summary in pool.map(
+            _evaluate_factor_task, config.factor_names
+        ):
+            _log(log_info, f"evaluation_factor_finished factor={factor_name}")
+            summaries[factor_name] = summary
+
+    empty = pd.DataFrame()
+    return tuple(
+        FactorEvaluationResult(
+            factor_name=factor_name,
+            clean_factor_data=empty,
+            summary=summaries[factor_name],
+            daily_ic=empty,
+            quantile_returns=empty,
+            output_dir=Path(run_dir) / "factors" / factor_name,
+        )
+        for factor_name in config.factor_names
     )
 
 
