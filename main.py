@@ -25,6 +25,7 @@ from zer0factor.factors import (
     OpenReturn,
     OvernightReturn,
 )
+from zer0factor.pipeline import run_build_stage, update_factor_registry
 from zer0factor.preprocess import FactorPreprocessPipeline, PreprocessConfig
 from zer0factor.registry import FactorRegistry
 from zer0factor.storage import FactorStorage
@@ -553,6 +554,55 @@ def compute_market_cap(ctx):
     for factor_name, row_count in row_counts.items():
         logger.info("market_cap_factor_rows factor={} rows={}", factor_name, row_count)
     logger.info("market_cap_factor_job_finished factors={}", len(row_counts))
+
+
+@cli.command("build-factors")
+@click.option("--family", "family_name", required=True, help="Factor family to build")
+@click.option(
+    "--stage",
+    type=click.Choice(["raw", "preprocess", "all"]),
+    default="all",
+    show_default=True,
+)
+@click.option("--start-date", default=None)
+@click.option("--end-date", default=None)
+@click.option("--registry", "registry_path", default="config/factors.toml", show_default=True)
+@click.option("--update-registry", is_flag=True, default=False)
+@click.pass_context
+def build_factors_command(
+    ctx,
+    family_name,
+    stage,
+    start_date,
+    end_date,
+    registry_path,
+    update_registry,
+):
+    """Build a registered factor family."""
+    from zer0share.api import LocalPro
+
+    cfg = load_config(ctx.obj["config_path"])
+    configure_logging(cfg.log_path)
+    resolved_start = start_date or cfg.start_date
+    resolved_end = end_date if end_date is not None else (cfg.end_date or None)
+    storage = FactorStorage(cfg.factor_dir, cfg.db_path)
+    pro = LocalPro(cfg.zer0share_data_dir) if stage in {"preprocess", "all"} else None
+
+    rows = run_build_stage(
+        family_name=family_name,
+        stage=stage,
+        storage=storage,
+        pro=pro,
+        start_date=resolved_start,
+        end_date=resolved_end,
+        process_universe=cfg.process_universe,
+    )
+    for factor_name, row_count in rows.items():
+        click.echo(f"{factor_name}: {row_count}")
+
+    if update_registry:
+        added = update_factor_registry(Path(registry_path), family_name=family_name)
+        click.echo(f"registry entries added: {len(added)}")
 
 
 @cli.command("standardize-factor")

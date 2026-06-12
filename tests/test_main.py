@@ -938,3 +938,103 @@ description = ""
     ])
     assert result.exit_code == 0
     assert "not found" in result.output.lower() or "N" in result.output
+
+
+def test_build_factors_command_runs_stage_and_prints_rows(monkeypatch, tmp_path):
+    config_path = tmp_path / "settings.toml"
+    config_path.write_text(
+        f"""
+[zer0share]
+data_dir = "{tmp_path / 'share'}"
+
+[paths]
+factor_dir = "{tmp_path / 'factors'}"
+db_path = "{tmp_path / 'factor.duckdb'}"
+log_path = "{tmp_path / 'factor.log'}"
+
+[factor]
+universe = "all"
+process_universe = "univ_trade_base"
+start_date = "20240101"
+end_date = ""
+""".lstrip(),
+        encoding="utf-8",
+    )
+    calls = []
+
+    def fake_run_build_stage(**kwargs):
+        calls.append(kwargs)
+        return {"daily_return_ma5": 3, "z_daily_return_ma5": 3}
+
+    monkeypatch.setattr("main.run_build_stage", fake_run_build_stage)
+
+    result = CliRunner().invoke(
+        cli,
+        [
+            "--config",
+            str(config_path),
+            "build-factors",
+            "--family",
+            "rolling_return",
+            "--stage",
+            "all",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert calls[0]["family_name"] == "rolling_return"
+    assert calls[0]["stage"] == "all"
+    assert calls[0]["start_date"] == "20240101"
+    assert calls[0]["end_date"] is None
+    assert "daily_return_ma5: 3" in result.output
+    assert "z_daily_return_ma5: 3" in result.output
+
+
+def test_build_factors_command_updates_registry_when_requested(monkeypatch, tmp_path):
+    config_path = tmp_path / "settings.toml"
+    registry_path = tmp_path / "factors.toml"
+    config_path.write_text(
+        f"""
+[zer0share]
+data_dir = "{tmp_path / 'share'}"
+
+[paths]
+factor_dir = "{tmp_path / 'factors'}"
+db_path = "{tmp_path / 'factor.duckdb'}"
+log_path = "{tmp_path / 'factor.log'}"
+
+[factor]
+universe = "all"
+process_universe = "univ_trade_base"
+start_date = "20240101"
+end_date = ""
+""".lstrip(),
+        encoding="utf-8",
+    )
+    registry_calls = []
+
+    monkeypatch.setattr("main.run_build_stage", lambda **kwargs: {"daily_return_ma5": 3})
+    monkeypatch.setattr(
+        "main.update_factor_registry",
+        lambda path, family_name: registry_calls.append((path, family_name)) or ["daily_return_ma5"],
+    )
+
+    result = CliRunner().invoke(
+        cli,
+        [
+            "--config",
+            str(config_path),
+            "build-factors",
+            "--family",
+            "rolling_return",
+            "--stage",
+            "raw",
+            "--registry",
+            str(registry_path),
+            "--update-registry",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert registry_calls == [(registry_path, "rolling_return")]
+    assert "registry entries added: 1" in result.output
