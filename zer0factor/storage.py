@@ -4,7 +4,7 @@ from pathlib import Path
 import duckdb
 import pandas as pd
 import pyarrow as pa
-import pyarrow.parquet as pq
+import pyarrow.dataset as ds
 
 
 @dataclass(frozen=True)
@@ -38,14 +38,19 @@ class FactorStorage:
 
         factor_path = self._factor_dir / factor_name
         factor_path.mkdir(parents=True, exist_ok=True)
-        for date, group in df.groupby("trade_date"):
-            partition = factor_path / f"date={date}"
-            partition.mkdir(parents=True, exist_ok=True)
-            table = pa.Table.from_pandas(
-                group[["ts_code", "value"]].reset_index(drop=True),
-                preserve_index=False,
+        if not df.empty:
+            frame = df[["ts_code", "value"]].reset_index(drop=True)
+            frame["date"] = df["trade_date"].astype(str).to_numpy()
+            ds.write_dataset(
+                pa.Table.from_pandas(frame, preserve_index=False),
+                base_dir=str(factor_path),
+                format="parquet",
+                partitioning=ds.partitioning(
+                    pa.schema([("date", pa.string())]), flavor="hive"
+                ),
+                existing_data_behavior="delete_matching",
+                basename_template="data-{i}.parquet",
             )
-            pq.write_table(table, partition / "data.parquet")
 
         with duckdb.connect(str(self._db_path)) as con:
             con.execute("""
@@ -63,8 +68,8 @@ class FactorStorage:
         if not factor_path.exists():
             raise FileNotFoundError(f"Factor '{factor_name}' not found")
 
-        pattern = str(factor_path / "date=*" / "data.parquet")
-        if not list(factor_path.glob("date=*/data.parquet")):
+        pattern = str(factor_path / "date=*" / "*.parquet")
+        if not list(factor_path.glob("date=*/*.parquet")):
             return pd.DataFrame(columns=["trade_date", "ts_code", "value"])
         where = []
         params: list = [pattern]
@@ -96,13 +101,13 @@ class FactorStorage:
         factor_path = self._factor_dir / factor_name
         if not factor_path.exists():
             return None
-        partitions = sorted(factor_path.glob("date=*/data.parquet"))
+        partitions = sorted(factor_path.glob("date=*/*.parquet"))
         if not partitions:
             return None
-        dates = sorted(p.parent.name.split("=")[1] for p in partitions)
+        dates = sorted({p.parent.name.split("=")[1] for p in partitions})
         start_date = dates[0]
         end_date = dates[-1]
-        pattern = str(factor_path / "date=*" / "data.parquet")
+        pattern = str(factor_path / "date=*" / "*.parquet")
         row = duckdb.connect().execute(
             "SELECT count(*) AS rows FROM read_parquet(?)",
             [pattern],
