@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 import multiprocessing
+import time
 import warnings
 from collections.abc import Callable
 from concurrent.futures import ProcessPoolExecutor
@@ -42,6 +43,7 @@ from zer0factor.eval.plots import (
     plot_quantile_returns,
     plot_rolling_ic,
 )
+from zer0factor.notify.null import NullNotifier
 
 
 def evaluate_factor(
@@ -179,6 +181,7 @@ def evaluate_factors(
     run_id: str | None = None,
     log_info: Callable[[str], None] | None = None,
     workers: int = 1,
+    notifier: NullNotifier | None = None,
 ) -> EvaluationRunResult:
     """Evaluate stored factors and write run artifacts.
 
@@ -205,6 +208,19 @@ def evaluate_factors(
         transaction_cost_bps=config.transaction_cost_bps,
     )
     run_id, run_dir = create_run_directory(resolved_config, run_id=run_id)
+    _notifier = notifier or NullNotifier()
+    _notifier.notify_start(
+        "evaluate",
+        details={
+            "因子数": str(len(resolved_config.factor_names)),
+            "workers": str(workers),
+        },
+    )
+    _t0 = time.monotonic()
+    _milestones = {
+        round(len(resolved_config.factor_names) * pct)
+        for pct in (0.25, 0.50, 0.75)
+    } - {0, len(resolved_config.factor_names)}
     _log(
         log_info,
         "evaluation_run_started "
@@ -248,6 +264,8 @@ def evaluate_factors(
             universe_panel=universe_panel,
             workers=workers,
             log_info=log_info,
+            notifier=_notifier,
+            milestones=_milestones,
         )
     else:
         factor_results = []
@@ -266,6 +284,9 @@ def evaluate_factors(
                         log_info=log_info,
                     )
                 )
+                _done = len(factor_results)
+                if _done in _milestones:
+                    _notifier.notify_progress("evaluate", _done, len(resolved_config.factor_names))
         factor_results = tuple(factor_results)
     summary = pd.concat(
         [factor_result.summary for factor_result in factor_results],
@@ -283,6 +304,9 @@ def evaluate_factors(
         f"run_id={run_id} output_dir={run_dir} factors={len(factor_results)}",
     )
 
+    _notifier.notify_eval_done(
+        "evaluate", run_id, len(factor_results), time.monotonic() - _t0
+    )
     return EvaluationRunResult(
         run_id=run_id,
         output_dir=run_dir,
@@ -327,6 +351,8 @@ def _evaluate_factors_parallel(
     universe_panel: pd.DataFrame | None,
     workers: int,
     log_info: Callable[[str], None] | None,
+    notifier: NullNotifier | None = None,
+    milestones: set[int] | None = None,
 ) -> tuple[FactorEvaluationResult, ...]:
     context = {
         "storage": storage,
@@ -350,6 +376,9 @@ def _evaluate_factors_parallel(
         ):
             _log(log_info, f"evaluation_factor_finished factor={factor_name}")
             summaries[factor_name] = summary
+            _done = len(summaries)
+            if milestones and notifier and _done in milestones:
+                notifier.notify_progress("evaluate", _done, len(config.factor_names))
 
     empty = pd.DataFrame()
     return tuple(
