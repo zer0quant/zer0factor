@@ -6,6 +6,7 @@ from typing import Literal
 import pandas as pd
 
 from zer0factor.core import to_factor_output
+from zer0factor.panel import parse_trade_dates
 from zer0factor.preprocess.impute import impute_missing
 from zer0factor.preprocess.neutralize import neutralize
 from zer0factor.preprocess.standardize import standardize
@@ -112,7 +113,7 @@ def _to_wide(factor: pd.DataFrame) -> tuple[pd.DataFrame, bool]:
 
     if _LONG_COLUMNS.issubset(factor.columns):
         long = factor.loc[:, ["trade_date", "ts_code", "value"]].copy()
-        long["trade_date"] = _parse_trade_dates(long["trade_date"])
+        long["trade_date"] = parse_trade_dates(long["trade_date"])
         duplicates = long.duplicated(["trade_date", "ts_code"])
         if duplicates.any():
             raise ValueError("long factor input contains duplicate trade_date/ts_code")
@@ -120,14 +121,8 @@ def _to_wide(factor: pd.DataFrame) -> tuple[pd.DataFrame, bool]:
         return wide.sort_index().sort_index(axis=1), True
 
     wide = factor.copy()
-    wide.index = _parse_trade_dates(pd.Series(wide.index, index=wide.index)).to_numpy()
+    wide.index = parse_trade_dates(pd.Series(wide.index, index=wide.index)).to_numpy()
     return wide.sort_index().sort_index(axis=1), False
-
-
-def _parse_trade_dates(values: pd.Series) -> pd.Series:
-    if pd.api.types.is_numeric_dtype(values):
-        return pd.to_datetime(values.astype("Int64").astype(str), format="%Y%m%d")
-    return pd.to_datetime(values)
 
 
 def _validate_choice(value: str, allowed: set[str], field_name: str) -> None:
