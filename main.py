@@ -7,6 +7,7 @@ import pandas as pd
 from loguru import logger
 
 from zer0factor.config import load_config
+from zer0factor.notify import load_notifier
 from zer0factor.core import Factor, Zer0ShareDataProvider, run_factor
 from zer0factor.eval import (
     ANALYSIS_CONFIGS,
@@ -596,6 +597,7 @@ def build_factors_command(
     resolved_start = start_date or cfg.start_date
     resolved_end = end_date if end_date is not None else (cfg.end_date or None)
     storage = FactorStorage(cfg.factor_dir, cfg.db_path)
+    notifier = load_notifier(cfg)
     pro = LocalPro(cfg.zer0share_data_dir) if stage in {"preprocess", "all"} else None
 
     rows = run_build_stage(
@@ -607,6 +609,7 @@ def build_factors_command(
         end_date=resolved_end,
         process_universe=cfg.process_universe,
         workers=workers,
+        notifier=notifier,
     )
     for factor_name, row_count in rows.items():
         click.echo(f"{factor_name}: {row_count}")
@@ -789,6 +792,7 @@ def _run_evaluation_job(
         transaction_cost_bps=transaction_cost_bps,
     )
     storage = FactorStorage(cfg.factor_dir, cfg.db_path)
+    notifier = load_notifier(cfg)
 
     def log_progress(message: str) -> None:
         logger.info(message)
@@ -800,6 +804,7 @@ def _run_evaluation_job(
         config=config,
         log_info=log_progress,
         workers=workers,
+        notifier=notifier,
     )
     logger.info(
         "factor_evaluation_job_finished run_id={} output_dir={} factors={}",
