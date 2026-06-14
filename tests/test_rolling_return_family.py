@@ -6,11 +6,11 @@ import pytest
 from zer0factor.factors.rolling_returns import (
     BASE_RETURN_FACTORS,
     WINDOWS,
-    derive_rolling_mean_output,
     derive_rolling_mean_panel,
     parse_rolling_return_name,
     raw_factor_names,
 )
+import zer0factor.factors.rolling_returns as rolling_returns
 from zer0factor.pipeline import get_family
 
 
@@ -106,37 +106,7 @@ def test_derive_rolling_mean_panel_uses_half_window_min_periods() -> None:
     pd.testing.assert_frame_equal(result, expected)
 
 
-def test_derive_rolling_mean_output_returns_standard_sorted_long_schema() -> None:
-    panel = pd.DataFrame(
-        {
-            "000002.SZ": [1.0, 3.0, 5.0],
-            "000001.SZ": [2.0, 4.0, 6.0],
-        },
-        index=pd.to_datetime(["2024-01-01", "2024-01-02", "2024-01-03"]),
-    )
-
-    result = derive_rolling_mean_output(panel, base_factor="daily_return", window=2)
-
-    expected = pd.DataFrame(
-        {
-            "trade_date": [
-                "20240101",
-                "20240101",
-                "20240102",
-                "20240102",
-                "20240103",
-                "20240103",
-            ],
-            "ts_code": [
-                "000001.SZ",
-                "000002.SZ",
-                "000001.SZ",
-                "000002.SZ",
-                "000001.SZ",
-                "000002.SZ",
-            ],
-            "value": [2.0, 1.0, 3.0, 2.0, 5.0, 4.0],
-        }
-    )
-    assert tuple(result.columns) == ("trade_date", "ts_code", "value")
-    pd.testing.assert_frame_equal(result, expected)
+def test_rolling_returns_exports_only_panel_rolling_mean_helper() -> None:
+    assert "derive_rolling_mean_panel" in rolling_returns.__all__
+    assert "derive_rolling_mean_output" not in rolling_returns.__all__
+    assert not hasattr(rolling_returns, "derive_rolling_mean_output")

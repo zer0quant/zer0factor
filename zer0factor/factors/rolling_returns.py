@@ -2,8 +2,6 @@ from __future__ import annotations
 
 import pandas as pd
 
-from zer0factor.core import to_factor_output
-
 WINDOWS = (5, 10, 20, 30, 60, 90, 120, 180)
 BASE_RETURN_FACTORS = (
     "daily_return",
@@ -69,23 +67,10 @@ def derive_rolling_mean_panel(panel: pd.DataFrame, window: int) -> pd.DataFrame:
     return panel.rolling(window=window, min_periods=window // 2).mean()
 
 
-def derive_rolling_mean_output(
-    panel: pd.DataFrame,
-    *,
-    base_factor: str,
-    window: int,
-) -> pd.DataFrame:
-    return to_factor_output(
-        derive_rolling_mean_panel(panel, window),
-        f"{base_factor}_ma{window}",
-    )
-
-
 __all__ = [
     "BASE_RETURN_FACTORS",
     "PROFILE_PREFIXES",
     "WINDOWS",
-    "derive_rolling_mean_output",
     "derive_rolling_mean_panel",
     "parse_rolling_return_name",
     "raw_factor_name",
