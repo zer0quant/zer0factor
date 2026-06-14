@@ -13,6 +13,7 @@ class Config:
     process_universe: str
     start_date: str
     end_date: str
+    notify_webhook_url: str = ""
 
 
 def load_config(path: Path = Path("config/settings.toml")) -> Config:
@@ -33,6 +34,7 @@ def load_config(path: Path = Path("config/settings.toml")) -> Config:
             process_universe=raw["factor"].get("process_universe", "univ_trade_base"),
             start_date=raw["factor"]["start_date"],
             end_date=raw["factor"]["end_date"],
+            notify_webhook_url=raw.get("notify", {}).get("webhook_url", ""),
         )
     except KeyError as e:
         raise KeyError(f"配置文件缺少必要字段: {e}") from e
