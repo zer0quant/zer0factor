@@ -2,7 +2,6 @@ from pathlib import Path
 
 from zer0factor.config import Config
 from zer0factor.notify import load_notifier, FeishuNotifier, NullNotifier
-from zer0factor.notify.null import NullNotifier
 
 
 def test_null_notifier_all_methods_are_no_ops():
