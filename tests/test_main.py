@@ -316,6 +316,7 @@ min_monotonicity = 0.4
                 "start_date": "20230101",
                 "end_date": "20231231",
                 "zer0share_data_dir": tmp_path / "zer0share",
+                "notify_webhook_url": "",
             },
         )()
 
@@ -345,8 +346,10 @@ min_monotonicity = 0.4
     monkeypatch.setattr("main.load_config", fake_load_config)
     monkeypatch.setattr("main.evaluate_factors", fake_evaluate_factors)
     import zer0share.api
+    from zer0factor.notify import NullNotifier
 
     monkeypatch.setattr(zer0share.api, "LocalPro", FakeLocalPro)
+    monkeypatch.setattr("main.load_notifier", lambda cfg: NullNotifier())
 
     result = runner.invoke(
         cli,
@@ -380,6 +383,7 @@ def test_evaluate_factor_command_prints_progress(monkeypatch, tmp_path):
                 "start_date": "20240101",
                 "end_date": "20240102",
                 "zer0share_data_dir": tmp_path / "zer0share",
+                "notify_webhook_url": "",
             },
         )()
 
@@ -400,8 +404,10 @@ def test_evaluate_factor_command_prints_progress(monkeypatch, tmp_path):
     monkeypatch.setattr("main.load_config", fake_load_config)
     monkeypatch.setattr("main.evaluate_factors", fake_evaluate_factors)
     import zer0share.api
+    from zer0factor.notify import NullNotifier
 
     monkeypatch.setattr(zer0share.api, "LocalPro", FakeLocalPro)
+    monkeypatch.setattr("main.load_notifier", lambda cfg: NullNotifier())
 
     result = runner.invoke(
         cli,
