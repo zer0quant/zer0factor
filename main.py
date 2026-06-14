@@ -9,9 +9,11 @@ from loguru import logger
 from zer0factor.config import load_config
 from zer0factor.core import Factor, Zer0ShareDataProvider, run_factor
 from zer0factor.eval import (
+    ANALYSIS_CONFIGS,
     EvaluationConfig,
     evaluate_factors,
     load_batch_evaluation_config,
+    run_analysis,
 )
 from zer0factor.exposures import build_sw_l1_industry_panel
 from zer0factor.factors import (
@@ -952,6 +954,40 @@ def evaluate_batch_command(ctx, batch_file, benchmark_index, workers):
         workers=workers,
     )
     click.echo(f"Evaluation run {result.run_id} written to {result.output_dir}")
+
+
+@cli.command("analyze-evaluation")
+@click.option(
+    "--family",
+    required=True,
+    type=click.Choice(sorted(ANALYSIS_CONFIGS)),
+    help="Factor family analysis parser to use",
+)
+@click.option("--run-dir", default=None, help="Evaluation run directory (defaults to latest)")
+@click.option("--summary", default=None, type=click.Path(dir_okay=False, path_type=Path))
+@click.option("--output-dir", default=None, type=click.Path(file_okay=False, path_type=Path))
+@click.option("--evaluations-dir", default="data/evaluations", show_default=True)
+def analyze_evaluation_command(family, run_dir, summary, output_dir, evaluations_dir):
+    """Analyze an evaluation summary and write grouped diagnostics."""
+    resolved_run_dir = Path(run_dir) if run_dir else None
+    summary_path = summary
+    if summary_path is None:
+        resolved_run_dir = resolved_run_dir or find_latest_run_dir(Path(evaluations_dir))
+        summary_path = resolved_run_dir / "summary.csv"
+    elif resolved_run_dir is None:
+        resolved_run_dir = summary_path.parent
+    if not summary_path.exists():
+        raise click.ClickException(f"summary.csv not found: {summary_path}")
+
+    resolved_output_dir = output_dir or resolved_run_dir / "analysis"
+    result = run_analysis(
+        summary_path=summary_path,
+        output_dir=resolved_output_dir,
+        config=ANALYSIS_CONFIGS[family],
+    )
+    click.echo(f"Analysis report written to {result.report_path}")
+    click.echo(f"Factors analyzed: {result.analyzed_count}")
+    click.echo(f"Skipped factors: {result.skipped_count}")
 
 
 @cli.command("show-summary")

@@ -176,6 +176,55 @@ def test_evaluate_batch_command_is_registered():
     assert "--file" in result.output
 
 
+def test_analyze_evaluation_command_writes_analysis_outputs(tmp_path):
+    runner = CliRunner()
+    run_dir = tmp_path / "evaluations" / "run_001"
+    run_dir.mkdir(parents=True)
+    pd.DataFrame(
+        {
+            "factor_name": [
+                "z_size_industry_neu_intraday_return_ma20",
+                "z_neu_daily_return",
+            ],
+            "adjusted_t-stat": [18.0, 10.0],
+            "adjusted_ICIR": [0.36, 0.2],
+            "IC Mean": [-0.038, -0.02],
+            "directional_IC>0 %": [65.0, 58.0],
+            "directional_IC>0 %(M)": [90.0, 75.0],
+            "long_short_spread_bps": [20.0, 10.0],
+            "ls_ann_ret": [0.10, 0.03],
+            "ls_sharpe": [1.5, 0.8],
+            "ls_calmar": [1.0, 0.4],
+            "long_ann_ret": [0.10, 0.03],
+            "long_sharpe": [1.5, 0.8],
+            "long_calmar": [1.0, 0.4],
+            "long_max_dd": [-0.10, -0.20],
+            "long_exc_ann_ret": [0.04, -0.01],
+            "long_exc_sharpe": [0.8, -0.2],
+            "monotonicity": [0.9, 0.4],
+            "turnover_daily_long": [0.25, 0.4],
+            "factor_direction": [-1, -1],
+        }
+    ).to_csv(run_dir / "summary.csv", index=False)
+
+    result = runner.invoke(
+        cli,
+        [
+            "analyze-evaluation",
+            "--family",
+            "rolling_return",
+            "--run-dir",
+            str(run_dir),
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "Analysis report written to" in result.output
+    assert "Skipped factors: 1" in result.output
+    assert (run_dir / "analysis" / "analysis_report.md").exists()
+    assert (run_dir / "analysis" / "representative_factors.csv").exists()
+
+
 def test_evaluate_summary_command_is_removed():
     runner = CliRunner()
 
