@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import multiprocessing
+import time
 import tomllib
 from collections.abc import Callable
 from concurrent.futures import ProcessPoolExecutor
@@ -12,6 +13,7 @@ from typing import Any
 import pandas as pd
 
 from zer0factor.core import to_factor_output
+from zer0factor.notify.null import NullNotifier
 from zer0factor.exposures import build_sw_l1_industry_panel
 from zer0factor.factors.rolling_returns import (
     BASE_RETURN_FACTORS,
@@ -388,39 +390,60 @@ def run_build_stage(
     end_date: str | None,
     process_universe: str | None = None,
     workers: int = 1,
+    notifier: NullNotifier | None = None,
 ) -> dict[str, int]:
     family = get_family(family_name)
     if stage not in {"raw", "preprocess", "all"}:
         raise ValueError(f"unknown build stage: {stage}")
 
+    _notifier = notifier or NullNotifier()
     rows: dict[str, int] = {}
+
     if stage in {"raw", "all"}:
-        rows.update(
-            compute_raw_family_factors(
-                family,
-                storage=storage,
-                start_date=start_date,
-                end_date=end_date,
-                workers=workers,
+        _notifier.notify_start("raw")
+        t0 = time.monotonic()
+        try:
+            rows.update(
+                compute_raw_family_factors(
+                    family,
+                    storage=storage,
+                    start_date=start_date,
+                    end_date=end_date,
+                    workers=workers,
+                )
             )
-        )
+        except Exception as exc:
+            _notifier.notify_error("raw", exc)
+            raise
+        _notifier.notify_done("raw", rows, time.monotonic() - t0)
+
     if stage in {"preprocess", "all"}:
         if pro is None:
             raise ValueError("pro is required for preprocess stage")
         if process_universe is None:
             raise ValueError("process_universe is required for preprocess stage")
-        rows.update(
-            preprocess_all_factors(
-                list(family.raw_names()),
-                storage=storage,
-                pro=pro,
-                start_date=start_date,
-                end_date=end_date,
-                process_universe=process_universe,
-                profiles=family.profiles,
-                workers=workers,
+        _notifier.notify_start("preprocess")
+        t0 = time.monotonic()
+        pre_rows: dict[str, int] = {}
+        try:
+            pre_rows.update(
+                preprocess_all_factors(
+                    list(family.raw_names()),
+                    storage=storage,
+                    pro=pro,
+                    start_date=start_date,
+                    end_date=end_date,
+                    process_universe=process_universe,
+                    profiles=family.profiles,
+                    workers=workers,
+                )
             )
-        )
+        except Exception as exc:
+            _notifier.notify_error("preprocess", exc)
+            raise
+        _notifier.notify_done("preprocess", pre_rows, time.monotonic() - t0)
+        rows.update(pre_rows)
+
     return rows
 
 
