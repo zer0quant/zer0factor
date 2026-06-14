@@ -23,6 +23,17 @@ class FakePro:
             }
         )
 
+    def universe(self, universe=None, start_date=None, end_date=None, fields=None):
+        assert universe == "univ_trade_base"
+        assert start_date == "20240101"
+        return pd.DataFrame(
+            {
+                "trade_date": ["20240101", "20240102", "20240103", "20240104"],
+                "universe": [universe] * 4,
+                "ts_code": ["000001.SZ"] * 4,
+            }
+        )
+
 
 class RecordingPricePro(FakePro):
     def __init__(self):
@@ -629,6 +640,16 @@ class ParallelFakePro:
 
     def pro_bar(self, ts_code=None, start_date=None, end_date=None, adj=None):
         return pd.DataFrame(self.price_rows)
+
+    def universe(self, universe=None, start_date=None, end_date=None, fields=None):
+        prices = pd.DataFrame(self.price_rows)
+        return pd.DataFrame(
+            {
+                "trade_date": prices["trade_date"],
+                "universe": universe,
+                "ts_code": prices["ts_code"],
+            }
+        )
 
 
 def _parallel_eval_inputs(tmp_path):

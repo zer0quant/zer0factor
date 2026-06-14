@@ -9,7 +9,7 @@ from zer0factor.eval.artifacts import (
     write_factor_artifacts,
     write_run_summary,
 )
-from zer0factor.eval.config import EvaluationConfig
+from zer0factor.eval.config import DEFAULT_EVALUATION_UNIVERSE, EvaluationConfig
 from zer0factor.eval.plots import (
     plot_cumulative_ic,
     plot_quantile_returns,
@@ -121,7 +121,7 @@ def test_write_run_summary_serializes_tuple_periods_and_none_values(tmp_path):
     metadata = json.loads(paths["metadata"].read_text())
     assert metadata["end_date"] is None
     assert metadata["periods"] == [1, 5]
-    assert metadata["universe"] is None
+    assert metadata["universe"] == DEFAULT_EVALUATION_UNIVERSE
 
 
 @pytest.mark.parametrize(

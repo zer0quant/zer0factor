@@ -3,6 +3,7 @@ from pathlib import Path
 import pytest
 
 from zer0factor.eval import EvaluationConfig
+from zer0factor.eval.config import DEFAULT_EVALUATION_UNIVERSE
 
 
 def test_evaluation_config_defaults_to_open_t1_and_evaluations_dir():
@@ -17,7 +18,7 @@ def test_evaluation_config_defaults_to_open_t1_and_evaluations_dir():
     assert config.quantiles == 10
     assert config.return_type == "open_t1"
     assert config.max_loss == 0.35
-    assert config.universe is None
+    assert config.universe == DEFAULT_EVALUATION_UNIVERSE
     assert config.output_dir == Path("data/evaluations")
     assert config.rolling_ic_window == 63
     assert config.transaction_cost_bps == 10.0

@@ -7,6 +7,7 @@ from typing import Literal
 import pandas as pd
 
 ReturnType = Literal["open_t1", "close_t0"]
+DEFAULT_EVALUATION_UNIVERSE = "univ_trade_base"
 
 
 def _normalize_period(period: object) -> int:
@@ -66,6 +67,11 @@ class EvaluationConfig:
 
         object.__setattr__(self, "factor_names", factor_names)
         object.__setattr__(self, "periods", periods)
+        object.__setattr__(
+            self,
+            "universe",
+            DEFAULT_EVALUATION_UNIVERSE if self.universe is None else self.universe,
+        )
         object.__setattr__(self, "output_dir", output_dir)
 
 
