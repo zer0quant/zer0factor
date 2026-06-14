@@ -7,7 +7,6 @@ import pandas as pd
 from loguru import logger
 
 from zer0factor.config import load_config
-from zer0factor.notify import load_notifier
 from zer0factor.core import Factor, Zer0ShareDataProvider, run_factor
 from zer0factor.eval import (
     ANALYSIS_CONFIGS,
@@ -25,6 +24,7 @@ from zer0factor.factors import (
     OpenReturn,
     OvernightReturn,
 )
+from zer0factor.notify import load_notifier
 from zer0factor.pipeline import run_build_stage, update_factor_registry
 from zer0factor.preprocess import FactorPreprocessPipeline, PreprocessConfig
 from zer0factor.registry import FactorRegistry
