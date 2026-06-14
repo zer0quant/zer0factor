@@ -1,4 +1,4 @@
-from unittest.mock import MagicMock, patch, call
+from unittest.mock import MagicMock
 import pytest
 from zer0factor.notify.null import NullNotifier
 

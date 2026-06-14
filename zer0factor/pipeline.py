@@ -13,7 +13,6 @@ from typing import Any
 import pandas as pd
 
 from zer0factor.core import to_factor_output
-from zer0factor.notify.null import NullNotifier
 from zer0factor.exposures import build_sw_l1_industry_panel
 from zer0factor.factors.rolling_returns import (
     BASE_RETURN_FACTORS,
@@ -21,6 +20,7 @@ from zer0factor.factors.rolling_returns import (
     derive_rolling_mean_panel,
     raw_factor_name,
 )
+from zer0factor.notify.null import NullNotifier
 from zer0factor.preprocess import impute_missing, neutralize, standardize, winsorize
 from zer0factor.storage import FactorStorage
 
