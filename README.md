@@ -140,7 +140,6 @@ uv run ruff check zer0factor/core/__init__.py docs/skills/factor-research tests/
 | `uv run python main.py evaluate-factors <name...>` | 评估多个已存因子 |
 | `uv run python main.py evaluate-batch --file config/evaluation_batch.toml` | 按配置文件批量评估因子 |
 | `uv run python main.py show-summary` | 查看最近一次评估的完整 summary，按指标转置展示 |
-| `uv run python main.py evaluate-summary` | 生成 ranked summary 和 Markdown report |
 
 ## 因子注册表
 
@@ -193,14 +192,13 @@ uv run python main.py evaluate-batch --file config/evaluation_batch.toml
 data/evaluations/<run_id>/
 ├── summary.csv
 ├── summary.parquet
+├── metadata.json
 └── factors/<factor_name>/
     ├── clean_factor_data.parquet
-    ├── daily_ic.csv
-    ├── quantile_returns.csv
-    └── plots/
+    ├── daily_ic.parquet
+    ├── quantile_returns.parquet
+    └── figures/
 ```
-
-执行 `evaluate-summary` 后，会在同一个 run 目录下额外生成 `ranked_summary.csv` 和 `report.md`。
 
 查看最近一次 summary：
 

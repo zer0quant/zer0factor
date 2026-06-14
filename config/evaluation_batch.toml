@@ -2,20 +2,11 @@
 factor_source = "registry"
 registry_path = "config/factors.toml"
 enabled_only = true
-start_date = "20180101"
-end_date = "20240101"
-periods = [1, 5, 10]
+start_date = "20160101"
+end_date = ""
+periods = [1]
 quantiles = 10
 return_type = "open_t1"
 max_loss = 0.35
 output_dir = "data/evaluations"
 generate_tearsheets = true
-
-
-[report]
-min_ic = 0.02
-min_icir = 0.3
-min_win_rate = 52.0
-min_spread_bps = 0.0
-min_sample_count = 1000
-min_monotonicity = 0.3

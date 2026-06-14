@@ -9,11 +9,3 @@ quantiles = 10
 return_type = "open_t1"
 max_loss = 0.35
 output_dir = "data/evaluations"
-
-[report]
-min_ic = 0.02
-min_icir = 0.3
-min_win_rate = 52.0
-min_spread_bps = 0.0
-min_sample_count = 1000
-min_monotonicity = 0.3

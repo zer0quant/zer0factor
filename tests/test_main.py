@@ -176,58 +176,13 @@ def test_evaluate_batch_command_is_registered():
     assert "--file" in result.output
 
 
-def test_evaluate_summary_command_is_registered():
+def test_evaluate_summary_command_is_removed():
     runner = CliRunner()
 
     result = runner.invoke(cli, ["evaluate-summary", "--help"])
 
-    assert result.exit_code == 0
-    assert "Summarize an evaluation run" in result.output
-    assert "--min-ic" in result.output
-    assert "--min-monotonicity" in result.output
-    assert "--run-dir" in result.output
-
-
-def test_evaluate_summary_command_prints_report_paths(monkeypatch, tmp_path):
-    runner = CliRunner()
-
-    class FakeReport:
-        run_dir = tmp_path / "evaluations" / "run_001"
-        report_path = run_dir / "report.md"
-        ranked_summary_path = run_dir / "ranked_summary.csv"
-        ranked_summary = pd.DataFrame(
-            {
-                "factor_name": ["factor_a"],
-                "period": ["1D"],
-                "score": [3.1],
-                "passed": [True],
-            }
-        )
-
-    def fake_generate_evaluation_report(**kwargs):
-        assert kwargs["run_dir"] == tmp_path / "run_001"
-        assert kwargs["thresholds"].min_ic == 0.01
-        assert kwargs["thresholds"].min_monotonicity == 0.4
-        return FakeReport()
-
-    monkeypatch.setattr("main.generate_evaluation_report", fake_generate_evaluation_report)
-
-    result = runner.invoke(
-        cli,
-        [
-            "evaluate-summary",
-            "--run-dir",
-            str(tmp_path / "run_001"),
-            "--min-ic",
-            "0.01",
-            "--min-monotonicity",
-            "0.4",
-        ],
-    )
-
-    assert result.exit_code == 0
-    assert "Report written to" in result.output
-    assert "factor_a" in result.output
+    assert result.exit_code != 0
+    assert "No such command 'evaluate-summary'" in result.output
 
 
 def test_show_summary_hides_raw_ic_win_rates_by_default(tmp_path):
@@ -278,7 +233,7 @@ def test_show_summary_all_includes_raw_ic_win_rates(tmp_path):
     assert "directional_IC>0 %" in result.output
 
 
-def test_evaluate_batch_command_runs_evaluation_and_report(monkeypatch, tmp_path):
+def test_evaluate_batch_command_runs_evaluation_without_report(monkeypatch, tmp_path):
     runner = CliRunner()
     batch_file = tmp_path / "batch.toml"
     batch_file.write_text(
@@ -324,18 +279,6 @@ min_monotonicity = 0.4
         output_dir = tmp_path / "batch_evaluations" / "run_001"
         factor_results = (object(), object())
 
-    class FakeReport:
-        report_path = FakeRunResult.output_dir / "report.md"
-        ranked_summary_path = FakeRunResult.output_dir / "ranked_summary.csv"
-        ranked_summary = pd.DataFrame(
-            {
-                "factor_name": ["factor_a"],
-                "period": ["1D"],
-                "adjusted_score": [4.2],
-                "passed": [True],
-            }
-        )
-
     def fake_evaluate_factors(*, factor_names, config, log_info, **kwargs):
         assert factor_names == ("factor_a", "factor_b")
         assert config.factor_names == ("factor_a", "factor_b")
@@ -350,15 +293,8 @@ min_monotonicity = 0.4
         log_info("batch_eval_progress")
         return FakeRunResult()
 
-    def fake_generate_evaluation_report(**kwargs):
-        assert kwargs["run_dir"] == FakeRunResult.output_dir
-        assert kwargs["thresholds"].min_ic == 0.01
-        assert kwargs["thresholds"].min_monotonicity == 0.4
-        return FakeReport()
-
     monkeypatch.setattr("main.load_config", fake_load_config)
     monkeypatch.setattr("main.evaluate_factors", fake_evaluate_factors)
-    monkeypatch.setattr("main.generate_evaluation_report", fake_generate_evaluation_report)
     import zer0share.api
 
     monkeypatch.setattr(zer0share.api, "LocalPro", FakeLocalPro)
@@ -377,8 +313,8 @@ min_monotonicity = 0.4
     assert result.exit_code == 0
     assert "batch_eval_progress" in result.output
     assert "Evaluation run run_001 written to" in result.output
-    assert "Report written to" in result.output
-    assert "factor_a" in result.output
+    assert "Report written to" not in result.output
+    assert "Ranked summary written to" not in result.output
 
 
 def test_evaluate_factor_command_prints_progress(monkeypatch, tmp_path):
@@ -1155,13 +1091,7 @@ start_date = "20240101"
         calls.append(kwargs)
         return FakeResult()
 
-    class FakeReport:
-        report_path = tmp_path / "report.md"
-        ranked_summary_path = tmp_path / "ranked.csv"
-        ranked_summary = pd.DataFrame({"factor_name": ["factor_a"]})
-
     monkeypatch.setattr("main.evaluate_factors", fake_evaluate_factors)
-    monkeypatch.setattr("main.generate_evaluation_report", lambda **kwargs: FakeReport())
 
     result = CliRunner().invoke(
         cli,

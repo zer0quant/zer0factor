@@ -5,7 +5,6 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from zer0factor.eval.config import ReturnType
-from zer0factor.eval.report import ReportThresholds
 from zer0factor.registry import FactorRegistry
 
 
@@ -21,7 +20,6 @@ class BatchEvaluationConfig:
     max_loss: float = 0.35
     output_dir: Path = Path("data/evaluations")
     transaction_cost_bps: float = 10.0
-    report_thresholds: ReportThresholds = ReportThresholds()
 
 
 def load_batch_evaluation_config(path: Path | str) -> BatchEvaluationConfig:
@@ -68,7 +66,6 @@ def load_batch_evaluation_config(path: Path | str) -> BatchEvaluationConfig:
         max_loss=float(evaluation.get("max_loss", 0.35)),
         output_dir=Path(evaluation.get("output_dir", "data/evaluations")),
         transaction_cost_bps=_optional_float(evaluation.get("transaction_cost_bps"), 10.0),
-        report_thresholds=_load_report_thresholds(raw.get("report", {})),
     )
 
 
@@ -82,17 +79,3 @@ def _optional_float(value: object, default: float) -> float:
     if value in (None, ""):
         return default
     return float(value)
-
-
-def _load_report_thresholds(report: dict[str, object]) -> ReportThresholds:
-    defaults = ReportThresholds()
-    return ReportThresholds(
-        min_ic=float(report.get("min_ic", defaults.min_ic)),
-        min_icir=float(report.get("min_icir", defaults.min_icir)),
-        min_win_rate=float(report.get("min_win_rate", defaults.min_win_rate)),
-        min_spread_bps=float(report.get("min_spread_bps", defaults.min_spread_bps)),
-        min_sample_count=int(report.get("min_sample_count", defaults.min_sample_count)),
-        min_monotonicity=float(
-            report.get("min_monotonicity", defaults.min_monotonicity)
-        ),
-    )

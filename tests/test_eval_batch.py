@@ -33,6 +33,18 @@ transaction_cost_bps = 8.5
     assert cfg.transaction_cost_bps == pytest.approx(8.5)
 
 
+def test_load_batch_does_not_expose_report_thresholds(tmp_path):
+    p = _write_toml(tmp_path, """
+[evaluation]
+factors = ["z_neu_daily_return"]
+
+[report]
+min_ic = 0.01
+""")
+    cfg = load_batch_evaluation_config(p)
+    assert not hasattr(cfg, "report_thresholds")
+
+
 def test_load_batch_registry_mode_resolves_factors(tmp_path):
     registry = tmp_path / "factors.toml"
     registry.write_text("""
