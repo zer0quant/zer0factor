@@ -5,6 +5,8 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 config/settings.toml
+config/factors.toml
+.claude/settings.local.json
 data/
 db/
 logs/
