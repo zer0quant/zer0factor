@@ -209,6 +209,11 @@ def evaluate_factors(
     )
     run_id, run_dir = create_run_directory(resolved_config, run_id=run_id)
     _notifier = notifier or NullNotifier()
+    _t0 = time.monotonic()
+    _milestones = {
+        int(len(resolved_config.factor_names) * pct)
+        for pct in (0.25, 0.50, 0.75)
+    } - {0, len(resolved_config.factor_names)}
     _notifier.notify_start(
         "evaluate",
         details={
@@ -216,11 +221,6 @@ def evaluate_factors(
             "workers": str(workers),
         },
     )
-    _t0 = time.monotonic()
-    _milestones = {
-        round(len(resolved_config.factor_names) * pct)
-        for pct in (0.25, 0.50, 0.75)
-    } - {0, len(resolved_config.factor_names)}
     _log(
         log_info,
         "evaluation_run_started "
