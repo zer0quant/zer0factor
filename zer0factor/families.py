@@ -1,11 +1,11 @@
 from __future__ import annotations
 
+import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
 import pandas as pd
 
-from zer0factor.eval.analysis import PROFILE_PREFIXES
 from zer0factor.factors.rolling_returns import BASE_RETURN_FACTORS, WINDOWS
 
 
@@ -65,6 +65,16 @@ class RollingReturnFamily(FactorFamily):
     base_factors = BASE_RETURN_FACTORS
     windows = WINDOWS
 
+    # Matches: [preprocess_]base_factor_ma{window}
+    # preprocess: z | z_size_neu | z_industry_neu | z_size_industry_neu  (optional)
+    # base_factor: daily_return | open_return | intraday_return | overnight_return
+    # window: one or more digits
+    _NAME_RE = re.compile(
+        r"^(?:(?P<preprocess>z(?:_size_industry_neu|_industry_neu|_size_neu)?)_)?"
+        r"(?P<base>daily_return|open_return|intraday_return|overnight_return)"
+        r"_ma(?P<window>\d+)$"
+    )
+
     def raw_name(self, base_factor: str, window: int) -> str:
         return f"{base_factor}_ma{window}"
 
@@ -72,29 +82,17 @@ class RollingReturnFamily(FactorFamily):
         return panel.rolling(window=window, min_periods=window // 2).mean()
 
     def parse_name(self, factor_name: str) -> dict:
-        preprocess = "raw"
-        raw = factor_name
-        for prefix, profile in PROFILE_PREFIXES:
-            if factor_name.startswith(prefix):
-                preprocess = profile
-                raw = factor_name.removeprefix(prefix)
-                break
-
-        base_factor = next(
-            (bf for bf in self.base_factors if raw.startswith(f"{bf}_")),
-            None,
-        )
-        if base_factor is None:
+        m = self._NAME_RE.match(factor_name)
+        if m is None:
             raise ValueError(f"unknown rolling return factor name: {factor_name}")
-
-        suffix = raw.removeprefix(f"{base_factor}_ma")
-        if suffix == raw or not suffix.isdigit():
-            raise ValueError(f"factor name does not end with _ma<window>: {factor_name}")
-        window = int(suffix)
+        window = int(m["window"])
         if window not in self.windows:
             raise ValueError(f"unsupported rolling return window: {factor_name}")
-
-        return {"base_factor": base_factor, "preprocess": preprocess, "window": window}
+        return {
+            "base_factor": m["base"],
+            "preprocess": m["preprocess"] or "raw",
+            "window": window,
+        }
 
 
 FAMILIES: dict[str, FactorFamily] = {
