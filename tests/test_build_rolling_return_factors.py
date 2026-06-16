@@ -5,7 +5,8 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from zer0factor.families import FAMILIES, FactorFamily
+from zer0factor.factor_registry import FAMILIES
+from zer0factor.families import FactorFamily
 from zer0factor.pipeline import (
     SIZE_FACTOR_NAME,
     _long_to_wide,
@@ -174,9 +175,6 @@ def test_compute_raw_family_factors_uses_family_derive_and_naming() -> None:
 
         def derive(self, panel: pd.DataFrame, window: int) -> pd.DataFrame:
             return panel.rolling(window=window).max()
-
-        def parse_name(self, factor_name: str) -> dict:
-            raise NotImplementedError
 
     family = RollingMaxFamily()
 

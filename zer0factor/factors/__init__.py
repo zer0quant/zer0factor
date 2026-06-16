@@ -8,7 +8,7 @@ from zer0factor.factors.returns import (
     OpenReturn,
     OvernightReturn,
 )
-from zer0factor.factors.rolling_returns import BASE_RETURN_FACTORS, WINDOWS
+from zer0factor.factors.rolling_returns import BASE_RETURN_FACTORS, RollingReturnFamily, WINDOWS
 
 __all__ = [
     "BASE_RETURN_FACTORS",
@@ -18,5 +18,6 @@ __all__ = [
     "LogTotalMarketCap",
     "OpenReturn",
     "OvernightReturn",
+    "RollingReturnFamily",
     "WINDOWS",
 ]

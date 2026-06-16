@@ -14,7 +14,9 @@ import pandas as pd
 from zer0factor.core import to_factor_output
 from zer0factor.exposures import build_sw_l1_industry_panel
 from zer0factor.factors.rolling_returns import WINDOWS
-from zer0factor.families import FAMILIES, PROFILES, FactorFamily, PreprocessProfile, get_family
+from zer0factor.factor_registry import FAMILIES, get_family
+from zer0factor.families import FactorFamily
+from zer0factor.preprocess_profile import PROFILES, PreprocessProfile
 from zer0factor.notify.null import NullNotifier
 from zer0factor.preprocess import impute_missing, neutralize, standardize, winsorize
 from zer0factor.storage import FactorStorage
@@ -159,6 +161,8 @@ def preprocess_one_factor(
     base = _winsorize_impute_zscore(raw_panel)
     rows: dict[str, int] = {}
     for profile in profiles:
+        if profile.is_raw:
+            continue
         output_name = profile.output_name(raw_factor_name)
         if profile.neutralize_method is None:
             output_panel = base
@@ -426,6 +430,8 @@ def _registry_entries_for_family(family: FactorFamily) -> list[dict[str, object]
                 "evaluate_default": False,
             })
             for profile in family.profiles:
+                if profile.is_raw:
+                    continue
                 neutralized = profile.neutralize_method is not None
                 entries.append({
                     "name": profile.output_name(raw_name),

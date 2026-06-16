@@ -4,7 +4,17 @@ import pandas as pd
 import pytest
 
 from zer0factor.factors.rolling_returns import BASE_RETURN_FACTORS, WINDOWS
-from zer0factor.families import RollingReturnFamily, get_family
+from zer0factor.factor_registry import get_family
+from zer0factor.families import FactorVariant
+from zer0factor.factors.rolling_returns import RollingReturnFamily
+from zer0factor.preprocess_profile import (
+    PROFILES,
+    RAW,
+    Z,
+    Z_INDUSTRY_NEU,
+    Z_SIZE_INDUSTRY_NEU,
+    Z_SIZE_NEU,
+)
 
 
 def test_rolling_return_constants_match_design() -> None:
@@ -15,6 +25,48 @@ def test_rolling_return_constants_match_design() -> None:
         "intraday_return",
         "overnight_return",
     )
+
+
+def test_preprocess_profiles_cover_all_five_methods() -> None:
+    assert len(PROFILES) == 5
+    keys = [p.key for p in PROFILES]
+    assert keys == ["raw", "z", "z_size_neu", "z_industry_neu", "z_size_industry_neu"]
+
+
+def test_preprocess_profile_boolean_fields_reflect_steps() -> None:
+    assert RAW.zscore is False
+    assert RAW.size_neutral is False
+    assert RAW.industry_neutral is False
+
+    assert Z.zscore is True
+    assert Z.size_neutral is False
+    assert Z.industry_neutral is False
+
+    assert Z_SIZE_NEU.zscore is True
+    assert Z_SIZE_NEU.size_neutral is True
+    assert Z_SIZE_NEU.industry_neutral is False
+
+    assert Z_INDUSTRY_NEU.zscore is True
+    assert Z_INDUSTRY_NEU.size_neutral is False
+    assert Z_INDUSTRY_NEU.industry_neutral is True
+
+    assert Z_SIZE_INDUSTRY_NEU.zscore is True
+    assert Z_SIZE_INDUSTRY_NEU.size_neutral is True
+    assert Z_SIZE_INDUSTRY_NEU.industry_neutral is True
+
+
+def test_preprocess_profile_neutralize_method() -> None:
+    assert RAW.neutralize_method is None
+    assert Z.neutralize_method is None
+    assert Z_SIZE_NEU.neutralize_method == "size"
+    assert Z_INDUSTRY_NEU.neutralize_method == "industry"
+    assert Z_SIZE_INDUSTRY_NEU.neutralize_method == "size_industry"
+
+
+def test_preprocess_profile_output_name() -> None:
+    assert RAW.output_name("daily_return_ma5") == "daily_return_ma5"
+    assert Z.output_name("daily_return_ma5") == "z_daily_return_ma5"
+    assert Z_SIZE_NEU.output_name("daily_return_ma5") == "z_size_neu_daily_return_ma5"
 
 
 def test_raw_names_expand_to_32_in_stable_order() -> None:
@@ -29,11 +81,11 @@ def test_raw_names_expand_to_32_in_stable_order() -> None:
     assert names[-1] == "overnight_return_ma180"
 
 
-def test_rolling_return_family_expands_profiles() -> None:
+def test_rolling_return_family_variant_counts() -> None:
     family = get_family("rolling_return")
 
-    assert len(family.preprocess_output_names()) == 128
-    assert len(family.all_factor_names()) == 160
+    assert len(family.all_factor_names()) == 160   # 32 raw × 5 profiles
+    assert len(family.preprocess_output_names()) == 128  # 32 raw × 4 preprocessed
     assert family.all_factor_names()[0] == "daily_return_ma5"
     assert "z_daily_return_ma5" in family.all_factor_names()
     assert "z_size_neu_daily_return_ma5" in family.all_factor_names()
@@ -41,19 +93,27 @@ def test_rolling_return_family_expands_profiles() -> None:
     assert "z_size_industry_neu_overnight_return_ma180" in family.all_factor_names()
 
 
-def test_parse_name_handles_raw_and_preprocessed() -> None:
+def test_parse_name_returns_factor_variant_for_raw() -> None:
     family = get_family("rolling_return")
+    variant = family.parse_name("daily_return_ma20")
 
-    assert family.parse_name("daily_return_ma20") == {
-        "base_factor": "daily_return",
-        "preprocess": "raw",
-        "window": 20,
-    }
-    assert family.parse_name("z_size_industry_neu_overnight_return_ma180") == {
-        "base_factor": "overnight_return",
-        "preprocess": "z_size_industry_neu",
-        "window": 180,
-    }
+    assert isinstance(variant, FactorVariant)
+    assert variant.raw_name == "daily_return_ma20"
+    assert variant.is_raw is True
+    assert variant.preprocess == "raw"
+    assert variant.name == "daily_return_ma20"
+
+
+def test_parse_name_returns_factor_variant_for_preprocessed() -> None:
+    family = get_family("rolling_return")
+    variant = family.parse_name("z_size_industry_neu_overnight_return_ma180")
+
+    assert isinstance(variant, FactorVariant)
+    assert variant.raw_name == "overnight_return_ma180"
+    assert variant.is_raw is False
+    assert variant.preprocess == "z_size_industry_neu"
+    assert variant.profile == Z_SIZE_INDUSTRY_NEU
+    assert variant.name == "z_size_industry_neu_overnight_return_ma180"
 
 
 def test_parse_name_round_trips_all_profiles() -> None:
@@ -61,21 +121,20 @@ def test_parse_name_round_trips_all_profiles() -> None:
 
     for profile in family.profiles:
         factor_name = profile.output_name("daily_return_ma20")
-        assert family.parse_name(factor_name) == {
-            "base_factor": "daily_return",
-            "preprocess": profile.key,
-            "window": 20,
-        }
+        variant = family.parse_name(factor_name)
+        assert variant.profile == profile
+        assert variant.raw_name == "daily_return_ma20"
+        assert variant.name == factor_name
 
 
 def test_parse_name_rejects_unknown_names() -> None:
     family = get_family("rolling_return")
 
-    with pytest.raises(ValueError, match="unknown rolling return factor name"):
+    with pytest.raises(ValueError, match="unknown factor name"):
         family.parse_name("ma_bias_20d")
-    with pytest.raises(ValueError, match="unknown rolling return factor name"):
+    with pytest.raises(ValueError, match="unknown factor name"):
         family.parse_name("daily_return_mean20")
-    with pytest.raises(ValueError, match="unsupported rolling return window"):
+    with pytest.raises(ValueError, match="unknown factor name"):
         family.parse_name("daily_return_ma999")
 
 
