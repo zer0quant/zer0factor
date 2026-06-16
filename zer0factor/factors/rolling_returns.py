@@ -24,6 +24,13 @@ class RollingReturnFamily(FactorFamily):
     def derive(self, panel: pd.DataFrame, window: int) -> pd.DataFrame:
         return panel.rolling(window=window, min_periods=window // 2).mean()
 
+    def parse_raw_name(self, raw_name: str) -> dict[str, object]:
+        for base in self.base_factors:
+            if raw_name.startswith(base):
+                window = int(raw_name.removeprefix(f"{base}_ma"))
+                return {"base_factor": base, "window": window}
+        raise ValueError(f"cannot parse raw factor name: {raw_name!r}")
+
 
 __all__ = [
     "BASE_RETURN_FACTORS",

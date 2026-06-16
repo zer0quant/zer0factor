@@ -3,17 +3,20 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from zer0factor.factors.rolling_returns import BASE_RETURN_FACTORS, WINDOWS
 from zer0factor.factor_registry import get_family
-from zer0factor.families import FactorVariant
-from zer0factor.factors.rolling_returns import RollingReturnFamily
+from zer0factor.factors.rolling_returns import (
+    BASE_RETURN_FACTORS,
+    WINDOWS,
+    RollingReturnFamily,
+)
+from zer0factor.families import FactorOutputSpec
 from zer0factor.preprocess_profile import (
     PROFILES,
     RAW,
-    Z,
     Z_INDUSTRY_NEU,
     Z_SIZE_INDUSTRY_NEU,
     Z_SIZE_NEU,
+    Z,
 )
 
 
@@ -93,49 +96,58 @@ def test_rolling_return_family_variant_counts() -> None:
     assert "z_size_industry_neu_overnight_return_ma180" in family.all_factor_names()
 
 
-def test_parse_name_returns_factor_variant_for_raw() -> None:
+def test_parse_output_name_returns_factor_output_spec_for_raw() -> None:
     family = get_family("rolling_return")
-    variant = family.parse_name("daily_return_ma20")
+    spec = family.parse_output_name("daily_return_ma20")
 
-    assert isinstance(variant, FactorVariant)
-    assert variant.raw_name == "daily_return_ma20"
-    assert variant.is_raw is True
-    assert variant.preprocess == "raw"
-    assert variant.name == "daily_return_ma20"
+    assert isinstance(spec, FactorOutputSpec)
+    assert spec.family == "rolling_return"
+    assert spec.raw_name == "daily_return_ma20"
+    assert spec.is_raw is True
+    assert spec.preprocess == "raw"
+    assert spec.name == "daily_return_ma20"
+    assert spec.params == {"base_factor": "daily_return", "window": 20}
+    assert spec.analysis_dimensions() == {
+        "base_factor": "daily_return",
+        "preprocess": "raw",
+        "window": 20,
+    }
 
 
-def test_parse_name_returns_factor_variant_for_preprocessed() -> None:
+def test_parse_output_name_returns_factor_output_spec_for_preprocessed() -> None:
     family = get_family("rolling_return")
-    variant = family.parse_name("z_size_industry_neu_overnight_return_ma180")
+    spec = family.parse_output_name("z_size_industry_neu_overnight_return_ma180")
 
-    assert isinstance(variant, FactorVariant)
-    assert variant.raw_name == "overnight_return_ma180"
-    assert variant.is_raw is False
-    assert variant.preprocess == "z_size_industry_neu"
-    assert variant.profile == Z_SIZE_INDUSTRY_NEU
-    assert variant.name == "z_size_industry_neu_overnight_return_ma180"
+    assert isinstance(spec, FactorOutputSpec)
+    assert spec.family == "rolling_return"
+    assert spec.raw_name == "overnight_return_ma180"
+    assert spec.is_raw is False
+    assert spec.preprocess == "z_size_industry_neu"
+    assert spec.profile == Z_SIZE_INDUSTRY_NEU
+    assert spec.name == "z_size_industry_neu_overnight_return_ma180"
+    assert spec.params == {"base_factor": "overnight_return", "window": 180}
 
 
-def test_parse_name_round_trips_all_profiles() -> None:
+def test_parse_output_name_round_trips_all_profiles() -> None:
     family = get_family("rolling_return")
 
     for profile in family.profiles:
         factor_name = profile.output_name("daily_return_ma20")
-        variant = family.parse_name(factor_name)
-        assert variant.profile == profile
-        assert variant.raw_name == "daily_return_ma20"
-        assert variant.name == factor_name
+        spec = family.parse_output_name(factor_name)
+        assert spec.profile == profile
+        assert spec.raw_name == "daily_return_ma20"
+        assert spec.name == factor_name
 
 
-def test_parse_name_rejects_unknown_names() -> None:
+def test_parse_output_name_rejects_unknown_names() -> None:
     family = get_family("rolling_return")
 
     with pytest.raises(ValueError, match="unknown factor name"):
-        family.parse_name("ma_bias_20d")
+        family.parse_output_name("ma_bias_20d")
     with pytest.raises(ValueError, match="unknown factor name"):
-        family.parse_name("daily_return_mean20")
+        family.parse_output_name("daily_return_mean20")
     with pytest.raises(ValueError, match="unknown factor name"):
-        family.parse_name("daily_return_ma999")
+        family.parse_output_name("daily_return_ma999")
 
 
 def test_derive_uses_half_window_min_periods() -> None:

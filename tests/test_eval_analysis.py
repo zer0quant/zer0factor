@@ -6,10 +6,10 @@ import pytest
 from zer0factor.eval.analysis import (
     ROLLING_RETURN_ANALYSIS_CONFIG,
     EvaluationAnalyzer,
-    parse_rolling_return_factor_name,
     run_analysis,
     window_bucket,
 )
+from zer0factor.factor_registry import get_family
 
 
 def _row(
@@ -53,10 +53,9 @@ def _row(
     }
 
 
-def test_parse_rolling_return_factor_name_extracts_family_dimensions() -> None:
-    parsed = parse_rolling_return_factor_name(
-        "z_size_industry_neu_intraday_return_ma20"
-    )
+def test_rolling_return_family_analysis_dimensions_extracts_all_fields() -> None:
+    family = get_family("rolling_return")
+    parsed = family.analysis_dimensions("z_size_industry_neu_intraday_return_ma20")
 
     assert parsed == {
         "base_factor": "intraday_return",

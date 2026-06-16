@@ -7,19 +7,7 @@ from typing import Any
 
 import pandas as pd
 
-PROFILE_PREFIXES = (
-    ("z_size_industry_neu_", "z_size_industry_neu"),
-    ("z_industry_neu_", "z_industry_neu"),
-    ("z_size_neu_", "z_size_neu"),
-    ("z_", "z"),
-)
-
-ROLLING_RETURN_BASE_FACTORS = (
-    "daily_return",
-    "open_return",
-    "intraday_return",
-    "overnight_return",
-)
+from zer0factor.factor_registry import get_family
 
 SUMMARY_METRICS = [
     "composite_score",
@@ -70,32 +58,6 @@ def window_bucket(window: int) -> str:
     if window <= 30:
         return "medium"
     return "long"
-
-
-def parse_rolling_return_factor_name(factor_name: str) -> dict[str, Any]:
-    preprocess = "raw"
-    raw_name = factor_name
-    for prefix, profile in PROFILE_PREFIXES:
-        if factor_name.startswith(prefix):
-            preprocess = profile
-            raw_name = factor_name[len(prefix):]
-            break
-
-    base_factor = next(
-        (name for name in ROLLING_RETURN_BASE_FACTORS if raw_name.startswith(name)),
-        None,
-    )
-    if base_factor is None:
-        raise ValueError(f"unknown rolling return factor name: {factor_name}")
-
-    suffix = raw_name.removeprefix(f"{base_factor}_ma")
-    if not suffix.isdigit():
-        raise ValueError(f"factor name does not end with _ma<window>: {factor_name}")
-    return {
-        "base_factor": base_factor,
-        "preprocess": preprocess,
-        "window": int(suffix),
-    }
 
 
 def percentile_score(series: pd.Series, *, higher_is_better: bool = True) -> pd.Series:
@@ -302,7 +264,7 @@ def _select_display_columns(
 
 
 ROLLING_RETURN_ANALYSIS_CONFIG = EvaluationAnalysisConfig(
-    parse_factor_name=parse_rolling_return_factor_name,
+    parse_factor_name=get_family("rolling_return").analysis_dimensions,
     group_dimensions=["base_factor", "preprocess", "window", "window_bucket"],
     representative_dimensions=["base_factor", "preprocess", "window_bucket"],
     display_columns=[

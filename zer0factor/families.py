@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from typing import Mapping
 
 import pandas as pd
 
@@ -9,13 +10,12 @@ from zer0factor.preprocess_profile import PROFILES, PreprocessProfile
 
 
 @dataclass(frozen=True)
-class FactorVariant:
+class FactorOutputSpec:
+    family: str
+    name: str
     raw_name: str
     profile: PreprocessProfile
-
-    @property
-    def name(self) -> str:
-        return self.profile.output_name(self.raw_name)
+    params: Mapping[str, object]
 
     @property
     def preprocess(self) -> str:
@@ -24,6 +24,9 @@ class FactorVariant:
     @property
     def is_raw(self) -> bool:
         return self.profile.is_raw
+
+    def analysis_dimensions(self) -> dict[str, object]:
+        return {"preprocess": self.preprocess, **self.params}
 
 
 class FactorFamily(ABC):
@@ -38,6 +41,9 @@ class FactorFamily(ABC):
     @abstractmethod
     def derive(self, panel: pd.DataFrame, window: int) -> pd.DataFrame: ...
 
+    def parse_raw_name(self, raw_name: str) -> Mapping[str, object]:
+        return {}
+
     def raw_names(self) -> tuple[str, ...]:
         return tuple(
             self.raw_name(base_factor, window)
@@ -45,29 +51,38 @@ class FactorFamily(ABC):
             for window in self.windows
         )
 
-    def variants(self) -> tuple[FactorVariant, ...]:
+    def output_specs(self) -> tuple[FactorOutputSpec, ...]:
         return tuple(
-            FactorVariant(raw, profile)
+            FactorOutputSpec(
+                family=self.name,
+                name=profile.output_name(raw),
+                raw_name=raw,
+                profile=profile,
+                params=self.parse_raw_name(raw),
+            )
             for raw in self.raw_names()
             for profile in self.profiles
         )
 
-    def parse_name(self, factor_name: str) -> FactorVariant:
-        index = {v.name: v for v in self.variants()}
+    def parse_output_name(self, factor_name: str) -> FactorOutputSpec:
+        index = {spec.name: spec for spec in self.output_specs()}
         if factor_name not in index:
             raise ValueError(f"unknown factor name: {factor_name!r}")
         return index[factor_name]
 
     def preprocess_output_names(self) -> list[str]:
-        return [v.name for v in self.variants() if not v.is_raw]
+        return [spec.name for spec in self.output_specs() if not spec.is_raw]
 
     def all_factor_names(self) -> list[str]:
-        return [v.name for v in self.variants()]
+        return [spec.name for spec in self.output_specs()]
+
+    def analysis_dimensions(self, factor_name: str) -> dict[str, object]:
+        return self.parse_output_name(factor_name).analysis_dimensions()
 
 
 __all__ = [
     "PROFILES",
     "FactorFamily",
-    "FactorVariant",
+    "FactorOutputSpec",
     "PreprocessProfile",
 ]
