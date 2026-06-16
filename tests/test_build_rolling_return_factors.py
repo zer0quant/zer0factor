@@ -164,13 +164,19 @@ def test_compute_raw_family_factors_uses_family_derive_and_naming() -> None:
     storage = FakeStorage({
         "daily_return": _base_factor([1.0, 2.0, 3.0, 4.0, 5.0]),
     })
-    family = FactorFamily(
-        name="rolling_max",
-        base_factors=("daily_return",),
-        windows=(2,),
-        raw_name=lambda base_factor, window: f"{base_factor}_max{window}",
-        derive=lambda panel, window: panel.rolling(window=window).max(),
-    )
+
+    class RollingMaxFamily(FactorFamily):
+        name = "rolling_max"
+        base_factors = ("daily_return",)
+        windows = (2,)
+
+        def raw_name(self, base_factor: str, window: int) -> str:
+            return f"{base_factor}_max{window}"
+
+        def derive(self, panel: pd.DataFrame, window: int) -> pd.DataFrame:
+            return panel.rolling(window=window).max()
+
+    family = RollingMaxFamily()
 
     rows = compute_raw_family_factors(
         family,

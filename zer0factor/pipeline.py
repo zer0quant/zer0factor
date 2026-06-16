@@ -4,6 +4,7 @@ import logging
 import multiprocessing
 import time
 import tomllib
+from abc import ABC, abstractmethod
 from collections.abc import Callable
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
@@ -46,14 +47,17 @@ PROFILES = (
 )
 
 
-@dataclass(frozen=True)
-class FactorFamily:
+class FactorFamily(ABC):
     name: str
     base_factors: tuple[str, ...]
     windows: tuple[int, ...]
-    raw_name: Callable[[str, int], str]
-    derive: Callable[[pd.DataFrame, int], pd.DataFrame]
     profiles: tuple[PreprocessProfile, ...] = PROFILES
+
+    @abstractmethod
+    def raw_name(self, base_factor: str, window: int) -> str: ...
+
+    @abstractmethod
+    def derive(self, panel: pd.DataFrame, window: int) -> pd.DataFrame: ...
 
     def raw_names(self) -> tuple[str, ...]:
         return tuple(
@@ -73,14 +77,20 @@ class FactorFamily:
         return [*self.raw_names(), *self.preprocess_output_names()]
 
 
-FAMILIES = {
-    "rolling_return": FactorFamily(
-        name="rolling_return",
-        base_factors=BASE_RETURN_FACTORS,
-        windows=WINDOWS,
-        raw_name=raw_factor_name,
-        derive=derive_rolling_mean_panel,
-    ),
+class RollingReturnFamily(FactorFamily):
+    name = "rolling_return"
+    base_factors = BASE_RETURN_FACTORS
+    windows = WINDOWS
+
+    def raw_name(self, base_factor: str, window: int) -> str:
+        return raw_factor_name(base_factor, window)
+
+    def derive(self, panel: pd.DataFrame, window: int) -> pd.DataFrame:
+        return derive_rolling_mean_panel(panel, window)
+
+
+FAMILIES: dict[str, FactorFamily] = {
+    "rolling_return": RollingReturnFamily(),
 }
 
 
@@ -637,6 +647,7 @@ __all__ = [
     "PROFILES",
     "SIZE_FACTOR_NAME",
     "FactorFamily",
+    "RollingReturnFamily",
     "PreprocessProfile",
     "compute_raw_family_factors",
     "compute_raw_rolling_return_factors",
