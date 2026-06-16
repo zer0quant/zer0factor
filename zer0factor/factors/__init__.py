@@ -8,12 +8,7 @@ from zer0factor.factors.returns import (
     OpenReturn,
     OvernightReturn,
 )
-from zer0factor.factors.rolling_returns import (
-    BASE_RETURN_FACTORS,
-    WINDOWS,
-    parse_rolling_return_name,
-    raw_factor_names,
-)
+from zer0factor.factors.rolling_returns import BASE_RETURN_FACTORS, WINDOWS
 
 __all__ = [
     "BASE_RETURN_FACTORS",
@@ -24,6 +19,4 @@ __all__ = [
     "OpenReturn",
     "OvernightReturn",
     "WINDOWS",
-    "parse_rolling_return_name",
-    "raw_factor_names",
 ]

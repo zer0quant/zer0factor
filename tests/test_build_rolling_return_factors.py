@@ -176,6 +176,9 @@ def test_compute_raw_family_factors_uses_family_derive_and_naming() -> None:
         def derive(self, panel: pd.DataFrame, window: int) -> pd.DataFrame:
             return panel.rolling(window=window).max()
 
+        def parse_name(self, factor_name: str) -> dict:
+            raise NotImplementedError
+
     family = RollingMaxFamily()
 
     rows = compute_raw_family_factors(

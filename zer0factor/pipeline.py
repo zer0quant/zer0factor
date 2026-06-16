@@ -14,13 +14,9 @@ from typing import Any
 import pandas as pd
 
 from zer0factor.core import to_factor_output
+from zer0factor.eval.analysis import PROFILE_PREFIXES
 from zer0factor.exposures import build_sw_l1_industry_panel
-from zer0factor.factors.rolling_returns import (
-    BASE_RETURN_FACTORS,
-    WINDOWS,
-    derive_rolling_mean_panel,
-    raw_factor_name,
-)
+from zer0factor.factors.rolling_returns import BASE_RETURN_FACTORS, WINDOWS
 from zer0factor.notify.null import NullNotifier
 from zer0factor.preprocess import impute_missing, neutralize, standardize, winsorize
 from zer0factor.storage import FactorStorage
@@ -59,6 +55,9 @@ class FactorFamily(ABC):
     @abstractmethod
     def derive(self, panel: pd.DataFrame, window: int) -> pd.DataFrame: ...
 
+    @abstractmethod
+    def parse_name(self, factor_name: str) -> dict: ...
+
     def raw_names(self) -> tuple[str, ...]:
         return tuple(
             self.raw_name(base_factor, window)
@@ -83,10 +82,35 @@ class RollingReturnFamily(FactorFamily):
     windows = WINDOWS
 
     def raw_name(self, base_factor: str, window: int) -> str:
-        return raw_factor_name(base_factor, window)
+        return f"{base_factor}_ma{window}"
 
     def derive(self, panel: pd.DataFrame, window: int) -> pd.DataFrame:
-        return derive_rolling_mean_panel(panel, window)
+        return panel.rolling(window=window, min_periods=window // 2).mean()
+
+    def parse_name(self, factor_name: str) -> dict:
+        preprocess = "raw"
+        raw = factor_name
+        for prefix, profile in PROFILE_PREFIXES:
+            if factor_name.startswith(prefix):
+                preprocess = profile
+                raw = factor_name.removeprefix(prefix)
+                break
+
+        base_factor = next(
+            (bf for bf in self.base_factors if raw.startswith(f"{bf}_")),
+            None,
+        )
+        if base_factor is None:
+            raise ValueError(f"unknown rolling return factor name: {factor_name}")
+
+        suffix = raw.removeprefix(f"{base_factor}_ma")
+        if suffix == raw or not suffix.isdigit():
+            raise ValueError(f"factor name does not end with _ma<window>: {factor_name}")
+        window = int(suffix)
+        if window not in self.windows:
+            raise ValueError(f"unsupported rolling return window: {factor_name}")
+
+        return {"base_factor": base_factor, "preprocess": preprocess, "window": window}
 
 
 FAMILIES: dict[str, FactorFamily] = {

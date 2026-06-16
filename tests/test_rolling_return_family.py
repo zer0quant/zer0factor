@@ -3,15 +3,8 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from zer0factor.factors.rolling_returns import (
-    BASE_RETURN_FACTORS,
-    WINDOWS,
-    derive_rolling_mean_panel,
-    parse_rolling_return_name,
-    raw_factor_names,
-)
-import zer0factor.factors.rolling_returns as rolling_returns
-from zer0factor.pipeline import get_family
+from zer0factor.factors.rolling_returns import BASE_RETURN_FACTORS, WINDOWS
+from zer0factor.pipeline import RollingReturnFamily, get_family
 
 
 def test_rolling_return_constants_match_design() -> None:
@@ -24,8 +17,9 @@ def test_rolling_return_constants_match_design() -> None:
     )
 
 
-def test_raw_factor_names_expand_to_32_in_stable_order() -> None:
-    names = raw_factor_names()
+def test_raw_names_expand_to_32_in_stable_order() -> None:
+    family = get_family("rolling_return")
+    names = family.raw_names()
 
     assert len(names) == 32
     assert len(set(names)) == 32
@@ -38,7 +32,6 @@ def test_raw_factor_names_expand_to_32_in_stable_order() -> None:
 def test_rolling_return_family_expands_profiles() -> None:
     family = get_family("rolling_return")
 
-    assert family.raw_names() == raw_factor_names()
     assert len(family.preprocess_output_names()) == 128
     assert len(family.all_factor_names()) == 160
     assert family.all_factor_names()[0] == "daily_return_ma5"
@@ -48,42 +41,46 @@ def test_rolling_return_family_expands_profiles() -> None:
     assert "z_size_industry_neu_overnight_return_ma180" in family.all_factor_names()
 
 
-def test_parse_rolling_return_name_handles_profiles() -> None:
-    assert parse_rolling_return_name("daily_return_ma20") == {
+def test_parse_name_handles_raw_and_preprocessed() -> None:
+    family = get_family("rolling_return")
+
+    assert family.parse_name("daily_return_ma20") == {
         "base_factor": "daily_return",
         "preprocess": "raw",
         "window": 20,
     }
-    assert parse_rolling_return_name("z_size_industry_neu_overnight_return_ma180") == {
+    assert family.parse_name("z_size_industry_neu_overnight_return_ma180") == {
         "base_factor": "overnight_return",
         "preprocess": "z_size_industry_neu",
         "window": 180,
     }
 
 
-def test_parse_rolling_return_name_round_trips_family_profiles() -> None:
+def test_parse_name_round_trips_all_profiles() -> None:
     family = get_family("rolling_return")
 
     for profile in family.profiles:
         factor_name = profile.output_name("daily_return_ma20")
-
-        assert parse_rolling_return_name(factor_name) == {
+        assert family.parse_name(factor_name) == {
             "base_factor": "daily_return",
             "preprocess": profile.key,
             "window": 20,
         }
 
 
-def test_parse_rolling_return_name_rejects_unknown_names() -> None:
+def test_parse_name_rejects_unknown_names() -> None:
+    family = get_family("rolling_return")
+
     with pytest.raises(ValueError, match="unknown rolling return factor name"):
-        parse_rolling_return_name("ma_bias_20d")
-    with pytest.raises(ValueError, match="factor name does not end with _ma<window>"):
-        parse_rolling_return_name("daily_return_mean20")
+        family.parse_name("ma_bias_20d")
+    with pytest.raises(ValueError, match="does not end with _ma<window>"):
+        family.parse_name("daily_return_mean20")
     with pytest.raises(ValueError, match="unsupported rolling return window"):
-        parse_rolling_return_name("daily_return_ma999")
+        family.parse_name("daily_return_ma999")
 
 
-def test_derive_rolling_mean_panel_uses_half_window_min_periods() -> None:
+def test_derive_uses_half_window_min_periods() -> None:
+    family = RollingReturnFamily()
     panel = pd.DataFrame(
         {
             "000001.SZ": [1.0, 2.0, 3.0, 4.0, 5.0],
@@ -94,7 +91,7 @@ def test_derive_rolling_mean_panel_uses_half_window_min_periods() -> None:
         ),
     )
 
-    result = derive_rolling_mean_panel(panel, window=4)
+    result = family.derive(panel, window=4)
 
     expected = pd.DataFrame(
         {
@@ -104,9 +101,3 @@ def test_derive_rolling_mean_panel_uses_half_window_min_periods() -> None:
         index=panel.index,
     )
     pd.testing.assert_frame_equal(result, expected)
-
-
-def test_rolling_returns_exports_only_panel_rolling_mean_helper() -> None:
-    assert "derive_rolling_mean_panel" in rolling_returns.__all__
-    assert "derive_rolling_mean_output" not in rolling_returns.__all__
-    assert not hasattr(rolling_returns, "derive_rolling_mean_output")
