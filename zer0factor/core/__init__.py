@@ -99,6 +99,13 @@ class Factor:
         raise NotImplementedError
 
 
+class ParametricFactor(Factor):
+    """Factor whose spec is determined at instantiation time by constructor parameters."""
+
+    def __init__(self, spec: FactorSpec) -> None:
+        self.spec = spec
+
+
 def to_factor_output(
     value: pd.DataFrame | pd.Series,
     factor_name: str | None = None,
@@ -254,6 +261,7 @@ __all__ = [
     "Factor",
     "FactorFrame",
     "FactorSpec",
+    "ParametricFactor",
     "STANDARD_FIELDS",
     "Zer0ShareDataProvider",
     "run_factor",
