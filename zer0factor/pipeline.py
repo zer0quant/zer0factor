@@ -4,19 +4,17 @@ import logging
 import multiprocessing
 import time
 import tomllib
-from abc import ABC, abstractmethod
 from collections.abc import Callable
 from concurrent.futures import ProcessPoolExecutor
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import pandas as pd
 
 from zer0factor.core import to_factor_output
-from zer0factor.eval.analysis import PROFILE_PREFIXES
 from zer0factor.exposures import build_sw_l1_industry_panel
-from zer0factor.factors.rolling_returns import BASE_RETURN_FACTORS, WINDOWS
+from zer0factor.factors.rolling_returns import WINDOWS
+from zer0factor.families import FAMILIES, PROFILES, FactorFamily, PreprocessProfile, get_family
 from zer0factor.notify.null import NullNotifier
 from zer0factor.preprocess import impute_missing, neutralize, standardize, winsorize
 from zer0factor.storage import FactorStorage
@@ -24,106 +22,9 @@ from zer0factor.storage import FactorStorage
 LOGGER = logging.getLogger(__name__)
 SIZE_FACTOR_NAME = "z_log_circulating_market_cap"
 
-
-@dataclass(frozen=True)
-class PreprocessProfile:
-    key: str
-    prefix: str
-    neutralize_method: str | None
-
-    def output_name(self, raw_factor_name: str) -> str:
-        return f"{self.prefix}{raw_factor_name}"
-
-
-PROFILES = (
-    PreprocessProfile("z", "z_", None),
-    PreprocessProfile("z_size_neu", "z_size_neu_", "size"),
-    PreprocessProfile("z_industry_neu", "z_industry_neu_", "industry"),
-    PreprocessProfile("z_size_industry_neu", "z_size_industry_neu_", "size_industry"),
-)
-
-
-class FactorFamily(ABC):
-    name: str
-    base_factors: tuple[str, ...]
-    windows: tuple[int, ...]
-    profiles: tuple[PreprocessProfile, ...] = PROFILES
-
-    @abstractmethod
-    def raw_name(self, base_factor: str, window: int) -> str: ...
-
-    @abstractmethod
-    def derive(self, panel: pd.DataFrame, window: int) -> pd.DataFrame: ...
-
-    @abstractmethod
-    def parse_name(self, factor_name: str) -> dict: ...
-
-    def raw_names(self) -> tuple[str, ...]:
-        return tuple(
-            self.raw_name(base_factor, window)
-            for base_factor in self.base_factors
-            for window in self.windows
-        )
-
-    def preprocess_output_names(self) -> list[str]:
-        return [
-            profile.output_name(raw_name)
-            for raw_name in self.raw_names()
-            for profile in self.profiles
-        ]
-
-    def all_factor_names(self) -> list[str]:
-        return [*self.raw_names(), *self.preprocess_output_names()]
-
-
-class RollingReturnFamily(FactorFamily):
-    name = "rolling_return"
-    base_factors = BASE_RETURN_FACTORS
-    windows = WINDOWS
-
-    def raw_name(self, base_factor: str, window: int) -> str:
-        return f"{base_factor}_ma{window}"
-
-    def derive(self, panel: pd.DataFrame, window: int) -> pd.DataFrame:
-        return panel.rolling(window=window, min_periods=window // 2).mean()
-
-    def parse_name(self, factor_name: str) -> dict:
-        preprocess = "raw"
-        raw = factor_name
-        for prefix, profile in PROFILE_PREFIXES:
-            if factor_name.startswith(prefix):
-                preprocess = profile
-                raw = factor_name.removeprefix(prefix)
-                break
-
-        base_factor = next(
-            (bf for bf in self.base_factors if raw.startswith(f"{bf}_")),
-            None,
-        )
-        if base_factor is None:
-            raise ValueError(f"unknown rolling return factor name: {factor_name}")
-
-        suffix = raw.removeprefix(f"{base_factor}_ma")
-        if suffix == raw or not suffix.isdigit():
-            raise ValueError(f"factor name does not end with _ma<window>: {factor_name}")
-        window = int(suffix)
-        if window not in self.windows:
-            raise ValueError(f"unsupported rolling return window: {factor_name}")
-
-        return {"base_factor": base_factor, "preprocess": preprocess, "window": window}
-
-
-FAMILIES: dict[str, FactorFamily] = {
-    "rolling_return": RollingReturnFamily(),
-}
-
-
-def get_family(name: str) -> FactorFamily:
-    try:
-        return FAMILIES[name]
-    except KeyError as exc:
-        known = ", ".join(sorted(FAMILIES))
-        raise ValueError(f"unknown factor family: {name}; known families: {known}") from exc
+ProgressFn = Callable[[int, int, str], None]
+LogFn = Callable[[str], None]
+PostProcessFn = Callable[[str, pd.DataFrame], dict[str, int]]
 
 
 def compute_raw_family_factors(
@@ -667,15 +568,9 @@ def _parse_trade_dates(values: pd.Series) -> pd.Series:
 
 
 __all__ = [
-    "FAMILIES",
-    "PROFILES",
     "SIZE_FACTOR_NAME",
-    "FactorFamily",
-    "RollingReturnFamily",
-    "PreprocessProfile",
     "compute_raw_family_factors",
     "compute_raw_rolling_return_factors",
-    "get_family",
     "preprocess_all_factors",
     "preprocess_one_factor",
     "run_build_stage",

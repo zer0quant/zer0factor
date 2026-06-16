@@ -5,10 +5,9 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
+from zer0factor.families import FAMILIES, FactorFamily
 from zer0factor.pipeline import (
-    FAMILIES,
     SIZE_FACTOR_NAME,
-    FactorFamily,
     _long_to_wide,
     compute_raw_family_factors,
     compute_raw_rolling_return_factors,

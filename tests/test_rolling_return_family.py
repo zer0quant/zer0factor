@@ -4,7 +4,7 @@ import pandas as pd
 import pytest
 
 from zer0factor.factors.rolling_returns import BASE_RETURN_FACTORS, WINDOWS
-from zer0factor.pipeline import RollingReturnFamily, get_family
+from zer0factor.families import RollingReturnFamily, get_family
 
 
 def test_rolling_return_constants_match_design() -> None:
