@@ -83,13 +83,22 @@ def evaluate_factor(
         figure_writer=FactorFigureWriter(),
         log_info=log_info,
     )
-    return evaluator.evaluate(
+    result = evaluator.evaluate(
         factor_name,
         run,
         shared_data=EvaluationSharedData(
             price_data=price_data,
             universe_panel=universe_panel,
         ),
+    )
+    return FactorEvaluationResult(
+        factor_name=result.factor_name,
+        clean_factor_data=result.clean_factor_data,
+        summary=result.summary,
+        daily_ic=result.daily_ic,
+        quantile_returns=result.quantile_returns,
+        figure_paths=result.figure_paths,
+        output_dir=result.output_dir,
     )
 
 

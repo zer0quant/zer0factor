@@ -4,6 +4,7 @@ import pandas as pd
 import pytest
 
 from zer0factor.eval import EvaluationConfig, evaluate_factor, evaluate_factors
+from zer0factor.eval.config import FactorEvaluationResult as LegacyFactorEvaluationResult
 from zer0factor.eval.loaders import load_price_data, load_universe_panel
 from zer0factor.eval.pipeline import _calculate_period_sample_counts
 from zer0factor.storage import FactorStorage
@@ -257,6 +258,22 @@ def test_evaluate_factor_derives_factor_artifact_dir_from_run_dir(tmp_path, monk
     assert (factor_dir / "daily_ic.parquet").exists()
     assert (factor_dir / "quantile_returns.parquet").exists()
     assert (factor_dir / "figures" / "quantile_returns_1D.png").exists()
+
+
+def test_evaluate_factor_returns_legacy_result_type(tmp_path, monkeypatch):
+    storage = FactorStorage(tmp_path / "factors", tmp_path / "factor.duckdb")
+    write_factor_a(storage)
+    patch_clean_factor_data(monkeypatch)
+
+    result = evaluate_factor(
+        factor_name="factor_a",
+        storage=storage,
+        pro=FakePro(),
+        config=make_config(tmp_path),
+        run_dir=tmp_path / "evaluations" / "run_001",
+    )
+
+    assert isinstance(result, LegacyFactorEvaluationResult)
 
 
 def test_evaluate_factor_writes_quantile_return_figure_for_each_period(
