@@ -9,6 +9,33 @@ import pandas as pd
 from zer0factor.eval.config import EvaluationConfig
 
 
+class EvaluationArtifactStore:
+    def create_run(self, run) -> None:
+        run.run_dir.mkdir(parents=True, exist_ok=False)
+
+    def write_factor_artifacts(self, result) -> dict[str, Path]:
+        if result.clean_factor_data is None:
+            raise ValueError("clean_factor_data is required to write factor artifacts")
+        if result.daily_ic is None:
+            raise ValueError("daily_ic is required to write factor artifacts")
+        if result.quantile_returns is None:
+            raise ValueError("quantile_returns is required to write factor artifacts")
+        return write_factor_artifacts(
+            factor_dir=result.output_dir,
+            clean_factor_data=result.clean_factor_data,
+            daily_ic=result.daily_ic,
+            quantile_returns=result.quantile_returns,
+        )
+
+    def write_run_summary(self, run, summary: pd.DataFrame) -> dict[str, Path]:
+        return write_run_summary(
+            run_dir=run.run_dir,
+            summary=summary,
+            config=run.config,
+            run_id=run.run_id,
+        )
+
+
 def create_run_directory(
     config: EvaluationConfig, run_id: str | None = None
 ) -> tuple[str, Path]:
