@@ -12,23 +12,22 @@ from pathlib import Path
 import pandas as pd
 from alphalens.utils import get_clean_factor_and_forward_returns
 
-from zer0factor.eval.alphalens_adapter import (
-    build_price_matrix,
-    factor_long_to_alphalens_series,
-    filter_factor_by_universe,
-)
 from zer0factor.eval.artifacts import (
+    EvaluationArtifactStore,
     create_run_directory,
-    write_factor_artifacts,
     write_run_summary,
 )
+from zer0factor.eval.calculator import MetricsCalculator
 from zer0factor.eval.config import (
     EvaluationConfig,
     EvaluationRunResult,
     FactorEvaluationResult,
 )
+from zer0factor.eval.data import EvaluationDataLoader
+from zer0factor.eval.domain import EvaluationRun, EvaluationRunConfig
+from zer0factor.eval.evaluator import EvaluationSharedData, FactorEvaluator
+from zer0factor.eval.figures import FactorFigureWriter
 from zer0factor.eval.loaders import (
-    load_index_daily,
     load_price_data,
     load_stored_factor,
     load_universe_panel,
@@ -57,119 +56,89 @@ def evaluate_factor(
     universe_panel: pd.DataFrame | None = None,
     log_info: Callable[[str], None] | None = None,
 ) -> FactorEvaluationResult:
-    if factor_name not in config.factor_names:
-        raise ValueError("factor_name must be included in config.factor_names")
-
-    factor_data = load_stored_factor(
-        storage,
-        factor_name,
+    run_config = EvaluationRunConfig(
+        factor_names=config.factor_names,
         start_date=config.start_date,
         end_date=config.end_date,
-    )
-    if factor_data.empty:
-        raise ValueError(f"{factor_name}: no factor data")
-    _log(
-        log_info,
-        f"evaluation_factor_load_finished factor={factor_name} rows={len(factor_data)}",
-    )
-
-    factor = factor_long_to_alphalens_series(factor_data)
-    factor = filter_factor_by_universe(factor, universe_panel)
-    if factor.empty:
-        raise ValueError(f"{factor_name}: no factor data after universe filtering")
-
-    if price_data is None:
-        price_end_date = config.end_date or _max_factor_trade_date(factor_data)
-        price_data = load_price_data(
-            pro,
-            start_date=config.start_date,
-            end_date=price_end_date,
-            periods=config.periods,
-        )
-    prices = build_price_matrix(price_data, config.return_type)
-
-    _log(log_info, f"evaluation_clean_factor_started factor={factor_name}")
-    clean_factor_data = _get_clean_factor_and_forward_returns(
-        factor,
-        prices,
-        quantiles=config.quantiles,
         periods=config.periods,
-        max_loss=config.max_loss,
-    )
-    if clean_factor_data.empty:
-        raise ValueError(f"{factor_name}: no clean factor data")
-    _log(
-        log_info,
-        f"evaluation_clean_factor_finished factor={factor_name} rows={len(clean_factor_data)}",
-    )
-
-    daily_ic = calculate_daily_ic(clean_factor_data)
-    quantile_returns = calculate_quantile_returns(clean_factor_data)
-    if quantile_returns.empty or len(quantile_returns.columns) == 0:
-        raise ValueError(f"{factor_name}: no quantile return periods")
-    _log(
-        log_info,
-        f"evaluation_metrics_finished factor={factor_name} periods={len(quantile_returns.columns)}",
-    )
-
-    index_returns = None
-    if config.benchmark_index:
-        index_returns = load_index_daily(
-            pro,
-            ts_code=config.benchmark_index,
-            start_date=config.start_date,
-            end_date=config.end_date,
-        )
-
-    summary = build_summary(
-        factor_name=factor_name,
-        return_type=config.return_type,
-        clean_factor_data_sample_count=len(clean_factor_data),
-        clean_factor_data_start=clean_factor_data.index.get_level_values("date").min(),
-        clean_factor_data_end=clean_factor_data.index.get_level_values("date").max(),
         quantiles=config.quantiles,
-        daily_ic=daily_ic,
-        quantile_returns=quantile_returns,
-        clean_factor_data=clean_factor_data,
-        index_returns=index_returns,
+        return_type=config.return_type,
+        max_loss=config.max_loss,
+        universe=config.universe,
+        output_dir=config.output_dir,
+        rolling_ic_window=config.rolling_ic_window,
+        benchmark_index=config.benchmark_index,
         transaction_cost_bps=config.transaction_cost_bps,
-        period_sample_counts=_calculate_period_sample_counts(
-            factor,
-            prices,
-            quantiles=config.quantiles,
-            periods=config.periods,
-            max_loss=config.max_loss,
+    )
+    run_dir = Path(run_dir)
+    run = EvaluationRun(
+        run_id=run_dir.name,
+        run_dir=run_dir,
+        config=run_config,
+    )
+    evaluator = FactorEvaluator(
+        data_loader=EvaluationDataLoader(storage, pro),
+        metric_calculator=_PipelineCompatibilityMetricsCalculator(),
+        artifact_store=EvaluationArtifactStore(),
+        figure_writer=FactorFigureWriter(),
+        log_info=log_info,
+    )
+    return evaluator.evaluate(
+        factor_name,
+        run,
+        shared_data=EvaluationSharedData(
+            price_data=price_data,
+            universe_panel=universe_panel,
         ),
     )
 
-    factor_dir = Path(run_dir) / "factors" / factor_name
-    write_factor_artifacts(
-        factor_dir=factor_dir,
-        clean_factor_data=clean_factor_data,
-        daily_ic=daily_ic,
-        quantile_returns=quantile_returns,
-    )
-    figure_paths = _write_factor_figures(
-        factor_name=factor_name,
-        factor_dir=factor_dir,
-        daily_ic=daily_ic,
-        quantile_returns=quantile_returns,
-        rolling_ic_window=config.rolling_ic_window,
-    )
-    _log(
-        log_info,
-        f"evaluation_artifacts_written factor={factor_name} output_dir={factor_dir}",
-    )
 
-    return FactorEvaluationResult(
-        factor_name=factor_name,
-        clean_factor_data=clean_factor_data,
-        summary=summary,
-        daily_ic=daily_ic,
-        quantile_returns=quantile_returns,
-        figure_paths=figure_paths,
-        output_dir=factor_dir,
-    )
+class _PipelineCompatibilityMetricsCalculator(MetricsCalculator):
+    def clean_factor_and_forward_returns(
+        self,
+        factor: pd.Series,
+        prices: pd.DataFrame,
+        *,
+        quantiles: int,
+        periods: tuple[int, ...],
+        max_loss: float,
+    ) -> pd.DataFrame:
+        return _get_clean_factor_and_forward_returns(
+            factor,
+            prices,
+            quantiles=quantiles,
+            periods=periods,
+            max_loss=max_loss,
+        )
+
+    def calculate_daily_ic(self, clean_factor_data: pd.DataFrame) -> pd.DataFrame:
+        with _suppress_known_evaluation_warnings(), redirect_stdout(io.StringIO()):
+            return calculate_daily_ic(clean_factor_data)
+
+    def calculate_quantile_returns(self, clean_factor_data: pd.DataFrame) -> pd.DataFrame:
+        with _suppress_known_evaluation_warnings(), redirect_stdout(io.StringIO()):
+            return calculate_quantile_returns(clean_factor_data)
+
+    def build_factor_summary(self, **kwargs) -> pd.DataFrame:
+        with _suppress_known_evaluation_warnings(), redirect_stdout(io.StringIO()):
+            return build_summary(**kwargs)
+
+    def calculate_period_sample_counts(
+        self,
+        factor: pd.Series,
+        prices: pd.DataFrame,
+        *,
+        quantiles: int,
+        periods: tuple[int, ...],
+        max_loss: float,
+    ) -> dict[str, int]:
+        return _calculate_period_sample_counts(
+            factor,
+            prices,
+            quantiles=quantiles,
+            periods=periods,
+            max_loss=max_loss,
+        )
 
 
 def evaluate_factors(
