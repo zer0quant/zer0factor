@@ -35,13 +35,16 @@ class MetricsCalculator:
             )
 
     def calculate_daily_ic(self, clean_factor_data: pd.DataFrame) -> pd.DataFrame:
-        return calculate_daily_ic(clean_factor_data)
+        with suppress_known_evaluation_warnings(), redirect_stdout(io.StringIO()):
+            return calculate_daily_ic(clean_factor_data)
 
     def calculate_quantile_returns(self, clean_factor_data: pd.DataFrame) -> pd.DataFrame:
-        return calculate_quantile_returns(clean_factor_data)
+        with suppress_known_evaluation_warnings(), redirect_stdout(io.StringIO()):
+            return calculate_quantile_returns(clean_factor_data)
 
     def build_factor_summary(self, **kwargs) -> pd.DataFrame:
-        return build_summary(**kwargs)
+        with suppress_known_evaluation_warnings(), redirect_stdout(io.StringIO()):
+            return build_summary(**kwargs)
 
     def calculate_period_sample_counts(
         self,

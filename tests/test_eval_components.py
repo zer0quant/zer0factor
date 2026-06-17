@@ -69,3 +69,22 @@ def test_metrics_calculator_builds_period_sample_counts(monkeypatch):
     )
 
     assert counts == {"1D": 2, "5D": 2}
+
+
+def test_metrics_calculator_suppresses_metric_stdout(monkeypatch, capsys):
+    calculator = MetricsCalculator()
+    expected = pd.DataFrame({"1D": [0.1]})
+
+    def fake_daily_ic(clean_factor_data):
+        print("alphalens output")
+        return expected
+
+    monkeypatch.setattr(
+        "zer0factor.eval.calculator.calculate_daily_ic",
+        fake_daily_ic,
+    )
+
+    result = calculator.calculate_daily_ic(pd.DataFrame({"factor": [1.0]}))
+
+    pd.testing.assert_frame_equal(result, expected)
+    assert capsys.readouterr().out == ""
