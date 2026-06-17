@@ -107,6 +107,11 @@ class EvaluationRequest:
     analysis_family: str | None = None
 
     def __post_init__(self) -> None:
+        if isinstance(self.factor_names, (str, bytes)):
+            raise ValueError("factor_names must be a sequence of names")
+        if isinstance(self.categories, (str, bytes)):
+            raise ValueError("categories must be a sequence of names")
+
         object.__setattr__(self, "factor_names", tuple(self.factor_names))
         object.__setattr__(self, "categories", tuple(self.categories))
         object.__setattr__(

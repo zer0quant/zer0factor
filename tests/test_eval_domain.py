@@ -81,3 +81,13 @@ def test_evaluation_request_allows_explicit_factor_names(tmp_path):
 
     assert request.factor_names == ("factor_a",)
     assert request.factor_source == "explicit"
+
+
+def test_evaluation_request_rejects_string_factor_names():
+    with pytest.raises(ValueError, match="factor_names must be a sequence of names"):
+        EvaluationRequest(factor_names="factor_a")
+
+
+def test_evaluation_request_rejects_string_categories():
+    with pytest.raises(ValueError, match="categories must be a sequence of names"):
+        EvaluationRequest(categories="style")
