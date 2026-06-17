@@ -134,6 +134,8 @@ class EvaluationWorkflow:
             report_thresholds=request.report_thresholds,
             analysis_family=request.analysis_family,
         )
+        if _requires_process_pool(config):
+            self._ensure_process_pool_supported()
         run = self.run_factory.create(config, run_id=run_id)
 
         self.notifier.notify_start(
@@ -191,7 +193,8 @@ class EvaluationWorkflow:
         )
 
     def _build_executor(self, run: EvaluationRun):
-        if run.config.workers > 1 and len(run.config.factor_names) > 1:
+        if _requires_process_pool(run.config):
+            self._ensure_process_pool_supported()
             return ProcessPoolEvaluationExecutor(
                 storage=self.data_loader.storage,
                 pro=self.data_loader.pro,
@@ -213,7 +216,26 @@ class EvaluationWorkflow:
             log_info=self.log_info,
         )
 
+    def _ensure_process_pool_supported(self) -> None:
+        if (
+            type(self.data_loader) is EvaluationDataLoader
+            and type(self.metric_calculator) is MetricsCalculator
+            and type(self.artifact_store) is EvaluationArtifactStore
+            and type(self.figure_writer) is FactorFigureWriter
+        ):
+            return
+
+        raise ValueError(
+            "custom workflow components are not supported with process-pool "
+            "execution yet; use workers=1 or construct the workflow with "
+            "from_dependencies"
+        )
+
 
 def _log(log_info: Callable[[str], None] | None, message: str) -> None:
     if log_info is not None:
         log_info(message)
+
+
+def _requires_process_pool(config: EvaluationRunConfig) -> bool:
+    return config.workers > 1 and len(config.factor_names) > 1
