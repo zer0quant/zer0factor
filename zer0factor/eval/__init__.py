@@ -17,6 +17,7 @@ from zer0factor.eval.report import (
     find_latest_run_dir,
     generate_evaluation_report,
 )
+from zer0factor.eval.workflow import EvaluationRunFactory, EvaluationWorkflow
 
 __all__ = [
     "BatchEvaluationConfig",
@@ -26,6 +27,8 @@ __all__ = [
     "EvaluationRun",
     "EvaluationRunConfig",
     "EvaluationRunResult",
+    "EvaluationRunFactory",
+    "EvaluationWorkflow",
     "EvaluationWorkflowResult",
     "FactorEvaluationResult",
     "ReportThresholds",
