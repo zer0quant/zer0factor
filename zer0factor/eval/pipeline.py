@@ -30,7 +30,9 @@ from zer0factor.eval.execution import (
 from zer0factor.eval.evaluator import EvaluationSharedData, FactorEvaluator
 from zer0factor.eval.figures import FactorFigureWriter
 from zer0factor.eval.loaders import (
+    load_price_data,
     load_stored_factor,
+    load_universe_panel,
 )
 from zer0factor.eval.metrics import (
     build_summary,
@@ -224,14 +226,7 @@ def evaluate_factors(
         workers=workers,
     )
     run = EvaluationRun(run_id=run_id, run_dir=run_dir, config=run_config)
-    data_loader = EvaluationDataLoader(storage, pro)
-    evaluator = FactorEvaluator(
-        data_loader=data_loader,
-        metric_calculator=_PipelineCompatibilityMetricsCalculator(),
-        artifact_store=EvaluationArtifactStore(),
-        figure_writer=FactorFigureWriter(),
-        log_info=log_info,
-    )
+    data_loader = _PipelineCompatibilityDataLoader(storage, pro)
     if workers > 1 and len(resolved_config.factor_names) > 1:
         executor = ProcessPoolEvaluationExecutor(
             storage=storage,
@@ -244,7 +239,12 @@ def evaluate_factors(
         )
     else:
         executor = SerialEvaluationExecutor(
-            evaluator=evaluator,
+            evaluator=_PipelineCompatibilityEvaluator(
+                storage=storage,
+                pro=pro,
+                config=resolved_config,
+                log_info=log_info,
+            ),
             data_loader=data_loader,
             log_info=log_info,
             notifier=_notifier,
@@ -298,6 +298,60 @@ def _to_legacy_factor_result(result) -> FactorEvaluationResult:
         figure_paths=result.figure_paths,
         output_dir=result.output_dir,
     )
+
+
+class _PipelineCompatibilityDataLoader(EvaluationDataLoader):
+    def load_prices(
+        self, *, start_date: str, end_date: str | None, periods: tuple[int, ...]
+    ) -> pd.DataFrame:
+        return load_price_data(
+            self.pro,
+            start_date=start_date,
+            end_date=end_date,
+            periods=periods,
+        )
+
+    def load_universe(
+        self, *, universe_name: str | None, start_date: str, end_date: str | None
+    ) -> pd.DataFrame | None:
+        return load_universe_panel(
+            self.pro,
+            universe_name=universe_name,
+            start_date=start_date,
+            end_date=end_date,
+        )
+
+
+class _PipelineCompatibilityEvaluator:
+    def __init__(
+        self,
+        *,
+        storage,
+        pro,
+        config: EvaluationConfig,
+        log_info: Callable[[str], None] | None,
+    ):
+        self.storage = storage
+        self.pro = pro
+        self.config = config
+        self.log_info = log_info
+
+    def evaluate(
+        self,
+        factor_name: str,
+        run: EvaluationRun,
+        shared_data: EvaluationSharedData | None = None,
+    ) -> FactorEvaluationResult:
+        return evaluate_factor(
+            factor_name=factor_name,
+            storage=self.storage,
+            pro=self.pro,
+            config=self.config,
+            run_dir=run.run_dir,
+            price_data=shared_data.price_data if shared_data else None,
+            universe_panel=shared_data.universe_panel if shared_data else None,
+            log_info=self.log_info,
+        )
 
 
 def _log(log_info: Callable[[str], None] | None, message: str) -> None:
