@@ -100,26 +100,32 @@ def generate_evaluation_report(
 
     resolved_thresholds = thresholds or ReportThresholds()
     summary = pd.read_csv(summary_path)
-    monotonicity = load_quantile_monotonicity(resolved_run_dir, summary)
-    ranked = build_ranked_summary(summary, resolved_thresholds, monotonicity=monotonicity)
 
-    ranked_summary_path = resolved_run_dir / "ranked_summary.csv"
-    report_path = resolved_run_dir / "report.md"
-    ranked.to_csv(ranked_summary_path, index=False)
-    report_path.write_text(
-        render_markdown_report(
-            run_dir=resolved_run_dir,
-            ranked_summary=ranked,
-            thresholds=resolved_thresholds,
-        ),
-        encoding="utf-8",
+    from zer0factor.eval.reporting import (
+        EvaluationReporter,
+        MarkdownReportRenderer,
+        QuantileMonotonicityLoader,
+        SummaryRanker,
     )
-    return EvaluationReportResult(
-        run_dir=resolved_run_dir,
-        report_path=report_path,
-        ranked_summary_path=ranked_summary_path,
-        ranked_summary=ranked,
+
+    @dataclass(frozen=True)
+    class _ReportRun:
+        run_dir: Path
+
+        @property
+        def ranked_summary_csv(self) -> Path:
+            return self.run_dir / "ranked_summary.csv"
+
+        @property
+        def report_md(self) -> Path:
+            return self.run_dir / "report.md"
+
+    reporter = EvaluationReporter(
+        ranker=SummaryRanker(resolved_thresholds),
+        monotonicity_loader=QuantileMonotonicityLoader(),
+        renderer=MarkdownReportRenderer(),
     )
+    return reporter.generate(_ReportRun(resolved_run_dir), summary)
 
 
 def render_markdown_report(
