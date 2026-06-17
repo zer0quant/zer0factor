@@ -4,6 +4,12 @@ from zer0factor.eval.config import (
     EvaluationRunResult,
     FactorEvaluationResult,
 )
+from zer0factor.eval.domain import (
+    EvaluationRequest,
+    EvaluationRun,
+    EvaluationRunConfig,
+    EvaluationWorkflowResult,
+)
 from zer0factor.eval.pipeline import evaluate_factor, evaluate_factors
 from zer0factor.eval.report import (
     EvaluationReportResult,
@@ -15,8 +21,12 @@ from zer0factor.eval.report import (
 __all__ = [
     "BatchEvaluationConfig",
     "EvaluationConfig",
+    "EvaluationRequest",
     "EvaluationReportResult",
+    "EvaluationRun",
+    "EvaluationRunConfig",
     "EvaluationRunResult",
+    "EvaluationWorkflowResult",
     "FactorEvaluationResult",
     "ReportThresholds",
     "evaluate_factor",
