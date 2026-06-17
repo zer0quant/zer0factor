@@ -1,11 +1,9 @@
 from __future__ import annotations
 
 import io
-import multiprocessing
 import time
 import warnings
 from collections.abc import Callable
-from concurrent.futures import ProcessPoolExecutor
 from contextlib import contextmanager, redirect_stdout
 from pathlib import Path
 
@@ -25,12 +23,14 @@ from zer0factor.eval.config import (
 )
 from zer0factor.eval.data import EvaluationDataLoader
 from zer0factor.eval.domain import EvaluationRun, EvaluationRunConfig
+from zer0factor.eval.execution import (
+    ProcessPoolEvaluationExecutor,
+    SerialEvaluationExecutor,
+)
 from zer0factor.eval.evaluator import EvaluationSharedData, FactorEvaluator
 from zer0factor.eval.figures import FactorFigureWriter
 from zer0factor.eval.loaders import (
-    load_price_data,
     load_stored_factor,
-    load_universe_panel,
 )
 from zer0factor.eval.metrics import (
     build_summary,
@@ -208,66 +208,51 @@ def evaluate_factors(
         f"periods={','.join(str(period) for period in resolved_config.periods)} "
         f"return_type={resolved_config.return_type}",
     )
-    price_end_date = resolved_config.end_date or _max_stored_factor_trade_date(
-        storage,
-        resolved_config.factor_names,
-        start_date=resolved_config.start_date,
-    )
-    _log(
-        log_info,
-        "evaluation_price_load_started "
-        f"start_date={resolved_config.start_date} end_date={price_end_date}",
-    )
-    price_data = load_price_data(
-        pro,
-        start_date=resolved_config.start_date,
-        end_date=price_end_date,
-        periods=resolved_config.periods,
-    )
-    _log(log_info, f"evaluation_price_load_finished rows={len(price_data)}")
-    universe_panel = load_universe_panel(
-        pro,
-        universe_name=resolved_config.universe,
+    run_config = EvaluationRunConfig(
+        factor_names=resolved_config.factor_names,
         start_date=resolved_config.start_date,
         end_date=resolved_config.end_date,
+        periods=resolved_config.periods,
+        quantiles=resolved_config.quantiles,
+        return_type=resolved_config.return_type,
+        max_loss=resolved_config.max_loss,
+        universe=resolved_config.universe,
+        output_dir=resolved_config.output_dir,
+        rolling_ic_window=resolved_config.rolling_ic_window,
+        benchmark_index=resolved_config.benchmark_index,
+        transaction_cost_bps=resolved_config.transaction_cost_bps,
+        workers=workers,
     )
-
+    run = EvaluationRun(run_id=run_id, run_dir=run_dir, config=run_config)
+    data_loader = EvaluationDataLoader(storage, pro)
+    evaluator = FactorEvaluator(
+        data_loader=data_loader,
+        metric_calculator=_PipelineCompatibilityMetricsCalculator(),
+        artifact_store=EvaluationArtifactStore(),
+        figure_writer=FactorFigureWriter(),
+        log_info=log_info,
+    )
     if workers > 1 and len(resolved_config.factor_names) > 1:
-        factor_results = _evaluate_factors_parallel(
-            resolved_config,
+        executor = ProcessPoolEvaluationExecutor(
             storage=storage,
             pro=pro,
-            run_dir=run_dir,
-            price_data=price_data,
-            universe_panel=universe_panel,
+            data_loader=data_loader,
             workers=workers,
             log_info=log_info,
             notifier=_notifier,
             milestones=_milestones,
         )
     else:
-        factor_results = []
-        with _suppress_known_evaluation_warnings():
-            for factor_name in resolved_config.factor_names:
-                _log(log_info, f"evaluation_factor_started factor={factor_name}")
-                factor_results.append(
-                    evaluate_factor(
-                        factor_name=factor_name,
-                        storage=storage,
-                        pro=pro,
-                        config=resolved_config,
-                        run_dir=run_dir,
-                        price_data=price_data,
-                        universe_panel=universe_panel,
-                        log_info=log_info,
-                    )
-                )
-                _done = len(factor_results)
-                if _done in _milestones:
-                    _notifier.notify_progress("evaluate", _done, len(resolved_config.factor_names))
-        factor_results = tuple(factor_results)
+        executor = SerialEvaluationExecutor(
+            evaluator=evaluator,
+            data_loader=data_loader,
+            log_info=log_info,
+            notifier=_notifier,
+            milestones=_milestones,
+        )
+    domain_factor_results = executor.execute(run)
     summary = pd.concat(
-        [factor_result.summary for factor_result in factor_results],
+        [factor_result.summary for factor_result in domain_factor_results],
         ignore_index=True,
     )
     run_paths = write_run_summary(
@@ -279,11 +264,15 @@ def evaluate_factors(
     _log(
         log_info,
         "evaluation_run_finished "
-        f"run_id={run_id} output_dir={run_dir} factors={len(factor_results)}",
+        f"run_id={run_id} output_dir={run_dir} factors={len(domain_factor_results)}",
     )
 
     _notifier.notify_eval_done(
-        "evaluate", run_id, len(factor_results), time.monotonic() - _t0
+        "evaluate", run_id, len(domain_factor_results), time.monotonic() - _t0
+    )
+    factor_results = tuple(
+        _to_legacy_factor_result(factor_result)
+        for factor_result in domain_factor_results
     )
     return EvaluationRunResult(
         run_id=run_id,
@@ -294,81 +283,20 @@ def evaluate_factors(
     )
 
 
-_WORKER_EVAL_CONTEXT: dict | None = None
-
-
-def _init_evaluation_worker(context: dict) -> None:
-    global _WORKER_EVAL_CONTEXT
-    _WORKER_EVAL_CONTEXT = context
-
-
-def _evaluate_factor_task(factor_name: str) -> tuple[str, pd.DataFrame]:
-    context = _WORKER_EVAL_CONTEXT
-    if context is None:
-        raise RuntimeError("evaluation worker is not initialized")
-    with _suppress_known_evaluation_warnings():
-        result = evaluate_factor(
-            factor_name=factor_name,
-            storage=context["storage"],
-            pro=context["pro"],
-            config=context["config"],
-            run_dir=context["run_dir"],
-            price_data=context["price_data"],
-            universe_panel=context["universe_panel"],
-        )
-    return factor_name, result.summary
-
-
-def _evaluate_factors_parallel(
-    config: EvaluationConfig,
-    *,
-    storage,
-    pro,
-    run_dir: str | Path,
-    price_data: pd.DataFrame,
-    universe_panel: pd.DataFrame | None,
-    workers: int,
-    log_info: Callable[[str], None] | None,
-    notifier: NullNotifier | None = None,
-    milestones: set[int] | None = None,
-) -> tuple[FactorEvaluationResult, ...]:
-    context = {
-        "storage": storage,
-        "pro": pro,
-        "config": config,
-        "run_dir": run_dir,
-        "price_data": price_data,
-        "universe_panel": universe_panel,
-    }
-    summaries: dict[str, pd.DataFrame] = {}
-    ctx = multiprocessing.get_context("spawn")
-    max_workers = min(workers, len(config.factor_names))
-    with ProcessPoolExecutor(
-        max_workers=max_workers,
-        mp_context=ctx,
-        initializer=_init_evaluation_worker,
-        initargs=(context,),
-    ) as pool:
-        for factor_name, summary in pool.map(
-            _evaluate_factor_task, config.factor_names
-        ):
-            _log(log_info, f"evaluation_factor_finished factor={factor_name}")
-            summaries[factor_name] = summary
-            _done = len(summaries)
-            if milestones and notifier and _done in milestones:
-                notifier.notify_progress("evaluate", _done, len(config.factor_names))
-
+def _to_legacy_factor_result(result) -> FactorEvaluationResult:
     empty = pd.DataFrame()
-    return tuple(
-        FactorEvaluationResult(
-            factor_name=factor_name,
-            clean_factor_data=empty,
-            summary=summaries[factor_name],
-            daily_ic=empty,
-            quantile_returns=empty,
-            output_dir=Path(run_dir) / "factors" / factor_name,
-        )
-        for factor_name in config.factor_names
+    return FactorEvaluationResult(
+        factor_name=result.factor_name,
+        clean_factor_data=result.clean_factor_data
+        if result.clean_factor_data is not None
+        else empty,
+        summary=result.summary,
+        daily_ic=result.daily_ic if result.daily_ic is not None else empty,
+        quantile_returns=result.quantile_returns
+        if result.quantile_returns is not None
+        else empty,
+        figure_paths=result.figure_paths,
+        output_dir=result.output_dir,
     )
 
 
