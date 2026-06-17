@@ -224,7 +224,7 @@ FamilyAnalyzer = EvaluationAnalyzer
 
 class EvaluationAnalysisRunner:
     def __init__(self, configs: dict[str, EvaluationAnalysisConfig] | None = None) -> None:
-        self.configs = configs or ANALYSIS_CONFIGS
+        self.configs = configs if configs is not None else ANALYSIS_CONFIGS
 
     def run(self, run, *, family_name: str) -> AnalysisRunResult:
         if family_name not in self.configs:

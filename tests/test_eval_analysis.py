@@ -215,3 +215,14 @@ def test_analysis_runner_writes_family_outputs(tmp_path) -> None:
     assert result.analyzed_count == 1
     assert result.skipped_count == 1
     assert (run.analysis_dir / "ranked_factors.csv").exists()
+
+
+def test_analysis_runner_honors_empty_configs() -> None:
+    from zer0factor.eval.analysis import EvaluationAnalysisRunner
+
+    with pytest.raises(ValueError) as exc_info:
+        EvaluationAnalysisRunner(configs={}).run(object(), family_name="rolling_return")
+
+    message = str(exc_info.value)
+    assert "unknown analysis family: rolling_return" in message
+    assert message.endswith("known families: ")
