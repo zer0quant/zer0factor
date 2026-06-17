@@ -219,6 +219,27 @@ class EvaluationAnalyzer:
         )
 
 
+FamilyAnalyzer = EvaluationAnalyzer
+
+
+class EvaluationAnalysisRunner:
+    def __init__(self, configs: dict[str, EvaluationAnalysisConfig] | None = None) -> None:
+        self.configs = configs or ANALYSIS_CONFIGS
+
+    def run(self, run, *, family_name: str) -> AnalysisRunResult:
+        if family_name not in self.configs:
+            known = ", ".join(sorted(self.configs))
+            raise ValueError(f"unknown analysis family: {family_name}; known families: {known}")
+        summary_path = run.ranked_summary_csv if run.ranked_summary_csv.exists() else run.summary_csv
+        if not summary_path.exists():
+            raise FileNotFoundError(f"evaluation summary not found: {summary_path}")
+        return run_analysis(
+            summary_path=summary_path,
+            output_dir=run.analysis_dir,
+            config=self.configs[family_name],
+        )
+
+
 def run_analysis(
     *,
     summary_path: Path,

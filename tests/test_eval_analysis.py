@@ -188,3 +188,30 @@ def test_run_analysis_writes_object_oriented_outputs_without_filter_buckets(tmp_
     ]
     assert "long_ann_ret" not in ranked.columns
     assert "long_sharpe" not in ranked.columns
+
+
+def test_analysis_runner_writes_family_outputs(tmp_path) -> None:
+    from zer0factor.eval.analysis import EvaluationAnalysisRunner
+    from zer0factor.eval.domain import EvaluationRun, EvaluationRunConfig
+
+    run_dir = tmp_path / "run_001"
+    run_dir.mkdir()
+    pd.DataFrame([
+        _row("z_size_industry_neu_intraday_return_ma20"),
+        _row("z_neu_daily_return"),
+    ]).to_csv(run_dir / "ranked_summary.csv", index=False)
+    config = EvaluationRunConfig(
+        factor_names=("z_size_industry_neu_intraday_return_ma20", "z_neu_daily_return"),
+        start_date="20240101",
+        end_date="20240131",
+        output_dir=tmp_path,
+        analysis_family="rolling_return",
+    )
+    run = EvaluationRun(run_id="run_001", run_dir=run_dir, config=config)
+
+    result = EvaluationAnalysisRunner().run(run, family_name="rolling_return")
+
+    assert result.report_path == run.analysis_dir / "analysis_report.md"
+    assert result.analyzed_count == 1
+    assert result.skipped_count == 1
+    assert (run.analysis_dir / "ranked_factors.csv").exists()
