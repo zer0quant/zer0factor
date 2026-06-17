@@ -20,7 +20,8 @@ from zer0factor.eval.domain import (
 )
 from zer0factor.eval.evaluator import EvaluationSharedData, FactorEvaluator
 from zer0factor.eval.figures import FactorFigureWriter
-from zer0factor.notify.null import NullNotifier
+
+FactorCompletedCallback = Callable[[int, int], None]
 
 
 class EvaluationExecutor(Protocol):
@@ -33,8 +34,7 @@ class SerialEvaluationExecutor:
     evaluator: object
     data_loader: object | None
     log_info: Callable[[str], None] | None = None
-    notifier: NullNotifier | None = None
-    milestones: set[int] | None = None
+    on_factor_completed: FactorCompletedCallback | None = None
 
     def execute(self, run: EvaluationRun) -> tuple[FactorEvaluationResult, ...]:
         shared_data = self._load_shared_data(run)
@@ -50,10 +50,8 @@ class SerialEvaluationExecutor:
                     )
                 )
                 done = len(results)
-                if self.milestones and done in self.milestones and self.notifier:
-                    self.notifier.notify_progress(
-                        "evaluate", done, len(run.config.factor_names)
-                    )
+                if self.on_factor_completed is not None:
+                    self.on_factor_completed(done, len(run.config.factor_names))
         return tuple(results)
 
     def _load_shared_data(self, run: EvaluationRun) -> EvaluationSharedData | None:
@@ -94,20 +92,17 @@ class ProcessPoolEvaluationExecutor:
     data_loader: object
     workers: int
     log_info: Callable[[str], None] | None = None
-    notifier: NullNotifier | None = None
-    milestones: set[int] | None = None
+    on_factor_completed: FactorCompletedCallback | None = None
 
     def execute(self, run: EvaluationRun) -> tuple[FactorEvaluationResult, ...]:
         shared_data = self._load_shared_data(run)
-        context = {
-            "storage": self.storage,
-            "pro": self.pro,
-            "config": run.config,
-            "run": run,
-            "run_dir": run.run_dir,
-            "price_data": shared_data.price_data if shared_data else None,
-            "universe_panel": shared_data.universe_panel if shared_data else None,
-        }
+        context = _EvaluationWorkerContext(
+            storage=self.storage,
+            pro=self.pro,
+            run=run,
+            price_data=shared_data.price_data,
+            universe_panel=shared_data.universe_panel,
+        )
         summaries: dict[str, pd.DataFrame] = {}
         ctx = multiprocessing.get_context("spawn")
         max_workers = min(self.workers, len(run.config.factor_names))
@@ -124,10 +119,8 @@ class ProcessPoolEvaluationExecutor:
                 _log(self.log_info, f"evaluation_factor_finished factor={factor_name}")
                 summaries[factor_name] = summary
                 done = len(summaries)
-                if self.milestones and done in self.milestones and self.notifier:
-                    self.notifier.notify_progress(
-                        "evaluate", done, len(run.config.factor_names)
-                    )
+                if self.on_factor_completed is not None:
+                    self.on_factor_completed(done, len(run.config.factor_names))
 
         empty = pd.DataFrame()
         return tuple(
@@ -170,10 +163,19 @@ class ProcessPoolEvaluationExecutor:
         )
 
 
-_WORKER_EVAL_CONTEXT: dict | None = None
+@dataclass(frozen=True)
+class _EvaluationWorkerContext:
+    storage: object
+    pro: object
+    run: EvaluationRun
+    price_data: pd.DataFrame | None
+    universe_panel: pd.DataFrame | None
 
 
-def _init_evaluation_worker(context: dict) -> None:
+_WORKER_EVAL_CONTEXT: _EvaluationWorkerContext | None = None
+
+
+def _init_evaluation_worker(context: _EvaluationWorkerContext) -> None:
     global _WORKER_EVAL_CONTEXT
     _WORKER_EVAL_CONTEXT = context
 
@@ -184,7 +186,7 @@ def _evaluate_factor_task(factor_name: str) -> tuple[str, pd.DataFrame]:
         raise RuntimeError("evaluation worker is not initialized")
 
     evaluator = FactorEvaluator(
-        data_loader=EvaluationDataLoader(context["storage"], context["pro"]),
+        data_loader=EvaluationDataLoader(context.storage, context.pro),
         metric_calculator=MetricsCalculator(),
         artifact_store=EvaluationArtifactStore(),
         figure_writer=FactorFigureWriter(),
@@ -192,10 +194,10 @@ def _evaluate_factor_task(factor_name: str) -> tuple[str, pd.DataFrame]:
     with suppress_known_evaluation_warnings():
         result = evaluator.evaluate(
             factor_name,
-            context["run"],
+            context.run,
             shared_data=EvaluationSharedData(
-                price_data=context["price_data"],
-                universe_panel=context["universe_panel"],
+                price_data=context.price_data,
+                universe_panel=context.universe_panel,
             ),
         )
     return factor_name, result.summary

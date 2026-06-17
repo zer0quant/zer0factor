@@ -227,6 +227,11 @@ def evaluate_factors(
     )
     run = EvaluationRun(run_id=run_id, run_dir=run_dir, config=run_config)
     data_loader = _PipelineCompatibilityDataLoader(storage, pro)
+    artifact_store = EvaluationArtifactStore()
+    on_factor_completed = _build_progress_callback(
+        notifier=_notifier,
+        milestones=_milestones,
+    )
     if workers > 1 and len(resolved_config.factor_names) > 1:
         executor = ProcessPoolEvaluationExecutor(
             storage=storage,
@@ -234,8 +239,7 @@ def evaluate_factors(
             data_loader=data_loader,
             workers=workers,
             log_info=log_info,
-            notifier=_notifier,
-            milestones=_milestones,
+            on_factor_completed=on_factor_completed,
         )
     else:
         executor = SerialEvaluationExecutor(
@@ -247,20 +251,14 @@ def evaluate_factors(
             ),
             data_loader=data_loader,
             log_info=log_info,
-            notifier=_notifier,
-            milestones=_milestones,
+            on_factor_completed=on_factor_completed,
         )
     domain_factor_results = executor.execute(run)
     summary = pd.concat(
         [factor_result.summary for factor_result in domain_factor_results],
         ignore_index=True,
     )
-    run_paths = write_run_summary(
-        run_dir=run_dir,
-        summary=summary,
-        config=resolved_config,
-        run_id=run_id,
-    )
+    run_paths = artifact_store.write_run_summary(run, summary)
     _log(
         log_info,
         "evaluation_run_finished "
@@ -298,6 +296,18 @@ def _to_legacy_factor_result(result) -> FactorEvaluationResult:
         figure_paths=result.figure_paths,
         output_dir=result.output_dir,
     )
+
+
+def _build_progress_callback(
+    *,
+    notifier: NullNotifier,
+    milestones: set[int],
+) -> Callable[[int, int], None]:
+    def on_factor_completed(done: int, total: int) -> None:
+        if done in milestones:
+            notifier.notify_progress("evaluate", done, total)
+
+    return on_factor_completed
 
 
 class _PipelineCompatibilityDataLoader(EvaluationDataLoader):
