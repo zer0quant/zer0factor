@@ -10,6 +10,7 @@ from loguru import logger
 from zer0factor.cli.root import cli
 from zer0factor.config import load_config
 from zer0factor.context import AppContext
+from zer0factor.factor_registry import FAMILIES, FactorFamilyRegistry
 from zer0factor.eval import (
     EvaluationRequest,
     ReportThresholds,
@@ -351,15 +352,17 @@ def evaluate_summary_command(
 @click.option(
     "--family",
     required=True,
-    type=click.Choice(sorted(ANALYSIS_CONFIGS)),
-    help="Factor family analysis parser to use",
+    help="Factor family to analyze (built-in: rolling_return; or an external family from config)",
 )
 @click.option("--run-dir", default=None, help="Evaluation run directory (defaults to latest)")
 @click.option("--summary", default=None, type=click.Path(dir_okay=False, path_type=Path))
 @click.option("--output-dir", default=None, type=click.Path(file_okay=False, path_type=Path))
 @click.option("--evaluations-dir", default="data/evaluations", show_default=True)
-def analyze_evaluation_command(family, run_dir, summary, output_dir, evaluations_dir):
+@click.pass_context
+def analyze_evaluation_command(ctx, family, run_dir, summary, output_dir, evaluations_dir):
     """Analyze an evaluation summary and write grouped diagnostics."""
+    analysis_config = _resolve_analysis_config(family, ctx.obj["config_path"])
+
     resolved_run_dir = Path(run_dir) if run_dir else None
     summary_path = summary
     if summary_path is None:
@@ -374,11 +377,35 @@ def analyze_evaluation_command(family, run_dir, summary, output_dir, evaluations
     result = run_analysis(
         summary_path=Path(summary_path),
         output_dir=Path(resolved_output_dir),
-        config=ANALYSIS_CONFIGS[family],
+        config=analysis_config,
     )
     click.echo(f"Analysis report written to {result.report_path}")
     click.echo(f"Factors analyzed: {result.analyzed_count}")
     click.echo(f"Skipped factors: {result.skipped_count}")
+
+
+def _resolve_analysis_config(family: str, config_path):
+    if family in ANALYSIS_CONFIGS:
+        return ANALYSIS_CONFIGS[family]
+
+    cfg = load_config(config_path)
+    registry = FactorFamilyRegistry(FAMILIES, cfg.external_families)
+
+    try:
+        fam = registry.get(family)
+    except ValueError:
+        known = ", ".join(sorted({*ANALYSIS_CONFIGS, *registry.known_names()}))
+        raise click.BadParameter(
+            f"unknown family {family!r}; known: {known}",
+            param_hint="'--family'",
+        )
+
+    if fam.analysis_config is None:
+        raise click.ClickException(
+            f"family {family!r} does not provide an analysis_config"
+        )
+
+    return fam.analysis_config
 
 
 @cli.command("show-summary")
