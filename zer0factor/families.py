@@ -2,7 +2,10 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Mapping
+from typing import TYPE_CHECKING, Mapping
+
+if TYPE_CHECKING:
+    from zer0factor.eval.analysis import EvaluationAnalysisConfig
 
 import pandas as pd
 
@@ -34,6 +37,7 @@ class FactorFamily(ABC):
     base_factors: tuple[str, ...]
     windows: tuple[int, ...]
     profiles: tuple[PreprocessProfile, ...] = PROFILES
+    uses_data_provider: bool = False
 
     @abstractmethod
     def raw_name(self, base_factor: str, window: int) -> str: ...
@@ -78,6 +82,10 @@ class FactorFamily(ABC):
 
     def analysis_dimensions(self, factor_name: str) -> dict[str, object]:
         return self.parse_output_name(factor_name).analysis_dimensions()
+
+    @property
+    def analysis_config(self) -> EvaluationAnalysisConfig | None:
+        return None
 
 
 __all__ = [
