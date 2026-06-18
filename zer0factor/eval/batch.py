@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from zer0factor.eval.config import ReturnType
+from zer0factor.eval.domain import EvaluationRequest
 from zer0factor.eval.report import ReportThresholds
 from zer0factor.registry import FactorRegistry
 
@@ -21,7 +22,26 @@ class BatchEvaluationConfig:
     max_loss: float = 0.35
     output_dir: Path = Path("data/evaluations")
     transaction_cost_bps: float = 10.0
+    workers: int = 1
     report_thresholds: ReportThresholds = ReportThresholds()
+
+    def to_request(self) -> EvaluationRequest:
+        return EvaluationRequest(
+            factor_names=self.factor_names,
+            factor_source="explicit",
+            start_date=self.start_date,
+            end_date=self.end_date,
+            periods=self.periods,
+            quantiles=self.quantiles,
+            return_type=self.return_type,
+            universe=self.universe,
+            max_loss=self.max_loss,
+            output_dir=self.output_dir,
+            transaction_cost_bps=self.transaction_cost_bps,
+            workers=self.workers,
+            report_thresholds=self.report_thresholds,
+            generate_report=True,
+        )
 
 
 def load_batch_evaluation_config(path: Path | str) -> BatchEvaluationConfig:
@@ -68,6 +88,7 @@ def load_batch_evaluation_config(path: Path | str) -> BatchEvaluationConfig:
         max_loss=float(evaluation.get("max_loss", 0.35)),
         output_dir=Path(evaluation.get("output_dir", "data/evaluations")),
         transaction_cost_bps=_optional_float(evaluation.get("transaction_cost_bps"), 10.0),
+        workers=int(evaluation.get("workers", 1)),
         report_thresholds=_load_report_thresholds(raw.get("report", {})),
     )
 

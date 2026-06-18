@@ -2,7 +2,8 @@ from pathlib import Path
 
 import pytest
 
-from zer0factor.eval.batch import load_batch_evaluation_config
+from zer0factor.eval.batch import BatchEvaluationConfig, load_batch_evaluation_config
+from zer0factor.eval.report import ReportThresholds
 
 
 def _write_toml(tmp_path: Path, content: str) -> Path:
@@ -33,6 +34,16 @@ transaction_cost_bps = 8.5
     assert cfg.transaction_cost_bps == pytest.approx(8.5)
 
 
+def test_load_batch_reads_workers(tmp_path):
+    p = _write_toml(tmp_path, """
+[evaluation]
+factors = ["z_neu_daily_return"]
+workers = 16
+""")
+    cfg = load_batch_evaluation_config(p)
+    assert cfg.workers == 16
+
+
 def test_load_batch_reads_report_thresholds(tmp_path):
     p = _write_toml(tmp_path, """
 [evaluation]
@@ -46,6 +57,29 @@ min_monotonicity = 0.4
     assert hasattr(cfg, "report_thresholds")
     assert cfg.report_thresholds.min_ic == pytest.approx(0.01)
     assert cfg.report_thresholds.min_monotonicity == pytest.approx(0.4)
+
+
+def test_batch_config_to_request_carries_evaluation_fields(tmp_path):
+    thresholds = ReportThresholds(min_ic=0.02)
+    cfg = BatchEvaluationConfig(
+        factor_names=("factor_a", "factor_b"),
+        start_date="20240101",
+        end_date="20240201",
+        periods=(1, 5),
+        workers=4,
+        output_dir=tmp_path / "evaluations",
+        report_thresholds=thresholds,
+    )
+
+    request = cfg.to_request()
+
+    assert request.factor_names == ("factor_a", "factor_b")
+    assert request.start_date == "20240101"
+    assert request.end_date == "20240201"
+    assert request.periods == (1, 5)
+    assert request.workers == 4
+    assert request.report_thresholds == thresholds
+    assert request.generate_report is True
 
 
 def test_load_batch_registry_mode_resolves_factors(tmp_path):
