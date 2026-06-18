@@ -186,6 +186,31 @@ def test_rank_standardization_outputs_percentile_ranks():
     assert row["000002.SZ"] == pytest.approx(1.0)
 
 
+def test_rank_normal_standardization_breaks_ties_and_preserves_missing_values():
+    factor = _panel([[1.0, 1.0, np.nan, 10.0]])
+
+    result = standardize(factor, method="rank_normal")
+
+    row = result.loc[pd.Timestamp("2024-01-01")]
+    assert row.dropna().nunique() == 3
+    assert row["000001.SZ"] < row["000002.SZ"] < row["000004.SZ"]
+    assert pd.isna(row["000003.SZ"])
+
+
+def test_rank_normal_standardization_is_approximately_standard_normal():
+    rng = np.random.default_rng(42)
+    factor = pd.DataFrame(
+        rng.exponential(scale=1.0, size=(50, 200)) ** 3,
+        index=pd.date_range("2024-01-01", periods=50, freq="D"),
+        columns=[f"s{i}" for i in range(200)],
+    )
+
+    result = standardize(factor, method="rank_normal")
+
+    assert (result.mean(axis=1).abs() < 0.2).all()
+    assert ((result.std(axis=1) - 1.0).abs() < 0.3).all()
+
+
 def test_size_industry_neutralization_removes_size_and_industry_exposure():
     factor = pd.DataFrame(
         [[11.0, 13.0, 17.0, 19.0, 23.0, 29.0]],

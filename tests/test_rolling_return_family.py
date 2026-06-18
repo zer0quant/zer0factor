@@ -12,6 +12,10 @@ from zer0factor.factors.rolling_returns import (
 from zer0factor.families import FactorOutputSpec
 from zer0factor.preprocess_profile import (
     PROFILES,
+    RANK,
+    RANK_INDUSTRY_NEU,
+    RANK_SIZE_INDUSTRY_NEU,
+    RANK_SIZE_NEU,
     RAW,
     Z_INDUSTRY_NEU,
     Z_SIZE_INDUSTRY_NEU,
@@ -70,6 +74,15 @@ def test_preprocess_profile_output_name() -> None:
     assert RAW.output_name("daily_return_ma5") == "daily_return_ma5"
     assert Z.output_name("daily_return_ma5") == "z_daily_return_ma5"
     assert Z_SIZE_NEU.output_name("daily_return_ma5") == "z_size_neu_daily_return_ma5"
+
+
+def test_rank_preprocess_profiles_use_rank_normal_standardization() -> None:
+    assert RANK.key == "rank"
+    assert RANK.standardize_method == "rank_normal"
+    assert RANK.output_name("rtn_intra_turn_strength_5d") == "rank_rtn_intra_turn_strength_5d"
+    assert RANK_SIZE_NEU.neutralize_method == "size"
+    assert RANK_INDUSTRY_NEU.neutralize_method == "industry"
+    assert RANK_SIZE_INDUSTRY_NEU.neutralize_method == "size_industry"
 
 
 def test_raw_names_expand_to_32_in_stable_order() -> None:

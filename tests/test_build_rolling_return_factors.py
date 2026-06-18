@@ -16,6 +16,7 @@ from zer0factor.pipeline import (
     run_build_stage,
     update_factor_registry,
 )
+from zer0factor.preprocess_profile import RANK_PROFILES
 from zer0factor.storage import FactorStorage
 
 
@@ -272,6 +273,33 @@ def test_preprocess_one_factor_writes_four_profiles() -> None:
         for frame in storage.writes.values()
     )
     assert all(not frame.empty for frame in storage.writes.values())
+
+
+def test_preprocess_one_factor_with_rank_profiles_breaks_ties() -> None:
+    raw = pd.DataFrame(
+        {
+            "trade_date": ["20240101"] * 4,
+            "ts_code": ["000001.SZ", "000002.SZ", "000003.SZ", "000004.SZ"],
+            "value": [1.0, 1.0, 1.0, 10.0],
+        }
+    )
+    storage = FakeStorage({
+        "rtn_intra_turn_strength_5d": raw,
+        SIZE_FACTOR_NAME: _size_factor(),
+    })
+
+    rows = preprocess_one_factor(
+        "rtn_intra_turn_strength_5d",
+        storage=storage,
+        industry_panel=_industry_panel(),
+        profiles=RANK_PROFILES,
+    )
+
+    assert "rank_rtn_intra_turn_strength_5d" in rows
+    rank_panel = _long_to_wide(storage.writes["rank_rtn_intra_turn_strength_5d"])
+    row = rank_panel.loc[pd.Timestamp("2024-01-01")]
+    assert row.nunique() == 4
+    assert row["000001.SZ"] < row["000002.SZ"] < row["000003.SZ"] < row["000004.SZ"]
 
 
 def test_run_build_stage_raw_dispatches_raw_builder(monkeypatch: pytest.MonkeyPatch) -> None:

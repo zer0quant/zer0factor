@@ -158,11 +158,18 @@ def preprocess_one_factor(
         columns=raw_panel.columns,
     )
 
-    base = _winsorize_impute_zscore(raw_panel)
+    bases: dict[str, pd.DataFrame] = {}
     rows: dict[str, int] = {}
     for profile in profiles:
         if profile.is_raw:
             continue
+        standardize_method = _profile_standardize_method(profile)
+        if standardize_method not in bases:
+            bases[standardize_method] = _preprocess_base(
+                raw_panel,
+                standardize_method=standardize_method,
+            )
+        base = bases[standardize_method]
         output_name = profile.output_name(raw_factor_name)
         if profile.neutralize_method is None:
             output_panel = base
@@ -560,6 +567,26 @@ def _winsorize_impute_zscore(panel: pd.DataFrame) -> pd.DataFrame:
     processed = winsorize(panel, method="mad", n=5.0)
     processed = impute_missing(processed, method="cross_section_median")
     return standardize(processed, method="zscore")
+
+
+def _rank_normalize(panel: pd.DataFrame) -> pd.DataFrame:
+    return standardize(panel, method="rank_normal")
+
+
+def _preprocess_base(panel: pd.DataFrame, *, standardize_method: str) -> pd.DataFrame:
+    if standardize_method == "rank_normal":
+        return _rank_normalize(panel)
+    if standardize_method == "zscore":
+        return _winsorize_impute_zscore(panel)
+    return standardize(panel, method=standardize_method)
+
+
+def _profile_standardize_method(profile: PreprocessProfile) -> str:
+    method = getattr(profile, "standardize_method", None)
+    if method is not None:
+        return str(method)
+    key = getattr(profile, "key", "")
+    return "rank_normal" if str(key).startswith("rank") else "zscore"
 
 
 def _neutralize_then_zscore(
