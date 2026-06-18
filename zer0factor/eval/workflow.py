@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
@@ -155,7 +156,19 @@ class EvaluationWorkflow:
             f"return_type={config.return_type}",
         )
 
-        executor = self._build_executor(run)
+        milestones = {
+            int(len(factor_names) * pct)
+            for pct in (0.25, 0.50, 0.75)
+        } - {0, len(factor_names)}
+        on_factor_completed = _build_progress_callback(
+            notifier=self.notifier,
+            milestones=milestones,
+        )
+        executor = self._build_executor(
+            run,
+            on_factor_completed=on_factor_completed,
+        )
+        t0 = time.monotonic()
         factor_results = executor.execute(run)
         summary = pd.concat(
             [factor_result.summary for factor_result in factor_results],
@@ -184,6 +197,12 @@ class EvaluationWorkflow:
             f"run_id={finished_run.run_id} output_dir={finished_run.run_dir} "
             f"factors={len(factor_results)}",
         )
+        self.notifier.notify_eval_done(
+            "evaluate",
+            finished_run.run_id,
+            len(factor_results),
+            time.monotonic() - t0,
+        )
         return EvaluationWorkflowResult(
             run=finished_run,
             factor_results=factor_results,
@@ -192,7 +211,12 @@ class EvaluationWorkflow:
             analysis=analysis,
         )
 
-    def _build_executor(self, run: EvaluationRun):
+    def _build_executor(
+        self,
+        run: EvaluationRun,
+        *,
+        on_factor_completed: Callable[[int, int], None],
+    ):
         if _requires_process_pool(run.config):
             self._ensure_process_pool_supported()
             return ProcessPoolEvaluationExecutor(
@@ -201,6 +225,7 @@ class EvaluationWorkflow:
                 data_loader=self.data_loader,
                 workers=run.config.workers,
                 log_info=self.log_info,
+                on_factor_completed=on_factor_completed,
             )
 
         evaluator = FactorEvaluator(
@@ -214,6 +239,7 @@ class EvaluationWorkflow:
             evaluator=evaluator,
             data_loader=self.data_loader,
             log_info=self.log_info,
+            on_factor_completed=on_factor_completed,
         )
 
     def _ensure_process_pool_supported(self) -> None:
@@ -239,3 +265,15 @@ def _log(log_info: Callable[[str], None] | None, message: str) -> None:
 
 def _requires_process_pool(config: EvaluationRunConfig) -> bool:
     return config.workers > 1 and len(config.factor_names) > 1
+
+
+def _build_progress_callback(
+    *,
+    notifier: NullNotifier,
+    milestones: set[int],
+) -> Callable[[int, int], None]:
+    def on_factor_completed(done: int, total: int) -> None:
+        if done in milestones:
+            notifier.notify_progress("evaluate", done, total)
+
+    return on_factor_completed

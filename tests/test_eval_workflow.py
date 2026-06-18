@@ -39,6 +39,50 @@ class FakePro:
         return pd.DataFrame(columns=["trade_date", "pct_chg"])
 
 
+class RecordingNotifier:
+    def __init__(self):
+        self.starts = []
+        self.progress = []
+        self.eval_done = []
+
+    def notify_start(self, stage, details=None):
+        self.starts.append((stage, details))
+
+    def notify_progress(self, stage, done, total):
+        self.progress.append((stage, done, total))
+
+    def notify_eval_done(self, stage, run_id, factor_count, elapsed):
+        self.eval_done.append((stage, run_id, factor_count, elapsed))
+
+
+class FakeSerialEvaluationExecutor:
+    def __init__(self, *, on_factor_completed=None, **kwargs):
+        self.on_factor_completed = on_factor_completed
+
+    def execute(self, run):
+        results = []
+        for done, factor_name in enumerate(run.config.factor_names, start=1):
+            results.append(
+                FactorEvaluationResult(
+                    factor_name=factor_name,
+                    output_dir=run.factor_dir(factor_name),
+                    summary=pd.DataFrame({"factor_name": [factor_name]}),
+                )
+            )
+            if self.on_factor_completed is not None:
+                self.on_factor_completed(done, len(run.config.factor_names))
+        return tuple(results)
+
+
+class NoopReporterFactory:
+    def __call__(self, thresholds):
+        raise AssertionError("reporter should not be used")
+
+
+class DummyDataLoader:
+    pass
+
+
 def test_workflow_runs_evaluation_and_report(tmp_path, monkeypatch):
     storage = FactorStorage(tmp_path / "factors", tmp_path / "factor.duckdb")
     storage.write(
@@ -88,6 +132,60 @@ def test_workflow_runs_evaluation_and_report(tmp_path, monkeypatch):
     assert result.run.report_md.exists()
     assert result.summary["factor_name"].tolist() == ["factor_a"]
     assert result.report is not None
+    ranked_summary = pd.read_csv(result.run.ranked_summary_csv)
+    report_md = result.run.report_md.read_text(encoding="utf-8")
+    assert "factor_a" in ranked_summary.to_string() or "factor_a" in report_md
+
+
+def test_workflow_notifies_start_progress_and_eval_done(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        "zer0factor.eval.workflow.SerialEvaluationExecutor",
+        FakeSerialEvaluationExecutor,
+    )
+    notifier = RecordingNotifier()
+    workflow = EvaluationWorkflow(
+        selector=FactorSelector(),
+        run_factory=EvaluationRunFactory(),
+        data_loader=DummyDataLoader(),
+        artifact_store=EvaluationArtifactStore(),
+        metric_calculator=MetricsCalculator(),
+        figure_writer=NoopFigureWriter(),
+        reporter_factory=NoopReporterFactory(),
+        notifier=notifier,
+    )
+
+    result = workflow.run(
+        EvaluationRequest(
+            factor_names=("factor_a", "factor_b", "factor_c", "factor_d"),
+            start_date="20240101",
+            end_date="20240102",
+            periods=(1,),
+            quantiles=2,
+            output_dir=tmp_path / "evaluations",
+            generate_report=False,
+            workers=1,
+        ),
+        run_id="workflow-notify-test",
+    )
+
+    assert notifier.starts == [
+        (
+            "evaluate",
+            {
+                "因子数": "4",
+                "workers": "1",
+            },
+        )
+    ]
+    assert notifier.progress == [
+        ("evaluate", 1, 4),
+        ("evaluate", 2, 4),
+        ("evaluate", 3, 4),
+    ]
+    assert len(notifier.eval_done) == 1
+    assert notifier.eval_done[0][:3] == ("evaluate", "workflow-notify-test", 4)
+    assert notifier.eval_done[0][3] >= 0
+    assert result.run.run_id == "workflow-notify-test"
 
 
 class CustomMetricsCalculator(MetricsCalculator):
