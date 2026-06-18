@@ -66,8 +66,13 @@ def test_batch_config_to_request_carries_evaluation_fields(tmp_path):
         start_date="20240101",
         end_date="20240201",
         periods=(1, 5),
+        quantiles=7,
+        return_type="close_t0",
+        universe="custom_universe",
+        max_loss=0.25,
         workers=4,
         output_dir=tmp_path / "evaluations",
+        transaction_cost_bps=6.5,
         report_thresholds=thresholds,
     )
 
@@ -77,7 +82,12 @@ def test_batch_config_to_request_carries_evaluation_fields(tmp_path):
     assert request.start_date == "20240101"
     assert request.end_date == "20240201"
     assert request.periods == (1, 5)
+    assert request.quantiles == 7
+    assert request.return_type == "close_t0"
+    assert request.universe == "custom_universe"
+    assert request.max_loss == pytest.approx(0.25)
     assert request.workers == 4
+    assert request.transaction_cost_bps == pytest.approx(6.5)
     assert request.report_thresholds == thresholds
     assert request.generate_report is True
 

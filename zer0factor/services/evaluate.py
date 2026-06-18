@@ -85,6 +85,12 @@ class EvaluationService:
                 )
             return self._workflow.run(request, run_id=run_id)
 
+        if self._workflow is not None:
+            raise TypeError(
+                "legacy EvaluationConfig is only supported by "
+                "legacy-constructed EvaluationService"
+            )
+
         return self._run_legacy_config(
             request,
             workers=1 if workers is None else workers,
