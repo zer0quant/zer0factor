@@ -1,8 +1,11 @@
+import sys
+import types
 from pathlib import Path
 
 import pandas as pd
 from click.testing import CliRunner
 
+from zer0factor.eval.domain import EvaluationRequest
 from zer0factor.cli import cli
 from zer0factor.storage import FactorStorage
 
@@ -227,6 +230,7 @@ return_type = "close_t0"
 universe = "000001.SZ,000002.SZ"
 max_loss = 0.25
 output_dir = "batch_evaluations"
+workers = 16
 
 [report]
 min_ic = 0.01
@@ -250,18 +254,11 @@ min_monotonicity = 0.4
             },
         )()
 
-    class FakeLocalPro:
-        def __init__(self, data_dir):
-            self.data_dir = data_dir
-
-    class FakeRunResult:
-        run_id = "run_001"
-        output_dir = tmp_path / "batch_evaluations" / "run_001"
-        factor_results = (object(), object())
-
     class FakeReport:
-        report_path = FakeRunResult.output_dir / "report.md"
-        ranked_summary_path = FakeRunResult.output_dir / "ranked_summary.csv"
+        report_path = tmp_path / "batch_evaluations" / "run_001" / "workflow_report.md"
+        ranked_summary_path = (
+            tmp_path / "batch_evaluations" / "run_001" / "workflow_ranked_summary.csv"
+        )
         ranked_summary = pd.DataFrame(
             {
                 "factor_name": ["factor_a"],
@@ -271,38 +268,57 @@ min_monotonicity = 0.4
             }
         )
 
-    def fake_evaluate_factors(*, factor_names, config, log_info, **kwargs):
-        assert factor_names == ("factor_a", "factor_b")
-        assert config.factor_names == ("factor_a", "factor_b")
-        assert config.start_date == "20240101"
-        assert config.end_date == "20240131"
-        assert config.periods == (1, 5)
-        assert config.quantiles == 5
-        assert config.return_type == "close_t0"
-        assert config.universe == "000001.SZ,000002.SZ"
-        assert config.max_loss == 0.25
-        assert config.output_dir == Path("batch_evaluations")
-        log_info("batch_eval_progress")
-        return FakeRunResult()
+    calls = {}
 
-    def fake_generate_evaluation_report(**kwargs):
-        assert kwargs["run_dir"] == FakeRunResult.output_dir
-        assert kwargs["thresholds"].min_ic == 0.01
-        assert kwargs["thresholds"].min_monotonicity == 0.4
-        return FakeReport()
+    class FakeAppContext:
+        storage = object()
+        pro = object()
+
+        def __init__(self, cfg):
+            calls["config"] = cfg
+
+        def configure_logging(self):
+            calls["configured_logging"] = True
+
+    class FakeService:
+        @classmethod
+        def from_dependencies(cls, *, storage, pro, log_info=None, notifier=None):
+            calls["from_dependencies"] = {
+                "storage": storage,
+                "pro": pro,
+                "log_info": log_info,
+                "notifier": notifier,
+            }
+            return cls(log_info)
+
+        def __init__(self, log_info):
+            self.log_info = log_info
+
+        def run(self, request, **kwargs):
+            assert kwargs == {}
+            calls["request"] = request
+            calls.setdefault("progress", []).append("batch_eval_progress")
+            self.log_info("batch_eval_progress")
+            return types.SimpleNamespace(
+                run=types.SimpleNamespace(
+                    run_id="run_001",
+                    run_dir=tmp_path / "batch_evaluations" / "run_001",
+                ),
+                factor_results=(object(), object()),
+                report=FakeReport(),
+            )
 
     monkeypatch.setattr("zer0factor.cli.evaluate_cmds.load_config", fake_load_config)
-    monkeypatch.setattr(
-        "zer0factor.services.evaluate.evaluate_factors", fake_evaluate_factors
-    )
+    monkeypatch.setattr("zer0factor.cli.evaluate_cmds.AppContext", FakeAppContext)
+    monkeypatch.setattr("zer0factor.cli.evaluate_cmds.EvaluationService", FakeService)
     monkeypatch.setattr(
         "zer0factor.cli.evaluate_cmds.generate_evaluation_report",
-        fake_generate_evaluation_report,
+        lambda **kwargs: (_ for _ in ()).throw(
+            AssertionError("batch command should use workflow result.report")
+        ),
     )
-    import zer0share.api
     from zer0factor.notify import NullNotifier
 
-    monkeypatch.setattr(zer0share.api, "LocalPro", FakeLocalPro)
     monkeypatch.setattr("zer0factor.cli.evaluate_cmds.load_notifier", lambda cfg: NullNotifier())
 
     result = runner.invoke(
@@ -317,10 +333,121 @@ min_monotonicity = 0.4
     )
 
     assert result.exit_code == 0
-    assert "batch_eval_progress" in result.output
+    request = calls["request"]
+    assert isinstance(request, EvaluationRequest)
+    assert request.factor_names == ("factor_a", "factor_b")
+    assert request.start_date == "20240101"
+    assert request.end_date == "20240131"
+    assert request.periods == (1, 5)
+    assert request.quantiles == 5
+    assert request.return_type == "close_t0"
+    assert request.universe == "000001.SZ,000002.SZ"
+    assert request.max_loss == 0.25
+    assert request.output_dir == Path("batch_evaluations")
+    assert request.transaction_cost_bps == 10.0
+    assert request.workers == 16
+    assert request.benchmark_index is None
+    assert request.report_thresholds.min_ic == 0.01
+    assert request.report_thresholds.min_monotonicity == 0.4
+    assert request.generate_report is True
+    assert calls["from_dependencies"]["storage"] is FakeAppContext.storage
+    assert calls["from_dependencies"]["pro"] is FakeAppContext.pro
+    assert calls["progress"] == ["batch_eval_progress"]
     assert "Evaluation run run_001 written to" in result.output
-    assert "Report written to" in result.output
-    assert "Ranked summary written to" in result.output
+    assert str(FakeReport.report_path) in result.output
+    assert str(FakeReport.ranked_summary_path) in result.output
+
+
+def test_evaluate_batch_command_applies_benchmark_override_to_request(
+    monkeypatch,
+    tmp_path,
+):
+    runner = CliRunner()
+    batch_file = tmp_path / "batch.toml"
+    batch_file.write_text(
+        """
+[evaluation]
+factors = ["factor_a"]
+start_date = "20240101"
+end_date = "20240131"
+periods = [1]
+output_dir = "batch_evaluations"
+workers = 4
+
+[report]
+min_ic = 0.03
+min_monotonicity = 0.6
+""",
+        encoding="utf-8",
+    )
+
+    def fake_load_config(path):
+        return type(
+            "Config",
+            (),
+            {
+                "start_date": "20230101",
+                "end_date": "20231231",
+                "notify_webhook_url": "",
+            },
+        )()
+
+    calls = {}
+
+    class FakeAppContext:
+        storage = object()
+        pro = object()
+
+        def __init__(self, cfg):
+            pass
+
+        def configure_logging(self):
+            pass
+
+    class FakeService:
+        @classmethod
+        def from_dependencies(cls, **kwargs):
+            return cls()
+
+        def run(self, request, **kwargs):
+            calls["request"] = request
+            return types.SimpleNamespace(
+                run=types.SimpleNamespace(
+                    run_id="run_001",
+                    run_dir=tmp_path / "batch_evaluations" / "run_001",
+                ),
+                factor_results=(),
+                report=types.SimpleNamespace(
+                    report_path=tmp_path / "report.md",
+                    ranked_summary_path=tmp_path / "ranked.csv",
+                    ranked_summary=pd.DataFrame({"factor_name": ["factor_a"]}),
+                ),
+            )
+
+    monkeypatch.setattr("zer0factor.cli.evaluate_cmds.load_config", fake_load_config)
+    monkeypatch.setattr("zer0factor.cli.evaluate_cmds.AppContext", FakeAppContext)
+    monkeypatch.setattr("zer0factor.cli.evaluate_cmds.EvaluationService", FakeService)
+    monkeypatch.setattr("zer0factor.cli.evaluate_cmds.load_notifier", lambda cfg: object())
+
+    result = runner.invoke(
+        cli,
+        [
+            "--config",
+            str(tmp_path / "settings.toml"),
+            "evaluate-batch",
+            "--file",
+            str(batch_file),
+            "--benchmark-index",
+            "000300.SH",
+        ],
+    )
+
+    assert result.exit_code == 0
+    request = calls["request"]
+    assert request.benchmark_index == "000300.SH"
+    assert request.workers == 4
+    assert request.report_thresholds.min_ic == 0.03
+    assert request.report_thresholds.min_monotonicity == 0.6
 
 
 def test_evaluate_factor_command_prints_progress(monkeypatch, tmp_path):
@@ -341,28 +468,56 @@ def test_evaluate_factor_command_prints_progress(monkeypatch, tmp_path):
             },
         )()
 
-    class FakeLocalPro:
-        def __init__(self, data_dir):
-            self.data_dir = data_dir
+    calls = {}
 
-    class FakeRunResult:
-        run_id = "run_001"
-        output_dir = tmp_path / "evaluations" / "run_001"
-        factor_results = (object(),)
+    class FakeAppContext:
+        storage = object()
+        pro = object()
 
-    def fake_evaluate_factors(*, log_info, **kwargs):
-        log_info("evaluation_run_started factors=1")
-        log_info("evaluation_price_load_started start_date=20240101 end_date=20240115")
-        return FakeRunResult()
+        def __init__(self, cfg):
+            calls["config"] = cfg
+
+        def configure_logging(self):
+            calls["configured_logging"] = True
+
+    class FakeService:
+        @classmethod
+        def from_dependencies(cls, *, storage, pro, log_info=None, notifier=None):
+            calls["from_dependencies"] = {
+                "storage": storage,
+                "pro": pro,
+                "log_info": log_info,
+                "notifier": notifier,
+            }
+            return cls(log_info)
+
+        def __init__(self, log_info):
+            self.log_info = log_info
+
+        def run(self, request, **kwargs):
+            assert kwargs == {}
+            calls["request"] = request
+            calls["progress"] = [
+                "evaluation_run_started factors=1",
+                "evaluation_price_load_started start_date=20240101 end_date=20240115",
+            ]
+            self.log_info("evaluation_run_started factors=1")
+            self.log_info("evaluation_price_load_started start_date=20240101 end_date=20240115")
+            return types.SimpleNamespace(
+                run=types.SimpleNamespace(
+                    run_id="run_001",
+                    run_dir=tmp_path / "evaluations" / "run_001",
+                ),
+                factor_results=(object(),),
+                report=None,
+            )
 
     monkeypatch.setattr("zer0factor.cli.evaluate_cmds.load_config", fake_load_config)
-    monkeypatch.setattr(
-        "zer0factor.services.evaluate.evaluate_factors", fake_evaluate_factors
-    )
-    import zer0share.api
+    monkeypatch.setattr("zer0factor.cli.evaluate_cmds.AppContext", FakeAppContext)
+    monkeypatch.setattr("zer0factor.cli.evaluate_cmds.EvaluationService", FakeService)
+
     from zer0factor.notify import NullNotifier
 
-    monkeypatch.setattr(zer0share.api, "LocalPro", FakeLocalPro)
     monkeypatch.setattr("zer0factor.cli.evaluate_cmds.load_notifier", lambda cfg: NullNotifier())
 
     result = runner.invoke(
@@ -378,8 +533,22 @@ def test_evaluate_factor_command_prints_progress(monkeypatch, tmp_path):
     )
 
     assert result.exit_code == 0
-    assert "evaluation_run_started factors=1" in result.output
-    assert "evaluation_price_load_started start_date=20240101 end_date=20240115" in result.output
+    request = calls["request"]
+    assert isinstance(request, EvaluationRequest)
+    assert request.factor_names == ("factor_a",)
+    assert request.start_date == "20240101"
+    assert request.end_date == "20240102"
+    assert request.periods == (1, 5, 10)
+    assert request.quantiles == 10
+    assert request.return_type == "open_t1"
+    assert request.output_dir == tmp_path / "evaluations"
+    assert request.workers == 1
+    assert calls["from_dependencies"]["storage"] is FakeAppContext.storage
+    assert calls["from_dependencies"]["pro"] is FakeAppContext.pro
+    assert calls["progress"] == [
+        "evaluation_run_started factors=1",
+        "evaluation_price_load_started start_date=20240101 end_date=20240115",
+    ]
     assert "Evaluation run run_001 written to" in result.output
 
 
@@ -784,6 +953,105 @@ end_date = ""
     assert calls[0]["workers"] == 16
 
 
+def test_build_factors_external_data_provider_family_uses_compute_service(
+    monkeypatch,
+    tmp_path,
+):
+    module = types.ModuleType("fake_external_factors")
+    from zer0factor.families import FactorFamily
+
+    class FakeFamily(FactorFamily):
+        name = "ma_bias"
+        base_factors = ()
+        windows = ()
+        uses_data_provider = True
+        profiles = ()
+
+        def raw_name(self, base_factor: str, window: int) -> str:
+            return "ma_bias_5d"
+
+        def derive(self, panel: pd.DataFrame, window: int) -> pd.DataFrame:
+            raise NotImplementedError
+
+        def raw_names(self):
+            return ("ma_bias_5d",)
+
+        def factors(self):
+            return ("fake-factor",)
+
+    module.MA_BIAS_FAMILY = FakeFamily()
+    monkeypatch.setitem(sys.modules, "fake_external_factors", module)
+
+    config_path = tmp_path / "settings.toml"
+    config_path.write_text(
+        f"""
+[zer0share]
+data_dir = "{tmp_path / 'share'}"
+
+[paths]
+factor_dir = "{tmp_path / 'factors'}"
+db_path = "{tmp_path / 'factor.duckdb'}"
+log_path = "{tmp_path / 'factor.log'}"
+
+[factor]
+universe = "all"
+process_universe = "univ_trade_base"
+start_date = "20240101"
+end_date = ""
+
+[external_families]
+ma_bias = "fake_external_factors:MA_BIAS_FAMILY"
+""".lstrip(),
+        encoding="utf-8",
+    )
+    calls = {}
+
+    class FakeAppContext:
+        def __init__(self, cfg):
+            self.storage = object()
+            self.provider = object()
+            self.pro = object()
+
+        def configure_logging(self):
+            calls["configured_logging"] = True
+
+    class FakeService:
+        def __init__(self, provider, storage, *, log_info=None):
+            calls["provider"] = provider
+            calls["storage"] = storage
+
+        def compute_and_store(self, factors, *, start_date, end_date, universe):
+            calls["factors"] = factors
+            calls["start_date"] = start_date
+            calls["end_date"] = end_date
+            calls["universe"] = universe
+            return {"ma_bias_5d": 3}
+
+    monkeypatch.setattr("zer0factor.cli.compute_cmds.AppContext", FakeAppContext)
+    monkeypatch.setattr("zer0factor.cli.compute_cmds.FactorComputeService", FakeService)
+
+    result = CliRunner().invoke(
+        cli,
+        [
+            "--config",
+            str(config_path),
+            "build-factors",
+            "--family",
+            "ma_bias",
+            "--stage",
+            "raw",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert calls["configured_logging"] is True
+    assert calls["factors"] == ("fake-factor",)
+    assert calls["start_date"] == "20240101"
+    assert calls["end_date"] is None
+    assert calls["universe"] == "all"
+    assert "ma_bias_5d: 3" in result.output
+
+
 def _write_eval_settings(tmp_path):
     config_path = tmp_path / "settings.toml"
     config_path.write_text(
@@ -805,5 +1073,3 @@ end_date = ""
         encoding="utf-8",
     )
     return config_path
-
-

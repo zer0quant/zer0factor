@@ -1,5 +1,6 @@
 """Factor evaluation commands: evaluate-*, show-summary."""
 
+from dataclasses import replace
 from pathlib import Path
 
 import click
@@ -10,7 +11,7 @@ from zer0factor.cli.root import cli
 from zer0factor.config import load_config
 from zer0factor.context import AppContext
 from zer0factor.eval import (
-    EvaluationConfig,
+    EvaluationRequest,
     ReportThresholds,
     find_latest_run_dir,
     generate_evaluation_report,
@@ -61,7 +62,7 @@ def _run_evaluation_command(
         transaction_cost_bps=transaction_cost_bps,
         benchmark_index=benchmark_index,
     )
-    click.echo(f"Evaluation run {result.run_id} written to {result.output_dir}")
+    click.echo(f"Evaluation run {_result_run_id(result)} written to {_result_output_dir(result)}")
 
 
 def _run_evaluation_job(
@@ -78,17 +79,12 @@ def _run_evaluation_job(
     output_dir: Path,
     transaction_cost_bps: float,
     benchmark_index: str | None = None,
+    workers: int = 1,
 ):
-    cfg = load_config(ctx.obj["config_path"])
-    app = AppContext(cfg)
-    app.configure_logging()
-    notifier = load_notifier(cfg)
-    resolved_start = start_date or cfg.start_date
-    resolved_end = end_date if end_date is not None else (cfg.end_date or None)
-    config = EvaluationConfig(
+    request = EvaluationRequest(
         factor_names=factor_names,
-        start_date=resolved_start,
-        end_date=resolved_end,
+        start_date=start_date,
+        end_date=end_date,
         periods=periods,
         quantiles=quantiles,
         return_type=return_type,
@@ -97,20 +93,47 @@ def _run_evaluation_job(
         output_dir=output_dir,
         benchmark_index=benchmark_index,
         transaction_cost_bps=transaction_cost_bps,
+        workers=workers,
+    )
+    return _run_evaluation_request(ctx, request)
+
+
+def _run_evaluation_request(ctx, request: EvaluationRequest):
+    cfg = load_config(ctx.obj["config_path"])
+    app = AppContext(cfg)
+    app.configure_logging()
+    notifier = load_notifier(cfg)
+    request = replace(
+        request,
+        start_date=request.start_date or cfg.start_date,
+        end_date=request.end_date if request.end_date is not None else (cfg.end_date or None),
     )
 
     def log_progress(message: str) -> None:
         logger.info(message)
 
-    service = EvaluationService(app.storage, app.pro, log_info=log_progress, notifier=notifier)
-    result = service.run(config)
+    service = EvaluationService.from_dependencies(
+        storage=app.storage,
+        pro=app.pro,
+        log_info=log_progress,
+        notifier=notifier,
+    )
+    result = service.run(request)
     logger.info(
         "factor_evaluation_job_finished run_id={} output_dir={} factors={}",
-        result.run_id,
-        result.output_dir,
+        _result_run_id(result),
+        _result_output_dir(result),
         len(result.factor_results),
     )
     return result
+
+
+def _result_run_id(result) -> str:
+    return getattr(result, "run_id", None) or result.run.run_id
+
+
+def _result_output_dir(result) -> Path:
+    return getattr(result, "output_dir", None) or result.run.run_dir
 
 
 @cli.command("evaluate-factor")
@@ -247,26 +270,15 @@ def evaluate_factors_command(
 def evaluate_batch_command(ctx, batch_file, benchmark_index):
     """Evaluate factors from a TOML batch file."""
     batch = load_batch_evaluation_config(batch_file)
-    result = _run_evaluation_job(
-        ctx,
-        factor_names=batch.factor_names,
-        start_date=batch.start_date,
-        end_date=batch.end_date,
-        periods=batch.periods,
-        quantiles=batch.quantiles,
-        return_type=batch.return_type,
-        universe=batch.universe,
-        max_loss=batch.max_loss,
-        output_dir=batch.output_dir,
-        transaction_cost_bps=batch.transaction_cost_bps,
-        benchmark_index=benchmark_index,
-    )
-    click.echo(f"Evaluation run {result.run_id} written to {result.output_dir}")
+    request = batch.to_request()
+    if benchmark_index is not None:
+        request = replace(request, benchmark_index=benchmark_index)
+    result = _run_evaluation_request(ctx, request)
+    click.echo(f"Evaluation run {_result_run_id(result)} written to {_result_output_dir(result)}")
 
-    report = generate_evaluation_report(
-        run_dir=result.output_dir,
-        thresholds=batch.report_thresholds,
-    )
+    report = result.report
+    if report is None:
+        raise click.ClickException("Evaluation workflow did not produce a report")
     click.echo(f"Report written to {report.report_path}")
     click.echo(f"Ranked summary written to {report.ranked_summary_path}")
     preview_columns = [
