@@ -13,12 +13,12 @@ import pandas as pd
 
 from zer0factor.core import to_factor_output
 from zer0factor.exposures import build_sw_l1_industry_panel
+from zer0factor.factor_registry import get_family
 from zer0factor.factors.rolling_returns import WINDOWS
-from zer0factor.factor_registry import FAMILIES, get_family
 from zer0factor.families import FactorFamily
-from zer0factor.preprocess_profile import PROFILES, PreprocessProfile
 from zer0factor.notify.null import NullNotifier
 from zer0factor.preprocess import impute_missing, neutralize, standardize, winsorize
+from zer0factor.preprocess_profile import PROFILES, PreprocessProfile
 from zer0factor.storage import FactorStorage
 
 LOGGER = logging.getLogger(__name__)
@@ -332,6 +332,31 @@ def run_build_stage(
     notifier: NullNotifier | None = None,
 ) -> dict[str, int]:
     family = get_family(family_name)
+    return run_build_family(
+        family,
+        stage,
+        storage=storage,
+        pro=pro,
+        start_date=start_date,
+        end_date=end_date,
+        process_universe=process_universe,
+        workers=workers,
+        notifier=notifier,
+    )
+
+
+def run_build_family(
+    family: FactorFamily,
+    stage: str,
+    *,
+    storage: Any,
+    pro: Any | None = None,
+    start_date: str | None,
+    end_date: str | None,
+    process_universe: str | None = None,
+    workers: int = 1,
+    notifier: NullNotifier | None = None,
+) -> dict[str, int]:
     if stage not in {"raw", "preprocess", "all"}:
         raise ValueError(f"unknown build stage: {stage}")
 
@@ -386,8 +411,13 @@ def run_build_stage(
     return rows
 
 
-def update_factor_registry(registry_path: Path, *, family_name: str) -> list[str]:
-    family = get_family(family_name)
+def update_factor_registry(
+    registry_path: Path,
+    *,
+    family_name: str,
+    family: FactorFamily | None = None,
+) -> list[str]:
+    family = family or get_family(family_name)
     existing = _read_registry_names(registry_path)
     entries = _registry_entries_for_family(family)
     missing = [entry for entry in entries if entry["name"] not in existing]
@@ -580,5 +610,6 @@ __all__ = [
     "preprocess_all_factors",
     "preprocess_one_factor",
     "run_build_stage",
+    "run_build_family",
     "update_factor_registry",
 ]
