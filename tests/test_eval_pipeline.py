@@ -3,10 +3,16 @@ import warnings
 import pandas as pd
 import pytest
 
-from zer0factor.eval import EvaluationConfig, evaluate_factor, evaluate_factors
-from zer0factor.eval.config import FactorEvaluationResult as LegacyFactorEvaluationResult
+from zer0factor.eval.config import (
+    EvaluationConfig,
+    FactorEvaluationResult as LegacyFactorEvaluationResult,
+)
 from zer0factor.eval.loaders import load_price_data, load_universe_panel
-from zer0factor.eval.pipeline import _calculate_period_sample_counts
+from zer0factor.eval.pipeline import (
+    _calculate_period_sample_counts,
+    evaluate_factor,
+    evaluate_factors,
+)
 from zer0factor.storage import FactorStorage
 
 

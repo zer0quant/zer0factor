@@ -1,6 +1,5 @@
 import pytest
 
-from zer0factor.eval import EvaluationConfig
 from zer0factor.eval.domain import EvaluationRequest
 from zer0factor.eval.workflow import EvaluationWorkflow
 from zer0factor.services.evaluate import EvaluationService
@@ -105,19 +104,14 @@ def test_evaluation_service_from_dependencies_constructs_workflow_service(monkey
     }
 
 
-def test_workflow_backed_evaluation_service_rejects_legacy_config():
+def test_evaluation_service_run_requires_evaluation_request():
     workflow = RecordingWorkflow()
     service = EvaluationService(workflow=workflow)
-    config = EvaluationConfig(
-        factor_names=("factor_a",),
-        start_date="20240101",
-        end_date=None,
-    )
 
     with pytest.raises(
         TypeError,
-        match="legacy EvaluationConfig is only supported by legacy-constructed",
+        match="EvaluationService.run expects an EvaluationRequest",
     ):
-        service.run(config)
+        service.run(object())
 
     assert workflow.requests == []

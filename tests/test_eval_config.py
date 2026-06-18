@@ -2,8 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from zer0factor.eval import EvaluationConfig
-from zer0factor.eval.config import DEFAULT_EVALUATION_UNIVERSE
+from zer0factor.eval.config import DEFAULT_EVALUATION_UNIVERSE, EvaluationConfig
 
 
 def test_evaluation_config_defaults_to_open_t1_and_evaluations_dir():
@@ -117,3 +116,10 @@ def test_evaluation_config_rejects_negative_transaction_cost():
             end_date="20240131",
             transaction_cost_bps=-1.0,
         )
+
+
+def test_legacy_evaluation_config_is_not_exported_from_eval_root():
+    import zer0factor.eval as eval_root
+
+    assert "EvaluationConfig" not in eval_root.__all__
+    assert not hasattr(eval_root, "EvaluationConfig")
