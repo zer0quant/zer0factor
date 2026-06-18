@@ -9,7 +9,10 @@ from zer0factor.eval.artifacts import (
     write_factor_artifacts,
     write_run_summary,
 )
-from zer0factor.eval.config import DEFAULT_EVALUATION_UNIVERSE, EvaluationConfig
+from zer0factor.eval.domain import (
+    DEFAULT_EVALUATION_UNIVERSE,
+    EvaluationRunConfig,
+)
 from zer0factor.eval.plots import (
     plot_cumulative_ic,
     plot_quantile_returns,
@@ -18,7 +21,7 @@ from zer0factor.eval.plots import (
 
 
 def test_create_run_directory_uses_config_output_dir(tmp_path):
-    config = EvaluationConfig(
+    config = EvaluationRunConfig(
         factor_names=("factor_a",),
         start_date="20240101",
         end_date="20240131",
@@ -71,7 +74,7 @@ def test_write_run_summary_creates_summary_and_metadata(tmp_path):
         {"factor_name": ["factor_a"], "period": ["1D"]},
         index=pd.Index([7], name="source_index"),
     )
-    config = EvaluationConfig(
+    config = EvaluationRunConfig(
         factor_names=("factor_a",),
         start_date="20240101",
         end_date="20240131",
@@ -102,7 +105,7 @@ def test_write_run_summary_creates_summary_and_metadata(tmp_path):
 
 def test_write_run_summary_serializes_tuple_periods_and_none_values(tmp_path):
     summary = pd.DataFrame({"factor_name": ["factor_a"], "period": ["1D"]})
-    config = EvaluationConfig(
+    config = EvaluationRunConfig(
         factor_names=("factor_a",),
         start_date="20240101",
         end_date=None,

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from zer0factor.eval.config import ReturnType
+from zer0factor.eval.domain import ReturnType
 
 
 def _require_columns(data: pd.DataFrame, columns: set[str]) -> None:

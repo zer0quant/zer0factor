@@ -4,8 +4,7 @@ import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
-from zer0factor.eval.config import ReturnType
-from zer0factor.eval.domain import EvaluationRequest
+from zer0factor.eval.domain import EvaluationRequest, ReturnType
 from zer0factor.eval.report import ReportThresholds
 from zer0factor.registry import FactorRegistry
 

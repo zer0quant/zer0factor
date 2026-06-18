@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from zer0factor.eval.config import EvaluationConfig
+from zer0factor.eval.domain import EvaluationRunConfig
 
 
 class EvaluationArtifactStore:
@@ -37,7 +37,7 @@ class EvaluationArtifactStore:
 
 
 def create_run_directory(
-    config: EvaluationConfig, run_id: str | None = None
+    config: EvaluationRunConfig, run_id: str | None = None
 ) -> tuple[str, Path]:
     if run_id is None:
         run_id = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -72,7 +72,7 @@ def write_run_summary(
     *,
     run_dir: str | Path,
     summary: pd.DataFrame,
-    config: EvaluationConfig,
+    config: EvaluationRunConfig,
     run_id: str,
 ) -> dict[str, Path]:
     run_dir = Path(run_dir)
@@ -91,7 +91,7 @@ def write_run_summary(
     return paths
 
 
-def _build_metadata(*, config: EvaluationConfig, run_id: str) -> dict[str, object]:
+def _build_metadata(*, config: EvaluationRunConfig, run_id: str) -> dict[str, object]:
     return {
         "run_id": run_id,
         "factor_names": list(config.factor_names),
