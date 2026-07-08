@@ -6,12 +6,7 @@
 
 简体中文 | [English](README.en.md)
 
-面向 A 股本地数据的 AI 因子研究工作台。
-
-> 我在公众号「极客投研笔记」记录这个项目的设计过程、踩坑记录和后续扩展。  
-> 如果你对 AI + 量化投研、本地股票数据系统、因子研究工作流感兴趣，欢迎关注。
-
-`zer0factor` 负责把研报、投资逻辑、因子想法，整理成可以审核、可以运行、可以落盘的标准因子代码：
+面向 A 股本地数据的 AI 因子研究工作台。`zer0factor` 负责把研报、投资逻辑、因子想法，整理成可以审核、可以运行、可以落盘的标准因子代码：
 
 ```text
 研报 / 想法 -> FactorSpec -> Python compute() -> Parquet 因子值
@@ -20,45 +15,26 @@
 它和 [zer0share](https://github.com/zer0quant/zer0share) 是配套关系：
 
 - `zer0share`：负责本地 A 股数据采集、同步和查询
-- `zer0factor`：负责因子规范、因子生成、因子计算和因子存储
+- `zer0factor`：负责因子规范、因子生成、预处理、评估和存储
 
-项目还在早期阶段，更适合作为研究工作台使用，不是成熟的生产级因子平台。
+> 项目还在早期阶段，更适合作为研究工作台使用，不是成熟的生产级因子平台。
 
 ## 核心能力
 
-- 标准因子接口：`FactorSpec + FactorFrame + compute()`
+- 标准因子接口：`FactorSpec + FactorFrame + compute()`，输出统一为 `trade_date, ts_code, value`
 - `zer0share` 数据适配：把本地行情转成标准宽表面板
-- 标准输出：`trade_date, ts_code, value`
 - 因子存储：Parquet 分区文件 + DuckDB 注册表
 - 因子注册表：用 `config/factors.toml` 管理待评估因子、标签和默认评估参数
+- 因子预处理：截面去极值、标准化和行业 / 市值中性化
 - 因子评估：基于 Alphalens / Pyfolio 生成 IC、分组收益、换手、单调性和组合绩效指标
-- `factor-research` Codex skill：从研报提取、审核、生成和归档因子
-- 已包含一轮动量研报示例和生成出的因子代码
-
-## 目录结构
-
-```text
-zer0factor/
-├── zer0factor/
-│   ├── config.py              # 配置读取
-│   ├── storage.py             # Parquet + DuckDB 因子存储
-│   ├── registry.py            # 因子注册表
-│   ├── eval/                  # 因子评估、summary 和 report
-│   └── factor/__init__.py     # 因子接口和 zer0share provider
-├── docs/skills/factor-research/
-├── workspaces/                # 每轮研究流程的产物
-├── notebooks/
-├── tests/
-└── config/settings.example.toml
-```
+- `factor-research` skill：从研报提取、审核、生成和归档因子，已包含一轮动量研报示例
 
 ## 安装
 
-```bash
-git clone <your-repo-url>
-cd zer0factor
-uv sync
-```
+前置要求：
+
+- Python 3.11+ 和 [uv](https://docs.astral.sh/uv/)
+- 已经用 `zer0share` 同步好的本地 A 股数据
 
 默认要求 `zer0share` 和本项目在同级目录：
 
@@ -68,14 +44,20 @@ work/
 └── zer0share/
 ```
 
-对应配置在 `pyproject.toml`：
+如果你的 `zer0share` 在别的位置，先改 `pyproject.toml` 里的路径：
 
 ```toml
 [tool.uv.sources]
 zer0share = { path = "../zer0share" }
 ```
 
-如果你的 `zer0share` 在别的位置，先改这个路径。
+然后：
+
+```bash
+git clone https://github.com/zer0quant/zer0factor.git
+cd zer0factor
+uv sync
+```
 
 ## 配置
 
@@ -100,128 +82,42 @@ end_date   = ""
 
 ## 快速开始
 
-跑核心测试：
+以内置市值因子为例，从计算到评估走一遍最小流程：
 
 ```bash
-uv run pytest tests/test_config.py tests/test_storage.py tests/test_factor_standard.py tests/test_factor_research_skill_scripts.py
-```
-
-查看因子库状态：
-
-```bash
+# 查看因子库当前状态
 uv run python main.py --config config/settings.toml status
-```
 
-评估一个已落盘因子：
+# 计算内置市值因子并写入本地存储
+uv run python main.py compute-market-cap
 
-```bash
+# 评估因子并查看结果
 uv run python main.py evaluate-factor log_total_market_cap
 uv run python main.py show-summary
 ```
 
-检查核心代码和 skill：
+评估结果写入 `data/evaluations/<run_id>/`，指标口径详见 [docs/evaluation.md](docs/evaluation.md)。
 
-```bash
-uv run ruff check zer0factor/core/__init__.py docs/skills/factor-research tests/test_factor_standard.py tests/test_factor_research_skill_scripts.py
-```
-
-## CLI
+## CLI 命令一览
 
 | 命令 | 说明 |
 |---|---|
-| `uv run python main.py status` | 查看当前存储里有哪些已计算因子 |
-| `uv run python main.py factor-list` | 对比注册表和本地存储里的因子状态 |
-| `uv run python main.py factor-info <name>` | 查看单个因子的注册信息和存储状态 |
-| `uv run python main.py compute-returns` | 计算内置收益率因子并写入本地存储 |
-| `uv run python main.py compute-market-cap` | 计算内置市值因子并写入本地存储 |
-| `uv run python main.py standardize-factor <name>` | 对已存因子做截面去极值、填充和标准化 |
-| `uv run python main.py neutralize-factor <name>` | 对已标准化因子做行业 / 市值中性化 |
-| `uv run python main.py evaluate-factor <name>` | 评估单个已存因子 |
-| `uv run python main.py evaluate-factors <name...>` | 评估多个已存因子 |
-| `uv run python main.py evaluate-batch --file config/evaluation_batch.toml` | 按配置文件批量评估因子 |
-| `uv run python main.py show-summary` | 查看最近一次评估的完整 summary，按指标转置展示 |
+| `status` | 查看当前存储里有哪些已计算因子 |
+| `factor-list` | 对比注册表和本地存储里的因子状态 |
+| `factor-info <name>` | 查看单个因子的注册信息和存储状态 |
+| `compute-returns` | 计算内置收益率因子并写入本地存储 |
+| `compute-market-cap` | 计算内置市值因子并写入本地存储 |
+| `build-factors --family <name>` | 按因子族批量计算并写入本地存储 |
+| `standardize-factor <name>` | 对已存因子做截面去极值、填充和标准化 |
+| `neutralize-factor <name>` | 对已标准化因子做行业 / 市值中性化 |
+| `evaluate-factor <name>` | 评估单个已存因子 |
+| `evaluate-factors <name...>` | 评估多个已存因子 |
+| `evaluate-batch --file <file>` | 按配置文件批量评估因子 |
+| `evaluate-summary` | 汇总一次评估 run 的 summary |
+| `analyze-evaluation` | 分析评估 summary 并输出分组诊断 |
+| `show-summary` | 查看最近一次评估的完整 summary |
 
-## 因子注册表
-
-因子注册表默认路径是 `config/factors.toml`，用于维护哪些因子参与批量评估：
-
-```toml
-[[factors]]
-name = "z_neu_daily_return"
-category = "price"
-source_type = "neutralized"
-source_factor = "daily_return"
-enabled = true
-tags = ["momentum", "short-term"]
-
-[factors.evaluate]
-default = true
-quantiles = 5
-periods = [1, 5, 10]
-return_type = "open_t1"
-```
-
-常用命令：
-
-```bash
-uv run python main.py factor-list --enabled
-uv run python main.py factor-info z_neu_daily_return
-```
-
-## 因子评估
-
-单因子评估：
-
-```bash
-uv run python main.py evaluate-factor log_total_market_cap \
-  --start-date 20160101 \
-  --periods 1,5,10 \
-  --quantiles 10 \
-  --return-type open_t1
-```
-
-批量评估：
-
-```bash
-uv run python main.py evaluate-batch --file config/evaluation_batch.toml
-```
-
-评估结果写入 `data/evaluations/<run_id>/`：
-
-```text
-data/evaluations/<run_id>/
-├── summary.csv
-├── summary.parquet
-├── metadata.json
-└── factors/<factor_name>/
-    ├── clean_factor_data.parquet
-    ├── daily_ic.parquet
-    ├── quantile_returns.parquet
-    └── figures/
-```
-
-查看最近一次 summary：
-
-```bash
-uv run python main.py show-summary
-uv run python main.py show-summary --period 1D
-uv run python main.py show-summary --all
-```
-
-summary 默认保留方向化后的 `adjusted_ICIR`、`adjusted_t-stat`、`directional_IC>0 %` 和 `long_short_spread`；容易误读的原始方向指标，例如 `ICIR`、`t-stat`、`raw_quantile_spread` 已不再输出。`show-summary --all` 可查看少量保留的原始诊断列。
-
-### Summary 指标口径
-
-| 指标组 | 字段示例 | 口径 |
-|---|---|---|
-| 基础信息 | `factor_name`, `period`, `sample_count`, `factor_direction` | 因子名、预测周期、有效样本量和自动识别方向 |
-| IC | `IC Mean`, `IC Std`, `adjusted_ICIR`, `adjusted_t-stat`, `directional_IC>0 %` | IC 保留原始均值符号；ICIR、t-stat、胜率按因子方向调整，便于不同方向因子横向比较 |
-| 分组收益 | `mean_return_q1`, `mean_return_qN`, `long_short_spread_bps` | q1/qN 是原始分组均值；多空 spread 按 long/short 方向计算 |
-| 单调性 | `monotonicity`, `monotonicity_q_mean`, `monotonicity_q_ir`, `monotonicity_q_gt_50_rate` | 衡量分组收益是否随分组有稳定排序关系 |
-| 换手 | `turnover_daily_long`, `turnover_annual_rebalance_long` | 日均单边换手和按调仓周期折算的年化换手 |
-| 组合绩效 | `long_*`, `short_*`, `long_exc_*`, `short_exc_*`, `ls_*`, `full_*`, `idx_exc_*` | 使用 Alphalens `create_pyfolio_input` 生成组合收益，再用 Pyfolio 计算年化、回撤、Calmar 和 Sharpe |
-
-多日预测周期（如 5D、10D）会先把 Alphalens 生成的周期收益转成日化等价收益，再计算组合指标；Sharpe 会进一步按重叠窗口的自相关做自动调整，字段名保持为 `*_sharpe`。
+所有命令通过 `uv run python main.py <命令>` 执行，加 `--help` 查看完整参数。
 
 ## 标准因子长什么样
 
@@ -245,97 +141,35 @@ class Ret20_0(Factor):
         return to_factor_output(value, self.spec.name)
 ```
 
-因子代码只应该访问 `FactorFrame`，不要自己读文件、查 DuckDB、或者直接调用 `zer0share`。
+因子代码只应该访问 `FactorFrame`，不要自己读文件、查 DuckDB、或者直接调用 `zer0share`。字段契约和存储格式详见 [docs/factor-contract.md](docs/factor-contract.md)。
 
-## 标准字段
-
-| zer0factor 字段 | zer0share 来源 | 说明 |
-|---|---|---|
-| `open` | `open` | provider 负责复权 |
-| `high` | `high` | provider 负责复权 |
-| `low` | `low` | provider 负责复权 |
-| `close` | `close` | provider 负责复权 |
-| `volume` | `vol` | 统一改名，方便因子代码阅读 |
-| `amount` | `amount` | 成交额 |
-| `return_` | `pct_chg` 或计算收益率 | 避开 Python 关键字 `return` |
-
-默认使用后复权：`hfq`。
-
-## 因子存储
-
-因子值按日期分区写入 Parquet：
+## 目录结构
 
 ```text
-data/factors/
-└── ret20_0/
-    ├── date=20240102/data.parquet
-    └── date=20240103/data.parquet
-
-db/
-└── factor_meta.duckdb
+zer0factor/
+├── main.py                # CLI 入口
+├── zer0factor/
+│   ├── core/              # FactorSpec / FactorFrame / Factor 接口
+│   ├── factors/           # 内置因子（收益率、市值等）
+│   ├── cli/               # CLI 命令实现
+│   ├── preprocess/        # 去极值、标准化、中性化
+│   ├── eval/              # 因子评估、summary 和 report
+│   ├── registry.py        # 因子注册表
+│   └── storage.py         # Parquet + DuckDB 因子存储
+├── config/                # settings.example.toml、factors.toml
+├── docs/skills/factor-research/   # 研报到因子的 skill
+├── workspaces/            # 每轮研究流程的产物
+├── notebooks/
+└── tests/
 ```
 
-因子结果必须是三列：
+## 文档
 
-```text
-trade_date, ts_code, value
-```
-
-## factor-research Skill
-
-Codex skill 位置：
-
-```text
-docs/skills/factor-research/
-```
-
-流程：
-
-```text
-PDF 研报 / 研究想法
-  -> 候选因子
-  -> 人工审核
-  -> FactorSpec
-  -> 质量门检查
-  -> Python 因子代码
-  -> 执行检查
-  -> 归档
-```
-
-初始化工作区：
-
-```bash
-python docs/skills/factor-research/scripts/init_factor_research_workspace.py \
-  workspaces/my-factor-run \
-  --target-factor-count 5 \
-  --selection-mode top_representative
-```
-
-校验因子元数据：
-
-```bash
-python docs/skills/factor-research/scripts/validate_factors_json.py \
-  workspaces/my-factor-run/factors.json
-```
-
-## 示例流程
-
-`workspaces/factor-research-guosen-momentum/` 里有一轮完整的动量研报示例：
-
-- `factors.json`
-- `approved.json`
-- `code/*.py`
-- `results/execution_feedback.json`
-- `results/factor_library.json`
-- `feedback/round_feedback.md`
-
-生成出的因子：
-
-- `ret20_0`
-- `ret240_20_remove_up_limit`
-- `rank_mom120_20`
-- `smooth240_1`
-- `overnight_mom20`
+- [因子契约](docs/factor-contract.md)：标准字段、输出格式和存储布局
+- [因子评估](docs/evaluation.md)：注册表、评估命令、产物结构和指标口径
+- [factor-research skill](docs/skills/factor-research/)：从研报提取、审核、生成和归档因子的完整流程
+- [开发笔记](docs/devlog.md)：记录设计过程和踩坑的系列文章目录
+- 示例：`workspaces/factor-research-guosen-momentum/` 包含一轮完整的动量研报因子生成记录
 
 ## 当前限制
 
@@ -343,7 +177,6 @@ python docs/skills/factor-research/scripts/validate_factors_json.py \
 - `FactorFrame` 还没有暴露 ST、停牌、上市天数、精确涨停等字段。
 - 公告日因子、指数超额因子、风格回归因子还需要扩展 provider。
 - API 还处在实验阶段。
-
 
 ## 贡献
 
@@ -355,13 +188,17 @@ python docs/skills/factor-research/scripts/validate_factors_json.py \
 - 增加不包含第三方版权材料的示例
 - 改进文档
 
-详见 [CONTRIBUTING.md](CONTRIBUTING.md)。
+开发环境和提交规范详见 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
 ## 交流
 
-公众号：极客投研笔记
+我持续记录这个项目的设计过程、踩坑记录和后续扩展：
 
-如果你对本地股票数据系统、AI 量化投研或因子研究工作流感兴趣，可以关注公众号看后续更新。
+- [开发笔记目录](docs/devlog.md)：所有文章的索引，跟踪开发进度从这里开始
+- 知乎：[我用 Codex，把"投资研报到股票因子"的流程做成了一个 Skill](https://zhuanlan.zhihu.com/p/2037505179373806287) / [我用 Codex + Alphalens，搭了一套适配 A 股的因子评估流水线](https://zhuanlan.zhihu.com/p/2044174825103610007)
+- 微信公众号「极客投研笔记」：同步更新，欢迎关注
+
+如果你对 AI + 量化投研、本地股票数据系统、因子研究工作流感兴趣，欢迎交流。
 
 ## 免责声明
 

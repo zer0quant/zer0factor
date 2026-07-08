@@ -6,9 +6,7 @@
 
 [简体中文](README.md) | English
 
-AI-assisted factor research workspace for local A-share data.
-
-`zer0factor` turns research ideas and quant reports into reviewable, executable factor code:
+AI-assisted factor research workbench for local A-share data. `zer0factor` turns research reports and factor ideas into reviewable, executable, persisted factor code:
 
 ```text
 report / idea -> FactorSpec -> Python compute() -> Parquet factor values
@@ -16,42 +14,27 @@ report / idea -> FactorSpec -> Python compute() -> Parquet factor values
 
 It is built to work with [zer0share](https://github.com/zer0quant/zer0share):
 
-- `zer0share`: local A-share data collection and query layer
-- `zer0factor`: factor specification, generation, computation, and storage layer
+- `zer0share`: local A-share data collection, sync, and query
+- `zer0factor`: factor specification, generation, preprocessing, evaluation, and storage
 
-The project is still early. Treat it as a research workbench, not a production factor platform.
+> The project is still early. Treat it as a research workbench, not a production factor platform.
 
 ## Features
 
-- Standard factor contract: `FactorSpec + FactorFrame + compute()`
+- Standard factor contract: `FactorSpec + FactorFrame + compute()` with a unified `trade_date, ts_code, value` output
 - `zer0share` provider that maps local market data into wide factor panels
-- Factor output schema: `trade_date, ts_code, value`
 - Parquet factor storage with a DuckDB registry
-- `factor-research` Codex skill for report-to-factor workflows
-- Example momentum-report run with generated factor modules
-
-## Layout
-
-```text
-zer0factor/
-├── zer0factor/
-│   ├── config.py              # config loader
-│   ├── storage.py             # Parquet + DuckDB factor storage
-│   └── factor/__init__.py     # factor contract and zer0share provider
-├── docs/skills/factor-research/
-├── workspaces/                # research run artifacts
-├── notebooks/
-├── tests/
-└── config/settings.example.toml
-```
+- Factor registry: `config/factors.toml` tracks candidate factors, tags, and default evaluation parameters
+- Preprocessing: cross-sectional winsorization, standardization, and industry / market-cap neutralization
+- Factor evaluation: IC, quantile returns, turnover, monotonicity, and portfolio metrics via Alphalens / Pyfolio
+- `factor-research` skill for report-to-factor workflows, with one completed momentum-report example
 
 ## Install
 
-```bash
-git clone <your-repo-url>
-cd zer0factor
-uv sync
-```
+Prerequisites:
+
+- Python 3.11+ and [uv](https://docs.astral.sh/uv/)
+- Local A-share data synced with `zer0share`
 
 By default, `zer0factor` expects `zer0share` next to this repo:
 
@@ -61,14 +44,20 @@ work/
 └── zer0share/
 ```
 
-This is configured in `pyproject.toml`:
+If your `zer0share` checkout lives elsewhere, change the path in `pyproject.toml` first:
 
 ```toml
 [tool.uv.sources]
 zer0share = { path = "../zer0share" }
 ```
 
-Change the path if your local `zer0share` checkout lives elsewhere.
+Then:
+
+```bash
+git clone https://github.com/zer0quant/zer0factor.git
+cd zer0factor
+uv sync
+```
 
 ## Configure
 
@@ -93,30 +82,42 @@ end_date   = ""
 
 ## Quick Start
 
-Run the focused test suite:
+A minimal compute-to-evaluate loop, using the built-in market-cap factor:
 
 ```bash
-uv run pytest tests/test_config.py tests/test_storage.py tests/test_factor_standard.py tests/test_factor_research_skill_scripts.py
-```
-
-Check factor storage status:
-
-```bash
+# Check factor storage status
 uv run python main.py --config config/settings.toml status
+
+# Compute the built-in market-cap factors and write them to local storage
+uv run python main.py compute-market-cap
+
+# Evaluate a stored factor and inspect the results
+uv run python main.py evaluate-factor log_total_market_cap
+uv run python main.py show-summary
 ```
 
-Lint the core runtime and skill files:
-
-```bash
-uv run ruff check zer0factor/core/__init__.py docs/skills/factor-research tests/test_factor_standard.py tests/test_factor_research_skill_scripts.py
-```
+Evaluation artifacts are written to `data/evaluations/<run_id>/`. See [docs/evaluation.md](docs/evaluation.md) for metric definitions (Chinese).
 
 ## CLI
 
 | Command | Description |
 |---|---|
-| `uv run python main.py status` | List computed factors in the configured storage |
-| `uv run python main.py compute-returns` | Compute built-in return factors and write them to local storage |
+| `status` | List computed factors in the configured storage |
+| `factor-list` | Compare registry entries against local storage |
+| `factor-info <name>` | Show registry and storage status for one factor |
+| `compute-returns` | Compute built-in return factors and write them to local storage |
+| `compute-market-cap` | Compute built-in market-cap factors and write them to local storage |
+| `build-factors --family <name>` | Build a registered factor family |
+| `standardize-factor <name>` | Winsorize, impute, and standardize a stored factor cross-sectionally |
+| `neutralize-factor <name>` | Neutralize a standardized factor by industry / market cap |
+| `evaluate-factor <name>` | Evaluate a single stored factor |
+| `evaluate-factors <name...>` | Evaluate multiple stored factors |
+| `evaluate-batch --file <file>` | Batch-evaluate factors from a config file |
+| `evaluate-summary` | Summarize an evaluation run |
+| `analyze-evaluation` | Analyze an evaluation summary and write grouped diagnostics |
+| `show-summary` | Show the full summary of the latest evaluation run |
+
+Run every command as `uv run python main.py <command>`; add `--help` for full options.
 
 ## Factor Contract
 
@@ -140,98 +141,35 @@ class Ret20_0(Factor):
         return to_factor_output(value, self.spec.name)
 ```
 
-Factor code should only read data from `FactorFrame`. It should not read files, query DuckDB, or
-call `zer0share` directly.
+Factor code should only read data from `FactorFrame`. It should not read files, query DuckDB, or call `zer0share` directly. See [docs/factor-contract.md](docs/factor-contract.md) for field mappings and storage layout (Chinese).
 
-## Standard Fields
-
-| zer0factor field | zer0share source | Notes |
-|---|---|---|
-| `open` | `open` | adjusted by provider |
-| `high` | `high` | adjusted by provider |
-| `low` | `low` | adjusted by provider |
-| `close` | `close` | adjusted by provider |
-| `volume` | `vol` | renamed for factor code |
-| `amount` | `amount` | turnover amount |
-| `return_` | `pct_chg` or computed return | reserved word-safe name |
-
-Default adjustment is `hfq`.
-
-## Storage
-
-Factor values are written as date-partitioned Parquet:
+## Layout
 
 ```text
-data/factors/
-└── ret20_0/
-    ├── date=20240102/data.parquet
-    └── date=20240103/data.parquet
-
-db/
-└── factor_meta.duckdb
+zer0factor/
+├── main.py                # CLI entry point
+├── zer0factor/
+│   ├── core/              # FactorSpec / FactorFrame / Factor contract
+│   ├── factors/           # built-in factors (returns, market cap, ...)
+│   ├── cli/               # CLI command implementations
+│   ├── preprocess/        # winsorization, standardization, neutralization
+│   ├── eval/              # factor evaluation, summary, and report
+│   ├── registry.py        # factor registry
+│   └── storage.py         # Parquet + DuckDB factor storage
+├── config/                # settings.example.toml, factors.toml
+├── docs/skills/factor-research/   # report-to-factor skill
+├── workspaces/            # research run artifacts
+├── notebooks/
+└── tests/
 ```
 
-Each factor dataframe must contain:
+## Documentation
 
-```text
-trade_date, ts_code, value
-```
-
-## factor-research Skill
-
-The Codex skill lives in:
-
-```text
-docs/skills/factor-research/
-```
-
-Workflow:
-
-```text
-PDF report / research idea
-  -> candidate factors
-  -> human review
-  -> FactorSpec
-  -> quality gates
-  -> Python factor code
-  -> execution check
-  -> archive
-```
-
-Initialize a research workspace:
-
-```bash
-python docs/skills/factor-research/scripts/init_factor_research_workspace.py \
-  workspaces/my-factor-run \
-  --target-factor-count 5 \
-  --selection-mode top_representative
-```
-
-Validate factor metadata:
-
-```bash
-python docs/skills/factor-research/scripts/validate_factors_json.py \
-  workspaces/my-factor-run/factors.json
-```
-
-## Example Run
-
-`workspaces/factor-research-guosen-momentum/` contains one completed momentum-report run:
-
-- `factors.json`
-- `approved.json`
-- `code/*.py`
-- `results/execution_feedback.json`
-- `results/factor_library.json`
-- `feedback/round_feedback.md`
-
-Generated factors:
-
-- `ret20_0`
-- `ret240_20_remove_up_limit`
-- `rank_mom120_20`
-- `smooth240_1`
-- `overnight_mom20`
+- [Factor contract](docs/factor-contract.md): standard fields, output schema, and storage layout (Chinese)
+- [Factor evaluation](docs/evaluation.md): registry, evaluation commands, artifacts, and metric definitions (Chinese)
+- [factor-research skill](docs/skills/factor-research/): the full report-to-factor workflow
+- [Devlog](docs/devlog.md): index of articles documenting the design process (Chinese)
+- Example: `workspaces/factor-research-guosen-momentum/` contains one completed momentum-report run
 
 ## Limitations
 
@@ -239,19 +177,20 @@ Generated factors:
 - `FactorFrame` does not yet expose ST flags, suspension flags, listed-days masks, or exact limit-up metadata.
 - Announcement-date factors and benchmark-relative factors need additional provider contracts.
 - APIs are experimental.
-- Third-party PDFs and extracted full report text are ignored and should not be committed.
+
+## Community
+
+The design process and lessons learned are documented (in Chinese) on Zhihu and the WeChat official account 极客投研笔记. See the [devlog](docs/devlog.md) for the full article index.
 
 ## Contributing
 
-Contributions are welcome, especially around provider contracts, factor execution CLI, tests, and
-documentation.
+Contributions are welcome, especially around provider contracts, factor execution CLI, tests, and documentation.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Disclaimer
 
-This project is for research and engineering experiments only. It does not provide investment
-advice. Any factor, example, or generated result should be independently verified before use.
+This project is for research and engineering experiments only. It does not provide investment advice. Any factor, example, or generated result should be independently verified before use.
 
 ## License
 
