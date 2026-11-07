@@ -115,3 +115,34 @@ def make_factor_store(tmp_path):
         return factor_dir
 
     return _make
+
+
+@pytest.fixture
+def make_config(tmp_path, evaluations_dir):
+    from zer0factor.config import Config, StandardSetting, WebConfig
+
+    def _make(registry_text: str | None = None, **web_overrides):
+        registry = tmp_path / "factors.toml"
+        if registry_text is not None:
+            registry.write_text(registry_text)
+        (tmp_path / "factors").mkdir(exist_ok=True)
+        web = WebConfig(
+            cache_dir=tmp_path / "web_cache",
+            evaluations_dir=evaluations_dir,
+            registry_path=registry,
+            standard=StandardSetting(quantiles=5),
+            **web_overrides,
+        )
+        return Config(
+            zer0share_data_dir=tmp_path / "zer0share",
+            factor_dir=tmp_path / "factors",
+            db_path=tmp_path / "factor.duckdb",
+            log_path=tmp_path / "factor.log",
+            universe="all",
+            process_universe="univ_trade_base",
+            start_date="20160101",
+            end_date="",
+            web=web,
+        )
+
+    return _make
