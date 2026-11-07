@@ -1,0 +1,76 @@
+[
+ {
+  "kwargs": {
+   "direction": 1,
+   "period": "1D",
+   "long_quantile": 5,
+   "short_quantile": 1,
+   "transaction_cost_bps": 10.0
+  },
+  "expected": {
+   "long_ann_ret": 0.08688139650582771,
+   "long_max_dd": -0.017769244594165096,
+   "long_calmar": 4.889425436484624,
+   "long_sharpe": 1.696657451458779,
+   "short_ann_ret": 0.036969265033555354,
+   "short_max_dd": -0.034593376996264906,
+   "short_calmar": 1.0686804308682258,
+   "short_sharpe": 0.7857435049249817,
+   "long_exc_ann_ret": 0.12156243511119236,
+   "long_exc_max_dd": -0.014231172986695184,
+   "long_exc_calmar": 8.541982816514272,
+   "long_exc_sharpe": 2.4888072854763252,
+   "short_exc_ann_ret": 0.005295060750596381,
+   "short_exc_max_dd": -0.03450469965534781,
+   "short_exc_calmar": 0.15345911726479006,
+   "short_exc_sharpe": 0.14608335980208512,
+   "ls_ann_ret": 0.0622113886708735,
+   "ls_max_dd": -0.023059640650497374,
+   "ls_calmar": 2.6978472741088297,
+   "ls_sharpe": 1.7073506357771122,
+   "full_ann_ret": 0.040614662974911564,
+   "full_max_dd": -0.014728011432552294,
+   "full_calmar": 2.7576474367166646,
+   "full_sharpe": 1.4301249909428895,
+   "long_exc_short_exc_ann_ret_ratio": 22.957703572617334,
+   "ls_ann_ret_ratio": 1.682786731475646
+  }
+ },
+ {
+  "kwargs": {
+   "direction": -1,
+   "period": "5D",
+   "long_quantile": 1,
+   "short_quantile": 5,
+   "transaction_cost_bps": 0.0
+  },
+  "expected": {
+   "long_ann_ret": -0.23768541672336552,
+   "long_max_dd": -0.11539116525383022,
+   "long_calmar": -2.0598233512983435,
+   "long_sharpe": -13.115513446402886,
+   "short_ann_ret": -0.2113205843546785,
+   "short_max_dd": -0.1001336691853382,
+   "short_calmar": -2.1103849092311155,
+   "short_sharpe": -10.044668760317341,
+   "long_exc_ann_ret": -0.2328706689322695,
+   "long_exc_max_dd": -0.11331353308201003,
+   "long_exc_calmar": -2.0551002391191053,
+   "long_exc_sharpe": -13.216149509941985,
+   "short_exc_ann_ret": -0.21629641569628633,
+   "short_exc_max_dd": -0.10266135777772803,
+   "short_exc_calmar": -2.106892217075381,
+   "short_exc_sharpe": -9.836182438451619,
+   "ls_ann_ret": -0.2241931026469829,
+   "ls_max_dd": -0.10669119192551435,
+   "ls_calmar": -2.1013271911284073,
+   "ls_sharpe": -15.868411908390431,
+   "full_ann_ret": -0.20025551146417164,
+   "full_max_dd": -0.09454426294872803,
+   "full_calmar": -2.1181138359793605,
+   "full_sharpe": -16.953313470356296,
+   "long_exc_short_exc_ann_ret_ratio": -1.0766274983458624,
+   "ls_ann_ret_ratio": -1.0609146445984614
+  }
+ }
+]

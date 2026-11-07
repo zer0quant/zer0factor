@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 import warnings
 from contextlib import contextmanager
+from dataclasses import dataclass
 
 import numpy as np
 import pandas as pd
@@ -24,56 +25,65 @@ def detect_direction(daily_ic: pd.DataFrame) -> int:
     return 1 if (pd.isna(overall) or overall >= 0) else -1
 
 
-def build_pyfolio_return_metrics(
+@dataclass(frozen=True)
+class PortfolioDailyReturns:
+    long: pd.Series
+    short: pd.Series
+    ls: pd.Series
+    full: pd.Series
+    benchmark: pd.Series | None
+    long_positions: pd.DataFrame
+    short_positions: pd.DataFrame
+    ls_positions: pd.DataFrame
+    full_positions: pd.DataFrame
+    ls_benchmark: pd.Series | None
+    full_benchmark: pd.Series | None
+
+
+def build_portfolio_daily_returns(
     clean_factor_data: pd.DataFrame,
     *,
     direction: int,
     period: str,
     long_quantile: int,
     short_quantile: int,
-    index_returns: pd.Series | None = None,
     transaction_cost_bps: float = 0.0,
-) -> dict[str, float]:
+) -> PortfolioDailyReturns:
     """
-    Build all portfolio performance stats from Alphalens daily returns.
+    Daily-equivalent, cost-adjusted portfolio returns used by the summary metrics.
 
     Single-leg portfolios pin factor values to +1/-1 so Alphalens builds pure
     equal-weight long and short sleeves instead of using raw factor signs.
     transaction_cost_bps is applied as a simple proportional cost on estimated
-    daily turnover before Pyfolio metrics are computed.
+    daily turnover. Exceptions propagate to the caller.
     """
-    try:
-        with _suppress_known_pyfolio_warnings():
-            long_returns, long_positions, benchmark = _create_pyfolio_returns(
-                clean_factor_data,
-                period=period,
-                quantiles=[long_quantile],
-                factor_value=1.0,
-            )
-            short_returns, short_positions, _ = _create_pyfolio_returns(
-                clean_factor_data,
-                period=period,
-                quantiles=[short_quantile],
-                factor_value=-1.0,
-            )
-            ls_returns, ls_positions, ls_benchmark = _create_long_short_pyfolio_returns(
-                clean_factor_data,
-                direction=direction,
-                period=period,
-                equal_weight=True,
-                quantiles=sorted([long_quantile, short_quantile]),
-            )
-            full_returns, full_positions, full_benchmark = (
-                _create_long_short_pyfolio_returns(
-                    clean_factor_data,
-                    direction=direction,
-                    period=period,
-                    equal_weight=False,
-                    quantiles=None,
-                )
-            )
-    except Exception:
-        return _empty_pyfolio_return_metrics(index_returns is not None)
+    with _suppress_known_pyfolio_warnings():
+        long_returns, long_positions, benchmark = _create_pyfolio_returns(
+            clean_factor_data,
+            period=period,
+            quantiles=[long_quantile],
+            factor_value=1.0,
+        )
+        short_returns, short_positions, _ = _create_pyfolio_returns(
+            clean_factor_data,
+            period=period,
+            quantiles=[short_quantile],
+            factor_value=-1.0,
+        )
+        ls_returns, ls_positions, ls_benchmark = _create_long_short_pyfolio_returns(
+            clean_factor_data,
+            direction=direction,
+            period=period,
+            equal_weight=True,
+            quantiles=sorted([long_quantile, short_quantile]),
+        )
+        full_returns, full_positions, full_benchmark = _create_long_short_pyfolio_returns(
+            clean_factor_data,
+            direction=direction,
+            period=period,
+            equal_weight=False,
+            quantiles=None,
+        )
 
     period_int = _parse_period_int(period)
     long_returns = _daily_equivalent_returns(long_returns, period_int)
@@ -85,26 +95,59 @@ def build_pyfolio_return_metrics(
     full_benchmark = _daily_equivalent_returns(full_benchmark, period_int)
 
     if transaction_cost_bps > 0:
-        long_returns = _apply_transaction_costs(
-            long_returns,
-            long_positions,
-            transaction_cost_bps,
-        )
+        long_returns = _apply_transaction_costs(long_returns, long_positions, transaction_cost_bps)
         short_returns = _apply_transaction_costs(
-            short_returns,
-            short_positions,
-            transaction_cost_bps,
+            short_returns, short_positions, transaction_cost_bps
         )
-        ls_returns = _apply_transaction_costs(
-            ls_returns,
-            ls_positions,
-            transaction_cost_bps,
+        ls_returns = _apply_transaction_costs(ls_returns, ls_positions, transaction_cost_bps)
+        full_returns = _apply_transaction_costs(full_returns, full_positions, transaction_cost_bps)
+
+    return PortfolioDailyReturns(
+        long=long_returns,
+        short=short_returns,
+        ls=ls_returns,
+        full=full_returns,
+        benchmark=benchmark,
+        long_positions=long_positions,
+        short_positions=short_positions,
+        ls_positions=ls_positions,
+        full_positions=full_positions,
+        ls_benchmark=ls_benchmark,
+        full_benchmark=full_benchmark,
+    )
+
+
+def build_pyfolio_return_metrics(
+    clean_factor_data: pd.DataFrame,
+    *,
+    direction: int,
+    period: str,
+    long_quantile: int,
+    short_quantile: int,
+    index_returns: pd.Series | None = None,
+    transaction_cost_bps: float = 0.0,
+) -> dict[str, float]:
+    """Build all portfolio performance stats from Alphalens daily returns."""
+    try:
+        series = build_portfolio_daily_returns(
+            clean_factor_data,
+            direction=direction,
+            period=period,
+            long_quantile=long_quantile,
+            short_quantile=short_quantile,
+            transaction_cost_bps=transaction_cost_bps,
         )
-        full_returns = _apply_transaction_costs(
-            full_returns,
-            full_positions,
-            transaction_cost_bps,
-        )
+    except Exception:
+        return _empty_pyfolio_return_metrics(index_returns is not None)
+
+    period_int = _parse_period_int(period)
+    long_returns, long_positions = series.long, series.long_positions
+    short_returns, short_positions = series.short, series.short_positions
+    ls_returns, ls_positions = series.ls, series.ls_positions
+    full_returns, full_positions = series.full, series.full_positions
+    benchmark = series.benchmark
+    ls_benchmark = series.ls_benchmark
+    full_benchmark = series.full_benchmark
 
     result: dict[str, float] = {}
     result.update(_portfolio_stats("long", long_returns, benchmark, long_positions, period_int))
