@@ -9,6 +9,19 @@ from zer0factor.eval.metrics.returns import (
 )
 
 
+def _two_asset_factor_data(dates, period, period_returns):
+    """Two-asset factor data covering every date the faked pyfolio input returns."""
+    index = pd.MultiIndex.from_product([dates, ["A", "B"]], names=["date", "asset"])
+    return pd.DataFrame(
+        {
+            "factor": [1.0, 2.0] * len(dates),
+            "factor_quantile": [1, 10] * len(dates),
+            period: list(period_returns) * len(dates),
+        },
+        index=index,
+    )
+
+
 def test_detect_direction_positive_ic_gives_plus_one():
     daily_ic = pd.DataFrame(
         {"1D": [0.1, 0.2, 0.05]},
@@ -41,13 +54,8 @@ def test_build_pyfolio_return_metrics_builds_all_portfolios_and_maps_stats(monke
         ],
         names=["date", "asset"],
     )
-    clean_factor_data = pd.DataFrame(
-        {
-            "factor": [1.0, 2.0],
-            "factor_quantile": [1, 10],
-            "1D": [0.01, -0.01],
-        },
-        index=index,
+    clean_factor_data = _two_asset_factor_data(
+        pd.date_range("2024-01-02", periods=2), "1D", [0.01, -0.01]
     )
     captured = {}
     call_returns = {
@@ -127,14 +135,14 @@ def test_build_pyfolio_return_metrics_builds_all_portfolios_and_maps_stats(monke
         index_returns=pd.Series([0.005, 0.015], index=pd.date_range("2024-01-02", periods=2)),
     )
 
-    assert captured[(False, (1,))]["factor"] == [1.0, 1.0]
+    assert captured[(False, (1,))]["factor"] == [1.0, 1.0] * 2
     assert captured[(False, (1,))]["period"] == "1D"
     assert not captured[(False, (1,))]["long_short"]
     assert captured[(False, (1,))]["equal_weight"]
-    assert captured[(False, (10,))]["factor"] == [-1.0, -1.0]
-    assert captured[(True, (1, 10))]["factor"] == [-1.0, -2.0]
+    assert captured[(False, (10,))]["factor"] == [-1.0, -1.0] * 2
+    assert captured[(True, (1, 10))]["factor"] == [-1.0, -2.0] * 2
     assert captured[(True, (1, 10))]["long_short"]
-    assert captured[(True, None)]["factor"] == [-1.0, -2.0]
+    assert captured[(True, None)]["factor"] == [-1.0, -2.0] * 2
     assert captured[(True, None)]["long_short"]
     assert not captured[(True, None)]["equal_weight"]
     assert captured[(True, None)]["quantiles"] is None
@@ -196,19 +204,8 @@ def test_build_pyfolio_return_metrics_returns_nan_metrics_when_pyfolio_fails(mon
 
 
 def test_build_pyfolio_return_metrics_daily_equivalent_for_multi_day_period(monkeypatch):
-    clean_factor_data = pd.DataFrame(
-        {
-            "factor": [1.0, 2.0],
-            "factor_quantile": [1, 10],
-            "5D": [0.10, -0.05],
-        },
-        index=pd.MultiIndex.from_tuples(
-            [
-                (pd.Timestamp("2024-01-02"), "A"),
-                (pd.Timestamp("2024-01-02"), "B"),
-            ],
-            names=["date", "asset"],
-        ),
+    clean_factor_data = _two_asset_factor_data(
+        pd.date_range("2024-01-02", periods=2), "5D", [0.10, -0.05]
     )
     dates = pd.date_range("2024-01-02", periods=2)
     call_returns = {
@@ -275,21 +272,10 @@ def test_build_pyfolio_return_metrics_daily_equivalent_for_multi_day_period(monk
 
 
 def test_build_pyfolio_return_metrics_adjusts_sharpe_for_overlapping_period(monkeypatch):
-    clean_factor_data = pd.DataFrame(
-        {
-            "factor": [1.0, 2.0],
-            "factor_quantile": [1, 10],
-            "5D": [0.10, -0.05],
-        },
-        index=pd.MultiIndex.from_tuples(
-            [
-                (pd.Timestamp("2024-01-02"), "A"),
-                (pd.Timestamp("2024-01-02"), "B"),
-            ],
-            names=["date", "asset"],
-        ),
+    clean_factor_data = _two_asset_factor_data(
+        pd.bdate_range("2024-01-02", periods=5), "5D", [0.10, -0.05]
     )
-    dates = pd.date_range("2024-01-02", periods=5)
+    dates = pd.bdate_range("2024-01-02", periods=5)
     overlapping_returns = pd.Series([0.01, 0.011, 0.012, 0.013, 0.014], index=dates)
 
     def fake_create_pyfolio_input(
@@ -336,19 +322,8 @@ def test_build_pyfolio_return_metrics_adjusts_sharpe_for_overlapping_period(monk
 
 
 def test_build_pyfolio_return_metrics_applies_transaction_costs(monkeypatch):
-    clean_factor_data = pd.DataFrame(
-        {
-            "factor": [1.0, 2.0],
-            "factor_quantile": [1, 10],
-            "1D": [0.01, -0.01],
-        },
-        index=pd.MultiIndex.from_tuples(
-            [
-                (pd.Timestamp("2024-01-02"), "A"),
-                (pd.Timestamp("2024-01-02"), "B"),
-            ],
-            names=["date", "asset"],
-        ),
+    clean_factor_data = _two_asset_factor_data(
+        pd.date_range("2024-01-02", periods=2), "1D", [0.01, -0.01]
     )
     dates = pd.date_range("2024-01-02", periods=2)
     captured_returns = []

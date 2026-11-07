@@ -88,6 +88,25 @@ def build_portfolio_daily_returns(
                 quantiles=None,
             )
 
+    # create_pyfolio_input resamples returns, positions and benchmark to calendar
+    # days: weekends/holidays become zero-return, all-cash rows. Keep only the
+    # trading days of the factor data so annualization (252/yr) and turnover
+    # estimates see the real calendar. Dropping the forward-filled zero returns
+    # does not change compounded performance.
+    trading_days = _trading_days(clean_factor_data)
+    long_returns = _restrict_to_trading_days(long_returns, trading_days)
+    short_returns = _restrict_to_trading_days(short_returns, trading_days)
+    ls_returns = _restrict_to_trading_days(ls_returns, trading_days)
+    benchmark = _restrict_to_trading_days(benchmark, trading_days)
+    ls_benchmark = _restrict_to_trading_days(ls_benchmark, trading_days)
+    long_positions = _restrict_to_trading_days(long_positions, trading_days)
+    short_positions = _restrict_to_trading_days(short_positions, trading_days)
+    ls_positions = _restrict_to_trading_days(ls_positions, trading_days)
+    if include_full:
+        full_returns = _restrict_to_trading_days(full_returns, trading_days)
+        full_benchmark = _restrict_to_trading_days(full_benchmark, trading_days)
+        full_positions = _restrict_to_trading_days(full_positions, trading_days)
+
     period_int = _parse_period_int(period)
     long_returns = _daily_equivalent_returns(long_returns, period_int)
     short_returns = _daily_equivalent_returns(short_returns, period_int)
@@ -328,6 +347,16 @@ def _ann_return_ratio(numerator: float, denominator: float) -> float:
     if pd.isna(numerator) or pd.isna(denominator) or np.isclose(denominator, 0.0):
         return float("nan")
     return float(numerator / abs(denominator))
+
+
+def _trading_days(clean_factor_data: pd.DataFrame) -> pd.DatetimeIndex:
+    return pd.DatetimeIndex(clean_factor_data.index.get_level_values(0).unique())
+
+
+def _restrict_to_trading_days(obj, trading_days: pd.DatetimeIndex):
+    if obj is None:
+        return None
+    return obj.loc[obj.index.isin(trading_days)]
 
 
 def _daily_equivalent_returns(
