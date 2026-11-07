@@ -18,6 +18,7 @@ import {
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, Route, Routes, useLocation } from "react-router-dom";
 import { fetchMeta, refresh } from "./api";
+import { boardHref } from "./boardState";
 import { fmtDate } from "./format";
 import { useTheme, type ThemeMode } from "./theme";
 import type { Meta } from "./types";
@@ -114,7 +115,7 @@ export default function App() {
       style={{ borderInlineEnd: "none" }}
       onClick={() => setDrawerOpen(false)}
       items={[
-        { key: "board", label: <Link to="/">因子看板</Link> },
+        { key: "board", label: <Link to={boardHref()}>因子看板</Link> },
         { key: "compare", label: <Link to="/compare">因子对比</Link> },
       ]}
     />

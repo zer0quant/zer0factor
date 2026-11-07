@@ -2,6 +2,7 @@ import { Alert, Card, Empty, Grid, List, Skeleton, Space, Table, Tag, Typography
 import { useQuery } from "@tanstack/react-query";
 import { Link, useSearchParams } from "react-router-dom";
 import { fetchCompare, fetchCorrelation } from "../api";
+import { boardHref } from "../boardState";
 import { fmtDate, isNum, num, pct, signColor } from "../format";
 import type { BoardRow, Num } from "../types";
 import { CompareCurves, CorrHeatmap, factorTag } from "../components/charts";
@@ -57,7 +58,7 @@ export default function Compare() {
   if (!valid) {
     return (
       <Card>
-        <Empty description={<>请回 <Link to="/">因子看板</Link> 勾选 2–8 个因子后点击“开始对比”</>} />
+        <Empty description={<>请回 <Link to={boardHref()}>因子看板</Link> 勾选 2–8 个因子后点击“开始对比”</>} />
       </Card>
     );
   }

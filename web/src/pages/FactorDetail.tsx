@@ -17,6 +17,8 @@ import { useQuery } from "@tanstack/react-query";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { fetchDetail, fetchFactor } from "../api";
 import { runLabel } from "../format";
+import { boardHref } from "../boardState";
+import { FactorChips } from "../components/FactorName";
 import type { Detail, IcBlock } from "../types";
 import {
   AcfChart,
@@ -123,7 +125,7 @@ export default function FactorDetail() {
     return (
       <Space direction="vertical" size={16} style={{ width: "100%" }}>
         <ErrorState error={info.error} title={`因子 ${name} 加载失败`} onRetry={() => info.refetch()} />
-        <Link to="/">
+        <Link to={boardHref()}>
           <Button>回到因子看板</Button>
         </Link>
       </Space>
@@ -135,7 +137,7 @@ export default function FactorDetail() {
       <Card size="small">
         <Space direction="vertical" size={4} style={{ width: "100%" }}>
           <Typography.Text type="secondary">
-            <Link to="/">因子看板</Link> / {name}
+            <Link to={boardHref()}>因子看板</Link> / {name}
           </Typography.Text>
           <Space wrap>
             <Typography.Title level={4} style={{ margin: 0, overflowWrap: "anywhere" }}>
@@ -145,6 +147,7 @@ export default function FactorDetail() {
             {meta?.tags.map((t) => <Tag key={t}>{t}</Tag>)}
             {detail.data?.direction === -1 && <Tag color="orange">反向因子</Tag>}
           </Space>
+          <FactorChips name={name} link={false} copyable />
           {meta?.description && <Typography.Text type="secondary">{meta.description}</Typography.Text>}
         </Space>
       </Card>

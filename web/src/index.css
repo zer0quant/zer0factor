@@ -8,6 +8,7 @@
   --zf-best: #fef9c3;
   --zf-bar-bg: #1f2937;
   --zf-bar-fg: #ffffff;
+  --zf-line: #e5e7eb;
 }
 
 :root[data-theme="dark"] {
@@ -18,6 +19,7 @@
   --zf-best: rgba(250, 219, 20, 0.18);
   --zf-bar-bg: #262626;
   --zf-bar-fg: #f5f5f5;
+  --zf-line: #303030;
 }
 
 html,
@@ -71,4 +73,99 @@ body {
   max-width: 100%;
   overflow-x: auto;
   scrollbar-width: thin;
+}
+
+/* Factor name as segments: [preprocessing tag] base · MA<N>. */
+.zf-chips {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+}
+.zf-chips .ant-tag {
+  margin-inline-end: 0;
+  flex: none;
+}
+.zf-chips > a,
+.zf-chips > .zf-chips-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.zf-chips-text {
+  white-space: nowrap;
+}
+.zf-chips-win {
+  margin-inline-start: 6px;
+  font-weight: 600;
+}
+.zf-chips-copy {
+  flex: none;
+}
+.zf-wrap .zf-chips {
+  flex-wrap: wrap;
+}
+.zf-wrap .zf-chips-text {
+  white-space: normal;
+}
+
+/* Board direction arrow. */
+.zf-dir {
+  font-weight: 700;
+  color: var(--zf-muted);
+}
+.zf-dir-neg {
+  color: #d46b08;
+}
+:root[data-theme="dark"] .zf-dir-neg {
+  color: #e89a3c;
+}
+
+/* Board matrix view: return type × preprocessing rows, window columns. */
+.zf-matrix-wrap {
+  overflow-x: auto;
+}
+.zf-matrix {
+  border-collapse: separate;
+  border-spacing: 2px;
+  font-size: 13px;
+}
+.zf-matrix th {
+  font-weight: 500;
+  color: var(--zf-muted);
+  padding: 6px 8px;
+  white-space: nowrap;
+  text-align: center;
+}
+.zf-matrix .zf-matrix-rowhead {
+  text-align: left;
+}
+.zf-matrix .zf-matrix-base {
+  font-weight: 600;
+  color: inherit;
+  vertical-align: middle;
+  border-inline-end: 2px solid var(--zf-line);
+}
+.zf-matrix tr.zf-matrix-groupstart > * {
+  border-top: 6px solid transparent;
+}
+.zf-matrix-cell {
+  min-width: 72px;
+  padding: 7px 8px;
+  text-align: center;
+  border-radius: 4px;
+  cursor: pointer;
+  outline-offset: -2px;
+}
+.zf-matrix-cell:hover,
+.zf-matrix-cell:focus-visible {
+  outline: 2px solid var(--zf-muted);
+}
+.zf-matrix-cell.zf-matrix-sel {
+  outline: 2px solid #1677ff;
+  font-weight: 700;
+}
+.zf-matrix-empty {
+  min-width: 72px;
 }
