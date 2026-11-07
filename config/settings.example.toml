@@ -11,3 +11,15 @@ universe         = "all"              # 原始因子计算股票池
 process_universe = "univ_trade_base"  # 标准化 / 中性化股票池
 start_date       = "20160101"
 end_date         = ""                 # 空 = 最新交易日
+
+[web]
+cache_dir       = "data/web_cache"      # 网页工作台派生缓存，可安全删除
+evaluations_dir = "data/evaluations"
+registry_path   = "config/factors.toml"
+
+[web.standard]          # 因子看板的"标准设定"
+start_date  = "20160101"
+quantiles   = 10
+period      = "1D"
+return_type = "open_t1"
+universe    = "univ_trade_base"

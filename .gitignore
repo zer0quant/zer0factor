@@ -16,3 +16,7 @@ workspaces/*/report.txt
 *.egg-info/
 dist/
 .ipynb_checkpoints/
+.superpowers/
+data/web_cache/
+zer0factor/web/static/
+web/node_modules/

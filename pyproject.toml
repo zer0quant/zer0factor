@@ -16,6 +16,8 @@ dependencies = [
     "loguru>=0.7.0",
     "click>=8.1.0",
     "alphapurify>=0.1.8",
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
 ]
 
 [project.optional-dependencies]
@@ -37,6 +39,7 @@ build-backend = "hatchling.build"
 
 [dependency-groups]
 dev = [
+    "httpx>=0.28.1",
     "pytest>=9.0.3",
     "pytest-cov>=7.1.0",
     "ruff>=0.15.12",

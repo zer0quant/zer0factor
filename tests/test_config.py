@@ -145,3 +145,39 @@ ma_bias = "zer0alpha.factors.MA_BIAS_FAMILY"
 
     with pytest.raises(ValueError, match="invalid external family target"):
         load_config(toml)
+
+
+_BASE_TOML = """
+[zer0share]
+data_dir = "../zer0share/data"
+
+[paths]
+factor_dir = "data/factors"
+db_path = "db/factor_meta.duckdb"
+log_path = "logs/factor.log"
+
+[factor]
+universe = "all"
+start_date = "20160101"
+end_date = ""
+"""
+
+
+def test_load_config_web_defaults_when_section_missing(tmp_path):
+    from zer0factor.config import WebConfig
+
+    toml = tmp_path / "settings.toml"
+    toml.write_text(_BASE_TOML)
+    cfg = load_config(toml)
+    assert cfg.web == WebConfig()
+    assert cfg.web.standard.universe == "univ_trade_base"
+    assert cfg.web.standard.period == "1D"
+
+
+def test_load_config_web_overrides(tmp_path):
+    toml = tmp_path / "settings.toml"
+    toml.write_text(_BASE_TOML + '\n[web]\ncache_dir = "x"\n\n[web.standard]\nquantiles = 5\n')
+    cfg = load_config(toml)
+    assert cfg.web.cache_dir == Path("x")
+    assert cfg.web.standard.quantiles == 5
+    assert cfg.web.standard.start_date == "20160101"

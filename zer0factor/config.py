@@ -25,6 +25,44 @@ class ExternalFamilySpec:
 
 
 @dataclass(frozen=True)
+class StandardSetting:
+    start_date: str = "20160101"
+    quantiles: int = 10
+    period: str = "1D"
+    return_type: str = "open_t1"
+    universe: str = "univ_trade_base"
+
+
+@dataclass(frozen=True)
+class WebConfig:
+    cache_dir: Path = Path("data/web_cache")
+    evaluations_dir: Path = Path("data/evaluations")
+    registry_path: Path = Path("config/factors.toml")
+    standard: StandardSetting = StandardSetting()
+
+
+def _parse_web(raw: dict) -> WebConfig:
+    web = raw.get("web", {})
+    standard = web.get("standard", {})
+    defaults = StandardSetting()
+    paths = {
+        key: Path(web[key])
+        for key in ("cache_dir", "evaluations_dir", "registry_path")
+        if key in web
+    }
+    return WebConfig(
+        **paths,
+        standard=StandardSetting(
+            start_date=str(standard.get("start_date", defaults.start_date)),
+            quantiles=int(standard.get("quantiles", defaults.quantiles)),
+            period=str(standard.get("period", defaults.period)),
+            return_type=str(standard.get("return_type", defaults.return_type)),
+            universe=str(standard.get("universe", defaults.universe)),
+        ),
+    )
+
+
+@dataclass(frozen=True)
 class Config:
     zer0share_data_dir: Path
     factor_dir: Path
@@ -36,6 +74,7 @@ class Config:
     end_date: str
     notify_webhook_url: str = ""
     external_families: tuple[ExternalFamilySpec, ...] = ()
+    web: WebConfig = WebConfig()
 
     def external_family_targets(self) -> dict[str, str]:
         return {spec.name: spec.target for spec in self.external_families}
@@ -64,6 +103,7 @@ def load_config(path: Path = Path("config/settings.toml")) -> Config:
                 ExternalFamilySpec.from_target(str(name), str(target))
                 for name, target in raw.get("external_families", {}).items()
             ),
+            web=_parse_web(raw),
         )
     except KeyError as e:
         raise KeyError(f"配置文件缺少必要字段: {e}") from e
