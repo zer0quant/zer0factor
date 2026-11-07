@@ -100,7 +100,7 @@ uv run python main.py show-summary
 
 ## Web 工作台
 
-只读的浏览器界面，包含三个页面：**因子看板**（按标准设定排序、筛选、勾选）、**单因子详情**（分组累计收益、核心指标、IC / Rank IC 四件套、分组收益、最新因子值）、**因子对比**（指标并排、多空曲线叠加、截面相关性热力图）。
+浏览器界面，包含五个页面：**因子看板**（按标准设定排序、筛选、勾选）、**单因子详情**（分组累计收益、核心指标、IC / Rank IC 四件套、分组收益、最新因子值）、**因子对比**（指标并排、多空曲线叠加、截面相关性热力图）、**因子族**（自动发现的因子族、构建、接着评估）、**任务**（后台任务的进度、日志、取消、重跑）。
 
 ```bash
 # 首次使用：构建前端（需要 Node 18+）
@@ -119,6 +119,10 @@ uv run python main.py web-warm --run <run_id> --workers 12
 - **标准设定**：看板的指标统一取自满足 `config/settings.toml` 中 `[web.standard]`（区间起点、组数、持有期、收益口径、股票池，且评估到最新）的最新一次评估；没有标准评估的因子显示“未评估”。
 - **缓存**：详情页需要的日度序列会派生到 `data/web_cache/`，可随时删除重建；新的评估会直接写出这些序列。
 - **界面**：右上角可切换配色（跟随系统 / 浅色 / 深色，选择保存在浏览器本地）；窄屏（手机）下侧边栏收进左上角菜单。详情页累计收益图默认隐藏空头曲线（点图例显示），可切换对数坐标；对比页热力图横轴用 `#1`、`#2` 编号，对应纵轴的因子名。
+- **后台任务**：在网页上发起的评估、构建、基础因子计算、缓存预热都是后台任务。任务以独立进程运行（重启 `serve` 不会中断），记录和日志保存在 `[web] state_dir`（默认 `data/workbench/`）。评估、构建同时只跑 `[web.tasks] heavy_slots` 个（默认 1），其余排队；评估成功后会自动预热缓存并刷新看板。命令行直接运行的任务不在任务页里，也不计入并发上限。
+- **新建评估**：从看板对比篮的“评估”、详情页的“重新评估”、因子族页的“接着评估”打开；“标准设定”开关打开时，结果会进入看板。
+- **因子族自动发现**：`[families] packages = ["zer0alpha.factors"]` 会扫描这些包下导出 `FAMILY` 的子模块（`_` 开头的模块跳过），无需逐个登记；`[external_families]` 仍然兼容。加载失败的族会在因子族页标红并显示报错。模块可声明 `SOURCE = {"paper": ..., "url": ..., "formula": ...}` 记录来源。扫描和任务用 `[web.tasks] python` 指定的解释器执行（默认为服务自身），要构建 zer0alpha 的族时把它指向 zer0alpha 的 venv。
+- **安全**：工作台没有鉴权，任何能访问服务地址的人都能发起任务；只在可信网络里绑定非本机地址。
 - **前端开发**：先启动 `serve`，再在 `web/` 下运行 `npm run dev`（Vite 把 `/api` 代理到 8600 端口）。
 
 ## CLI 命令一览
@@ -134,11 +138,12 @@ uv run python main.py web-warm --run <run_id> --workers 12
 | `standardize-factor <name>` | 对已存因子做截面去极值、填充和标准化 |
 | `neutralize-factor <name>` | 对已标准化因子做行业 / 市值中性化 |
 | `evaluate-factor <name>` | 评估单个已存因子 |
-| `evaluate-factors <name...>` | 评估多个已存因子 |
+| `evaluate-factors <name...>` | 评估多个已存因子（支持 `--workers`、`--run-id`） |
 | `evaluate-batch --file <file>` | 按配置文件批量评估因子 |
 | `evaluate-summary` | 汇总一次评估 run 的 summary |
 | `analyze-evaluation` | 分析评估 summary 并输出分组诊断 |
-| `serve` | 启动只读 Web 工作台 |
+| `serve` | 启动 Web 工作台（含后台任务调度） |
+| `families [--json]` | 列出内置、自动发现和显式登记的因子族 |
 | `web-warm --run <run_id>` | 预生成 Web 图表缓存 |
 | `show-summary` | 查看最近一次评估的完整 summary |
 
