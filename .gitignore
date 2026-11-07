@@ -20,3 +20,4 @@ dist/
 data/web_cache/
 zer0factor/web/static/
 web/node_modules/
+data/workbench/

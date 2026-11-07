@@ -39,6 +39,9 @@ class WebConfig:
     evaluations_dir: Path = Path("data/evaluations")
     registry_path: Path = Path("config/factors.toml")
     standard: StandardSetting = StandardSetting()
+    state_dir: Path = Path("data/workbench")
+    heavy_slots: int = 1
+    light_slots: int = 2
 
 
 def _parse_web(raw: dict) -> WebConfig:
@@ -47,11 +50,14 @@ def _parse_web(raw: dict) -> WebConfig:
     defaults = StandardSetting()
     paths = {
         key: Path(web[key])
-        for key in ("cache_dir", "evaluations_dir", "registry_path")
+        for key in ("cache_dir", "evaluations_dir", "registry_path", "state_dir")
         if key in web
     }
+    tasks = web.get("tasks", {})
     return WebConfig(
         **paths,
+        heavy_slots=int(tasks.get("heavy_slots", 1)),
+        light_slots=int(tasks.get("light_slots", 2)),
         standard=StandardSetting(
             start_date=str(standard.get("start_date", defaults.start_date)),
             quantiles=int(standard.get("quantiles", defaults.quantiles)),
@@ -75,6 +81,7 @@ class Config:
     notify_webhook_url: str = ""
     external_families: tuple[ExternalFamilySpec, ...] = ()
     web: WebConfig = WebConfig()
+    family_packages: tuple[str, ...] = ()
 
     def external_family_targets(self) -> dict[str, str]:
         return {spec.name: spec.target for spec in self.external_families}
@@ -104,6 +111,9 @@ def load_config(path: Path = Path("config/settings.toml")) -> Config:
                 for name, target in raw.get("external_families", {}).items()
             ),
             web=_parse_web(raw),
+            family_packages=tuple(
+                str(p) for p in raw.get("families", {}).get("packages", ())
+            ),
         )
     except KeyError as e:
         raise KeyError(f"配置文件缺少必要字段: {e}") from e

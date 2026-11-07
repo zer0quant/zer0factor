@@ -181,3 +181,41 @@ def test_load_config_web_overrides(tmp_path):
     assert cfg.web.cache_dir == Path("x")
     assert cfg.web.standard.quantiles == 5
     assert cfg.web.standard.start_date == "20160101"
+
+
+BASE_TOML = """
+[zer0share]
+data_dir = "z"
+
+[paths]
+factor_dir = "f"
+db_path = "d.duckdb"
+log_path = "l.log"
+
+[factor]
+universe = "all"
+start_date = "20160101"
+end_date = ""
+"""
+
+
+def test_parse_web_state_dir_and_slots(tmp_path):
+    toml = tmp_path / "settings.toml"
+    toml.write_text(BASE_TOML)
+    cfg = load_config(toml)
+    assert cfg.web.state_dir == Path("data/workbench")
+    assert (cfg.web.heavy_slots, cfg.web.light_slots) == (1, 2)
+    toml.write_text(
+        BASE_TOML + '\n[web]\nstate_dir = "/tmp/wb"\n\n[web.tasks]\nheavy_slots = 2\nlight_slots = 3\n'
+    )
+    cfg = load_config(toml)
+    assert cfg.web.state_dir == Path("/tmp/wb")
+    assert (cfg.web.heavy_slots, cfg.web.light_slots) == (2, 3)
+
+
+def test_parse_family_packages(tmp_path):
+    toml = tmp_path / "settings.toml"
+    toml.write_text(BASE_TOML)
+    assert load_config(toml).family_packages == ()
+    toml.write_text(BASE_TOML + '\n[families]\npackages = ["zer0alpha.factors"]\n')
+    assert load_config(toml).family_packages == ("zer0alpha.factors",)

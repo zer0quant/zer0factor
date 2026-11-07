@@ -16,6 +16,7 @@ end_date         = ""                 # 空 = 最新交易日
 cache_dir       = "data/web_cache"      # 网页工作台派生缓存，可安全删除
 evaluations_dir = "data/evaluations"
 registry_path   = "config/factors.toml"
+state_dir       = "data/workbench"      # 任务记录、任务日志、因子族状态（工作台写入）
 
 [web.standard]          # 因子看板的"标准设定"
 start_date  = "20160101"
@@ -23,3 +24,10 @@ quantiles   = 10
 period      = "1D"
 return_type = "open_t1"
 universe    = "univ_trade_base"
+
+[web.tasks]             # 后台任务并发上限
+heavy_slots = 1         # 评估 / 构建
+light_slots = 2         # 预热缓存
+
+[families]              # 自动发现因子族：扫描这些包下导出 FAMILY 的子模块
+packages = ["zer0alpha.factors"]
