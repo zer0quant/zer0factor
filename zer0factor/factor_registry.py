@@ -65,8 +65,25 @@ class FactorFamilyRegistry:
         return {spec.name: spec for spec in external_specs}
 
 
+def family_registry(cfg) -> FactorFamilyRegistry:
+    """Built-ins + families auto-discovered in ``[families] packages`` + explicit specs."""
+    from zer0factor.discovery import discover_families
+
+    explicit = tuple(getattr(cfg, "external_families", ()) or ())
+    packages = tuple(getattr(cfg, "family_packages", ()) or ())
+    discovered = {
+        d.name: d.family
+        for d in discover_families(FAMILIES, packages, ())
+        if d.family is not None
+    }
+    # Explicit specs stay lazily imported (and validated) by the registry itself.
+    remaining = [s for s in explicit if s.name not in discovered]
+    return FactorFamilyRegistry(discovered, remaining)
+
+
 __all__ = [
     "FAMILIES",
+    "family_registry",
     "FactorFamilyRegistry",
     "get_family",
 ]

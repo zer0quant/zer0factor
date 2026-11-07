@@ -38,10 +38,9 @@ def _spec(cfg, tmp_path, kind, raw, **kw):
 def test_evaluate_spec_builds_cli_argv(cfg, tmp_path):
     spec = _spec(cfg, tmp_path, "evaluate", {"factors": ["fa", "fb"]})
     assert spec.queue == "heavy" and spec.kind == "evaluate"
-    assert spec.command[0] == sys.executable
-    assert spec.command[1].endswith("main.py")
-    assert spec.command[2:4] == ["--config", str((tmp_path / "settings.toml").resolve())]
-    tail = spec.command[4:]
+    assert spec.command[:3] == [sys.executable, "-m", "zer0factor.cli"]
+    assert spec.command[3:5] == ["--config", str((tmp_path / "settings.toml").resolve())]
+    tail = spec.command[5:]
     assert tail[:3] == ["evaluate-factors", "fa", "fb"]
     expected = [
         "--start-date", "20160101", "--periods", "1,5,10", "--quantiles", "10",
@@ -69,7 +68,7 @@ def test_spec_rejects_unknown_factor_and_bad_date(cfg, tmp_path):
 def test_build_spec_requires_known_family(cfg, tmp_path):
     spec = _spec(cfg, tmp_path, "build", {"family": "rolling_return", "stage": "raw",
                                            "update_registry": True, "workers": 4})
-    tail = spec.command[4:]
+    tail = spec.command[5:]
     assert tail[:3] == ["build-factors", "--family", "rolling_return"]
     assert "--update-registry" in tail and tail[tail.index("--stage") + 1] == "raw"
     assert tail[tail.index("--workers") + 1] == "4"
@@ -78,11 +77,11 @@ def test_build_spec_requires_known_family(cfg, tmp_path):
 
 
 def test_base_and_warm_specs(cfg, tmp_path):
-    assert _spec(cfg, tmp_path, "base", {"target": "returns"}).command[4:] == ["compute-returns"]
+    assert _spec(cfg, tmp_path, "base", {"target": "returns"}).command[5:] == ["compute-returns"]
     warm = _spec(cfg, tmp_path, "warm", {"run_id": "r1"}, known_runs={"r1"},
                  run_factor_counts={"r1": 7})
     assert warm.queue == "light"
-    assert warm.command[4:] == ["web-warm", "--run", "r1", "--workers", "8"]
+    assert warm.command[5:] == ["web-warm", "--run", "r1", "--workers", "8"]
     assert warm.progress_total == 7
     with pytest.raises(SpecError):
         _spec(cfg, tmp_path, "warm", {"run_id": "missing"})
@@ -116,3 +115,12 @@ def test_progress_counts_evaluate_lines():
     b = Progress("build", total=None)
     b.feed("hello")
     assert b.last_line == "hello" and b.done == 0
+
+
+def test_task_python_override(cfg, tmp_path):
+    from dataclasses import replace
+
+    cfg = replace(cfg, web=replace(cfg.web, task_python="/opt/alpha/bin/python"))
+    spec = _spec(cfg, tmp_path, "base", {"target": "market_cap"})
+    assert spec.command[0] == "/opt/alpha/bin/python"
+    assert spec.command[5:] == ["compute-market-cap"]

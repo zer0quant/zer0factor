@@ -9,7 +9,7 @@ from loguru import logger
 from zer0factor.cli.root import cli
 from zer0factor.config import load_config
 from zer0factor.context import AppContext
-from zer0factor.factor_registry import FAMILIES, FactorFamilyRegistry
+from zer0factor.factor_registry import FAMILIES, family_registry
 from zer0factor.factors.builtin import MARKET_CAP_FACTORS, RETURN_FACTORS
 from zer0factor.notify import load_notifier
 from zer0factor.pipeline import (
@@ -135,8 +135,7 @@ def build_factors_command(
     resolved_end = end_date if end_date is not None else (cfg.end_date or None)
     notifier = load_notifier(cfg)
     pro = app.pro if stage in {"preprocess", "all"} else None
-    family_registry = FactorFamilyRegistry(FAMILIES, cfg.external_families)
-    family = family_registry.get(family_name)
+    family = family_registry(cfg).get(family_name)
 
     if family.uses_data_provider:
         rows = _run_data_provider_family(

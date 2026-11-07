@@ -28,6 +28,8 @@ universe    = "univ_trade_base"
 [web.tasks]             # 后台任务并发上限
 heavy_slots = 1         # 评估 / 构建
 light_slots = 2         # 预热缓存
+# python = "../zer0alpha/.venv/bin/python"  # 任务与因子族扫描用的解释器（空 = 服务自身）；
+#                                            # 要构建 zer0alpha 的因子族，需指向能 import 它的 venv
 
 [families]              # 自动发现因子族：扫描这些包下导出 FAMILY 的子模块
 packages = ["zer0alpha.factors"]

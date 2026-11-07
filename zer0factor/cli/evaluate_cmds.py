@@ -10,7 +10,7 @@ from loguru import logger
 from zer0factor.cli.root import cli
 from zer0factor.config import load_config
 from zer0factor.context import AppContext
-from zer0factor.factor_registry import FAMILIES, FactorFamilyRegistry
+from zer0factor.factor_registry import family_registry
 from zer0factor.eval import (
     EvaluationRequest,
     ReportThresholds,
@@ -401,7 +401,7 @@ def _resolve_analysis_config(family: str, config_path):
         return ANALYSIS_CONFIGS[family]
 
     cfg = load_config(config_path)
-    registry = FactorFamilyRegistry(FAMILIES, cfg.external_families)
+    registry = family_registry(cfg)
 
     try:
         fam = registry.get(family)

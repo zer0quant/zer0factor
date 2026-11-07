@@ -1,5 +1,6 @@
-"""Registry inspection commands: factor-list, factor-info."""
+"""Registry inspection commands: factor-list, factor-info, families."""
 
+import json
 from pathlib import Path
 
 import click
@@ -135,3 +136,26 @@ def factor_info_command(ctx, name, registry_path):
         click.echo(f"end_date:      {stats.end_date}")
     else:
         click.echo("status:        not found in storage")
+
+
+@cli.command("families")
+@click.option("--json", "as_json", is_flag=True, default=False, help="Output JSON")
+@click.pass_context
+def families_command(ctx, as_json):
+    """List factor families: built-ins, auto-discovered packages, explicit specs."""
+    from zer0factor.discovery import describe, discover_families
+    from zer0factor.factor_registry import FAMILIES
+
+    cfg = load_config(ctx.obj["config_path"])
+    entries = discover_families(
+        FAMILIES,
+        tuple(getattr(cfg, "family_packages", ()) or ()),
+        tuple(getattr(cfg, "external_families", ()) or ()),
+    )
+    described = [describe(e) for e in entries]
+    if as_json:
+        click.echo(json.dumps({"families": described}, ensure_ascii=False))
+        return
+    for d in described:
+        status = f"ERROR {d['error']}" if d["error"] else f"{len(d['outputs'])} outputs"
+        click.echo(f"{d['name']:<40} {d['origin']:<9} {d['module']:<50} {status}")

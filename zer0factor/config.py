@@ -42,6 +42,9 @@ class WebConfig:
     state_dir: Path = Path("data/workbench")
     heavy_slots: int = 1
     light_slots: int = 2
+    # Interpreter for tasks and family discovery ("" = the server's own). Point it at a venv
+    # that can import the family packages, e.g. zer0alpha's.
+    task_python: str = ""
 
 
 def _parse_web(raw: dict) -> WebConfig:
@@ -58,6 +61,7 @@ def _parse_web(raw: dict) -> WebConfig:
         **paths,
         heavy_slots=int(tasks.get("heavy_slots", 1)),
         light_slots=int(tasks.get("light_slots", 2)),
+        task_python=str(tasks.get("python", "")),
         standard=StandardSetting(
             start_date=str(standard.get("start_date", defaults.start_date)),
             quantiles=int(standard.get("quantiles", defaults.quantiles)),

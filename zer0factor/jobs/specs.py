@@ -16,7 +16,6 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from zer0factor.config import Config
 
-MAIN_PY = Path(__file__).resolve().parents[2] / "main.py"
 
 Date = Annotated[str, Field(pattern=r"^\d{8}$")]
 Code = Annotated[str, Field(pattern=r"^[A-Za-z0-9_.]{1,64}$")]
@@ -85,6 +84,12 @@ class TaskSpec:
     extra: dict = field(default_factory=dict)
 
 
+def cli_head(cfg: Config, config_path: Path) -> list[str]:
+    """Command prefix for running the zer0factor CLI with the configured interpreter."""
+    python = cfg.web.task_python or sys.executable
+    return [python, "-m", "zer0factor.cli", "--config", str(Path(config_path).resolve())]
+
+
 def _timestamp() -> str:
     return datetime.now().strftime("%Y%m%d_%H%M%S")
 
@@ -123,7 +128,7 @@ def build_spec(
     except ValidationError as exc:
         raise SpecError(_first_error(exc)) from exc
 
-    head = [sys.executable, str(MAIN_PY), "--config", str(Path(config_path).resolve())]
+    head = cli_head(cfg, config_path)
     run_id = None
     total = None
 

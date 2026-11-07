@@ -6,10 +6,12 @@ import threading
 from contextlib import asynccontextmanager
 from dataclasses import asdict
 from pathlib import Path
+from typing import Literal
 
 import pandas as pd
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse, JSONResponse
+from pydantic import BaseModel, Field
 from loguru import logger
 
 from zer0factor.config import Config
@@ -24,6 +26,7 @@ from zer0factor.web.charts import (
 )
 from zer0factor.web.correlation import _cached as _correlation_cache
 from zer0factor.web.correlation import factor_correlation
+from zer0factor.web.families import DiscoveryError, FamilyCatalog
 from zer0factor.web.jsonsafe import to_jsonable
 from zer0factor.jobs.scheduler import Scheduler
 from zer0factor.jobs.store import TaskStore
@@ -55,6 +58,11 @@ def _run_summary(run: RunInfo, catalog: Catalog) -> dict:
 
 
 REFRESH_KINDS = {"evaluate", "warm"}
+
+
+class FamilyPatch(BaseModel):
+    status: Literal["enabled", "archived"] | None = None
+    note: str | None = Field(None, max_length=2000)
 
 
 def create_app(
@@ -172,7 +180,26 @@ def create_app(
             known_families=lambda: app.state.known_families(),
         ),
     )
-    app.state.known_families = lambda: set()
+    families = FamilyCatalog(cfg, Path(config_path or "config/settings.toml"), store)
+    app.state.families = families
+    app.state.known_families = families.valid_names
+
+    @app.get("/api/families")
+    def list_families(refresh: bool = False):
+        try:
+            rows = families.list(refresh=refresh)
+        except DiscoveryError as exc:
+            raise HTTPException(502, str(exc)) from exc
+        scanned = families.scanned_at
+        return _json({"families": rows, "scanned_at": scanned.isoformat(timespec="seconds")})
+
+    @app.patch("/api/families/{name}")
+    def patch_family(name: str, body: FamilyPatch):
+        if name not in families.valid_names():
+            raise HTTPException(404, f"unknown factor family: {name}")
+        store.set_family(name, status=body.status, note=body.note)
+        row = next(f for f in families.list() if f["name"] == name and not f["error"])
+        return _json(row)
 
     @app.get("/api/factors")
     def factors():
