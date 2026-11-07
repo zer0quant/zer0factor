@@ -20,9 +20,11 @@ import {
 import type { ColumnsType } from "antd/es/table";
 import type { SortOrder } from "antd/es/table/interface";
 import { useQuery } from "@tanstack/react-query";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import { fetchFactors } from "../api";
 import { rememberBoardSearch } from "../boardState";
+import { MAX_COMPARE, setBasket, toggleInBasket, useBasket } from "../compareBasket";
+import { CompareBar } from "../components/CompareBar";
 import {
   baseLabel,
   compareBase,
@@ -37,7 +39,6 @@ import { ErrorState } from "../components/states";
 import { FactorChips } from "../components/FactorName";
 import { FactorMatrix, MATRIX_METRICS } from "../components/FactorMatrix";
 
-const MAX_COMPARE = 8;
 const COLS_KEY = "zer0factor.board.hiddenColumns";
 const DEFAULT_SORT = "icir:descend";
 
@@ -150,7 +151,6 @@ export default function Board() {
   const screens = Grid.useBreakpoint();
   const compact = screens.md === false;
   const [params, setParams] = useSearchParams();
-  const navigate = useNavigate();
   const [storedHidden, setStoredHidden] = useState<string[] | null>(readHidden);
   const [selectMode, setSelectMode] = useState(false);
 
@@ -188,13 +188,19 @@ export default function Board() {
 
   useEffect(() => rememberBoardSearch(params.toString()), [params]);
 
-  const selected = useMemo(() => list(params.get("sel")), [params]);
-  const setSelected = (keys: string[]) => patch({ sel: keys.length ? keys.join(",") : null }, false);
+  const selected = useBasket();
+  const setSelected = setBasket;
   const toggleSelected = (name: string) => {
-    if (selected.includes(name)) setSelected(selected.filter((s) => s !== name));
-    else if (selected.length >= MAX_COMPARE) message.warning(`最多对比 ${MAX_COMPARE} 个因子`);
-    else setSelected([...selected, name]);
+    if (!toggleInBasket(name)) message.warning(`最多对比 ${MAX_COMPARE} 个因子`);
   };
+  // Legacy links carried the selection as ?sel=: move it into the basket once.
+  useEffect(() => {
+    const legacy = params.get("sel");
+    if (legacy) {
+      setBasket(list(legacy));
+      patch({ sel: null }, false);
+    }
+  }, []);
 
   const rows = data ?? [];
   const allCategories = useMemo(
@@ -630,43 +636,7 @@ export default function Board() {
           }}
         />
       )}
-      {selected.length > 0 && (
-        <div
-          style={{
-            position: "fixed",
-            bottom: 24,
-            left: "50%",
-            transform: "translateX(-50%)",
-            background: "var(--zf-bar-bg)",
-            color: "var(--zf-bar-fg)",
-            padding: "10px 16px",
-            borderRadius: 12,
-            boxShadow: "0 8px 24px rgba(0,0,0,.18)",
-            zIndex: 10,
-            display: "flex",
-            gap: 12,
-            alignItems: "center",
-            maxWidth: "calc(100vw - 32px)",
-          }}
-        >
-          <span>
-            已选 {selected.length} 个
-            {selected.length < 2 ? "（至少 2 个）" : ""}
-          </span>
-          <Button size="small" ghost onClick={() => setSelected([])}>
-            清空
-          </Button>
-          <Button
-            size="small"
-            type="primary"
-            disabled={selected.length < 2}
-            style={{ background: "var(--zf-bar-fg)", color: "var(--zf-bar-bg)" }}
-            onClick={() => navigate(`/compare?f=${encodeURIComponent(selected.join(","))}`)}
-          >
-            开始对比
-          </Button>
-        </div>
-      )}
+      <CompareBar />
     </Card>
   );
 }

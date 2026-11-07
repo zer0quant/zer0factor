@@ -9,6 +9,45 @@ const GROUP_COLORS = [
   "#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6",
   "#06b6d4", "#ec4899", "#84cc16", "#f97316", "#6366f1",
 ];
+/**
+ * Ordered palette for quantile groups (plasma ramp): group 1 → N reads as a
+ * gradient, so monotonicity is visible at a glance. The dark-theme ramp skips
+ * the darkest end so lines stay visible on a dark background.
+ */
+const GROUP_RAMP_LIGHT = [
+  "#0d0887", "#41049d", "#6a00a8", "#8f0da4", "#b12a90",
+  "#cc4778", "#e16462", "#f1834b", "#fca636", "#e3a10b",
+];
+const GROUP_RAMP_DARK = [
+  "#7b6cf6", "#9a5cf0", "#b14fd8", "#c44bb8", "#d4549a",
+  "#e16462", "#ec7a52", "#f59342", "#fbae34", "#f9d23c",
+];
+export function groupColors(n: number, dark: boolean): string[] {
+  const ramp = dark ? GROUP_RAMP_DARK : GROUP_RAMP_LIGHT;
+  if (n <= 1) return [ramp[0]];
+  return Array.from({ length: n }, (_, i) => ramp[Math.round((i * (ramp.length - 1)) / (n - 1))]);
+}
+
+/** Flip an IC block's sign for a negative-direction factor (ACF is sign-invariant). */
+export function adjustIcBlock(block: IcBlock, direction: number): IcBlock {
+  if (direction !== -1) return block;
+  const neg = (a: Num[]) => a.map((v) => (typeof v === "number" ? -v : v));
+  return {
+    ...block,
+    series: block.series && {
+      dates: block.series.dates,
+      values: neg(block.series.values),
+      cumulative: neg(block.series.cumulative),
+    },
+    hist: block.hist && {
+      edges: block.hist.edges.map((e) => -e).reverse(),
+      density: [...block.hist.density].reverse(),
+      normal: [...block.hist.normal].reverse(),
+    },
+    decay: block.decay && neg(block.decay),
+  };
+}
+
 const pctLabel = (v: number) => `${(v * 100).toFixed(0)}%`;
 const pctAxis = { axisLabel: { formatter: pctLabel } };
 const pctTip = (v: unknown) => (typeof v === "number" ? `${(v * 100).toFixed(2)}%` : "—");
@@ -50,6 +89,7 @@ export function CumulativeChart({
   // Log scale plots net value (1 + cumulative return); non-positive net values have no log.
   const tf = (d: Num[]) => (log ? d.map((v) => (typeof v === "number" && v > -1 ? 1 + v : null)) : d);
   const keys = Object.keys(groups).sort((a, b) => +a - +b);
+  const ramp = groupColors(keys.length, pal.dark);
   const series = [
     ...keys.map((k, i) => ({
       name: `组${k}`,
@@ -57,7 +97,7 @@ export function CumulativeChart({
       data: tf(groups[k]),
       showSymbol: false,
       lineStyle: { width: 1.2 },
-      color: GROUP_COLORS[i % GROUP_COLORS.length],
+      color: ramp[i],
     })),
     ...([
       ["多空", ls, pal.ink],
@@ -88,7 +128,7 @@ export function CumulativeChart({
           ]}
         />
         <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-          空头默认隐藏，点击图例可显示
+          分组颜色由深到浅对应组1→组{keys.length}；空头默认隐藏，点击图例可显示
         </Typography.Text>
       </Space>
       <Chart
@@ -258,10 +298,13 @@ export const factorTag = (i: number) => `#${i + 1}`;
 
 export function CorrHeatmap({
   factors,
+  labels = factors,
   matrix,
   threshold,
 }: {
   factors: string[];
+  /** Display labels for the y axis (defaults to the full names). */
+  labels?: string[];
   matrix: Num[][];
   threshold: number;
 }) {
@@ -270,8 +313,8 @@ export function CorrHeatmap({
   const compact = screens.md === false;
   const data = matrix.flatMap((row, i) => row.map((v, j) => [j, i, v]));
   const cell = compact ? 44 : 56;
-  const longest = Math.max(...factors.map((f, i) => `${factorTag(i)}  ${f}`.length));
-  const labelWidth = Math.min(compact ? 120 : 300, longest * 7 + 8);
+  const longest = Math.max(...labels.map((f, i) => `${factorTag(i)}  ${f}`.length));
+  const labelWidth = Math.min(compact ? 120 : 300, longest * 12 + 8);
   const height = Math.max(260, factors.length * cell + 110);
   return (
     <Chart
@@ -294,7 +337,7 @@ export function CorrHeatmap({
         },
         yAxis: {
           type: "category",
-          data: factors.map((f, i) => `${factorTag(i)}  ${f}`),
+          data: labels.map((f, i) => `${factorTag(i)}  ${f}`),
           inverse: true,
           axisLabel: { interval: 0, width: labelWidth, overflow: "truncate" },
         },

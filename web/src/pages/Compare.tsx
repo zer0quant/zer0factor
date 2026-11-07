@@ -1,7 +1,10 @@
-import { Alert, Card, Empty, Grid, List, Skeleton, Space, Table, Tag, Typography } from "antd";
+import { Alert, Button, Card, Empty, Grid, List, Select, Skeleton, Space, Table, Tag, Typography } from "antd";
 import { useQuery } from "@tanstack/react-query";
-import { Link, useSearchParams } from "react-router-dom";
-import { fetchCompare, fetchCorrelation } from "../api";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { fetchCompare, fetchCorrelation, fetchFactors } from "../api";
+import { MAX_COMPARE, compareHref, useBasket } from "../compareBasket";
+import { shortName } from "../factorName";
+import { FactorChips } from "../components/FactorName";
 import { boardHref } from "../boardState";
 import { fmtDate, isNum, num, pct, signColor } from "../format";
 import type { BoardRow, Num } from "../types";
@@ -41,9 +44,60 @@ function bestIndex(values: Num[], better: "high" | "low"): number {
 }
 
 export default function Compare() {
-  const [params] = useSearchParams();
+  const [params, setParams] = useSearchParams();
+  const navigate = useNavigate();
+  const basket = useBasket();
   const fs = (params.get("f") ?? "").split(",").filter(Boolean);
-  const valid = fs.length >= 2 && fs.length <= 8;
+  const valid = fs.length >= 2 && fs.length <= MAX_COMPARE;
+  const all = useQuery({ queryKey: ["factors"], queryFn: fetchFactors });
+  const setFactors = (names: string[]) => {
+    const next = new URLSearchParams(params);
+    if (names.length) next.set("f", names.join(","));
+    else next.delete("f");
+    setParams(next, { replace: true });
+  };
+  const picker = (
+    <Card size="small" title="对比因子">
+      <Space direction="vertical" size={8} style={{ width: "100%" }}>
+        <Select
+          mode="multiple"
+          showSearch
+          allowClear
+          maxCount={MAX_COMPARE}
+          placeholder="搜索并添加因子（2–8 个）"
+          style={{ width: "100%" }}
+          value={fs}
+          onChange={setFactors}
+          loading={all.isLoading}
+          optionFilterProp="search"
+          options={(all.data ?? []).map((r) => ({
+            value: r.name,
+            search: `${r.name} ${shortName(r.name)}`,
+            label: (
+              <span title={r.name}>
+                {shortName(r.name)}
+                {!r.evaluated && <Typography.Text type="secondary">（未评估）</Typography.Text>}
+              </span>
+            ),
+          }))}
+          tagRender={({ value, closable, onClose }) => {
+            const i = fs.indexOf(String(value));
+            return (
+              <Tag closable={closable} onClose={onClose} style={{ marginBlock: 2 }} title={String(value)}>
+                {i >= 0 ? `${factorTag(i)} ` : ""}
+                {shortName(String(value))}
+              </Tag>
+            );
+          }}
+        />
+        {basket.length >= 2 && basket.join(",") !== fs.join(",") && (
+          <Button size="small" onClick={() => navigate(compareHref(basket), { replace: true })}>
+            载入对比篮（{basket.length} 个）
+          </Button>
+        )}
+      </Space>
+    </Card>
+  );
   const screens = Grid.useBreakpoint();
   const compact = screens.md === false;
 
@@ -57,9 +111,18 @@ export default function Compare() {
 
   if (!valid) {
     return (
-      <Card>
-        <Empty description={<>请回 <Link to={boardHref()}>因子看板</Link> 勾选 2–8 个因子后点击“开始对比”</>} />
-      </Card>
+      <Space direction="vertical" size={16} style={{ width: "100%" }}>
+        {picker}
+        <Card>
+          <Empty
+            description={
+              <>
+                在上方添加 2–8 个因子，或回 <Link to={boardHref()}>因子看板</Link> 勾选后点击“开始对比”
+              </>
+            }
+          />
+        </Card>
+      </Space>
     );
   }
 
@@ -71,6 +134,7 @@ export default function Compare() {
 
   return (
     <Space direction="vertical" size={16} style={{ width: "100%" }}>
+      {picker}
       {cmp.error && <ErrorState error={cmp.error} title="对比数据加载失败" onRetry={() => cmp.refetch()} />}
       {data && data.inconsistent.length > 0 && (
         <Alert
@@ -97,13 +161,14 @@ export default function Compare() {
               { title: "指标", key: "metric", fixed: "left", width: 130, render: (_, r) => r.metric.label },
               ...(data?.factors ?? fs).map((f, i) => ({
                 title: (
-                  <Link to={`/factor/${encodeURIComponent(f)}`} title={f}>
-                    <Typography.Text type="secondary" style={{ marginInlineEnd: 4, fontWeight: 400 }}>
+                  <div className="zf-cmp-head">
+                    <Typography.Text type="secondary" style={{ fontWeight: 400 }}>
                       {factorTag(i)}
                     </Typography.Text>
-                    {f}
-                  </Link>
+                    <FactorChips name={f} />
+                  </div>
                 ),
+                width: 170,
                 key: f,
                 align: "right" as const,
                 render: (_: unknown, r: (typeof tableRows)[number]) => {
@@ -141,7 +206,15 @@ export default function Compare() {
                 message={`${data.missing_curve.join("、")} 的收益序列尚未生成：打开其详情页一次，或运行 web-warm 预热后再刷新。`}
               />
             )}
-            <CompareCurves dates={data.curves.dates} series={data.curves.series} />
+            <CompareCurves
+              dates={data.curves.dates}
+              series={Object.fromEntries(
+                Object.entries(data.curves.series).map(([f, d]) => {
+                  const i = data.factors.indexOf(f);
+                  return [`${i >= 0 ? `${factorTag(i)} ` : ""}${shortName(f)}`, d];
+                }),
+              )}
+            />
           </>
         ) : (
           <Empty description="无可用的收益序列" />
@@ -167,6 +240,7 @@ export default function Compare() {
             </Typography.Text>
             <CorrHeatmap
               factors={corr.data.factors}
+              labels={corr.data.factors.map(shortName)}
               matrix={corr.data.matrix}
               threshold={corr.data.threshold}
             />
@@ -180,12 +254,12 @@ export default function Compare() {
                 const ib = corr.data!.factors.indexOf(p.b);
                 return (
                   <List.Item>
-                    <span style={{ minWidth: 0, overflowWrap: "anywhere" }}>
+                    <span className="zf-pair">
                       {ia >= 0 && <Tag>{factorTag(ia)}</Tag>}
-                      {p.a}
+                      <FactorChips name={p.a} />
                       <Typography.Text type="secondary"> ↔ </Typography.Text>
                       {ib >= 0 && <Tag>{factorTag(ib)}</Tag>}
-                      {p.b}
+                      <FactorChips name={p.b} />
                     </span>
                     <Typography.Text strong className="num" style={{ flex: "none", marginInlineStart: 16 }}>
                       ρ = {p.rho.toFixed(3)}

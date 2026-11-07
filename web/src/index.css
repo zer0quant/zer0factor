@@ -169,3 +169,150 @@ body {
 .zf-matrix-empty {
   min-width: 72px;
 }
+
+/* Detail: headline KPI tiles + grouped metric lists. */
+.zf-kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(200px, 100%), 1fr));
+  gap: 10px;
+}
+.zf-kpi {
+  border: 1px solid;
+  border-radius: 8px;
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.zf-metric-groups {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(220px, 100%), 1fr));
+  gap: 8px 24px;
+}
+.zf-metric-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 3px 0;
+  border-bottom: 1px dashed var(--zf-line);
+  font-size: 13px;
+}
+.zf-metric-row .num {
+  font-weight: 600;
+}
+
+/* Group table: inline data bar behind the return. */
+.zf-databar {
+  position: relative;
+  display: flex;
+  justify-content: flex-end;
+  min-width: 96px;
+}
+.zf-databar-fill {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  height: 14px;
+  transform: translateY(-50%);
+  opacity: 0.16;
+  border-radius: 2px;
+}
+.zf-databar > .num {
+  position: relative;
+}
+.zf-row-total > td {
+  border-top: 2px solid var(--zf-line);
+}
+
+/* Detail: sibling navigation chips. */
+.zf-sibs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.zf-sib {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 2px 10px;
+  border: 1px solid var(--zf-line);
+  border-radius: 6px;
+  line-height: 1.35;
+  color: inherit;
+  min-width: 56px;
+}
+.zf-sib:hover {
+  border-color: #1677ff;
+}
+.zf-sib.zf-sib-cur {
+  border-color: #1677ff;
+  background: rgba(22, 119, 255, 0.08);
+  font-weight: 600;
+}
+.zf-sib small {
+  color: var(--zf-muted);
+  font-size: 11px;
+}
+
+.zf-compare-bar {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--zf-bar-bg);
+  color: var(--zf-bar-fg);
+  padding: 10px 16px;
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+  z-index: 10;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  max-width: calc(100vw - 32px);
+  white-space: nowrap;
+}
+
+/* Detail: run selector + parameters on one wrapping line. */
+.zf-run-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  padding-top: 8px;
+  border-top: 1px solid var(--zf-line);
+}
+
+/* Compare: factor column header and duplicate pairs. */
+.zf-cmp-head {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  white-space: normal;
+}
+.zf-cmp-head .zf-chips {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.zf-pair {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+.zf-pair .ant-tag {
+  margin-inline-end: 0;
+}
+@media (max-width: 767px) {
+  .zf-sibs {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: thin;
+    padding-bottom: 2px;
+  }
+  .zf-sib {
+    flex: none;
+  }
+}

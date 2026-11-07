@@ -1,24 +1,26 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import {
   Button,
   Card,
   Col,
+  Collapse,
   Empty,
   Row,
   Segmented,
   Select,
   Skeleton,
   Space,
+  Switch,
   Tag,
-  Tabs,
   Typography,
+  message,
 } from "antd";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { fetchDetail, fetchFactor } from "../api";
 import { runLabel } from "../format";
 import { boardHref } from "../boardState";
-import { FactorChips } from "../components/FactorName";
+import { MAX_COMPARE, toggleInBasket, useBasket } from "../compareBasket";
 import type { Detail, IcBlock } from "../types";
 import {
   AcfChart,
@@ -26,9 +28,13 @@ import {
   DecayChart,
   IcHistChart,
   IcSeriesChart,
+  adjustIcBlock,
 } from "../components/charts";
-import { GroupTable, LatestValues, MetricCards, ParamsPanel } from "../components/panels";
+import { GroupTable, LatestValues, MetricCards, ParamsSummary } from "../components/panels";
 import { ErrorState, SlowLoading } from "../components/states";
+import { FactorChips } from "../components/FactorName";
+import { Siblings } from "../components/Siblings";
+import { CompareBar } from "../components/CompareBar";
 
 function IcSection({ block, label }: { block: IcBlock; label: string }) {
   const cards: [string, React.ReactNode][] = [
@@ -50,10 +56,51 @@ function IcSection({ block, label }: { block: IcBlock; label: string }) {
   );
 }
 
+function IcCharts({ detail }: { detail: Detail }) {
+  const reverse = detail.direction === -1;
+  const [adjusted, setAdjusted] = useState(true);
+  const adj = reverse && adjusted;
+  const block = (b: IcBlock) => (adj ? adjustIcBlock(b, -1) : b);
+  const suffix = adj ? "（方向调整）" : "";
+  return (
+    <Card
+      size="small"
+      title="IC 分析"
+      extra={
+        reverse && (
+          <Space size={6}>
+            <Switch size="small" checked={adjusted} onChange={setAdjusted} />
+            <Typography.Text style={{ fontSize: 12 }}>按方向调整（× −1）</Typography.Text>
+          </Space>
+        )
+      }
+    >
+      <Space direction="vertical" size={16} style={{ width: "100%" }}>
+        <IcSection block={block(detail.rank_ic)} label={`Rank IC${suffix}`} />
+        <Collapse
+          size="small"
+          items={[
+            {
+              key: "pearson",
+              label: "IC（Pearson）图表",
+              children: <IcSection block={block(detail.ic)} label={`IC${suffix}`} />,
+            },
+          ]}
+        />
+      </Space>
+    </Card>
+  );
+}
+
 function Results({ detail, name, runId }: { detail: Detail; name: string; runId: string }) {
   const c = detail.cumulative;
+  const s = detail.summary;
+  const q = (v: unknown) => (typeof v === "number" ? String(Math.round(v)) : null);
   return (
     <Space direction="vertical" size={16} style={{ width: "100%" }}>
+      <Card size="small" title="核心指标">
+        <MetricCards detail={detail} />
+      </Card>
       <Card size="small" title="分组累计收益">
         {c ? (
           <>
@@ -66,26 +113,37 @@ function Results({ detail, name, runId }: { detail: Detail; name: string; runId:
           <Empty description="该 run 缺少原始数据（clean_factor_data），无法绘制收益曲线" />
         )}
       </Card>
-      <Card size="small" title="核心指标">
-        <MetricCards detail={detail} />
-      </Card>
       {detail.group_table && (
         <Card size="small" title="分组收益">
-          <GroupTable rows={detail.group_table} />
+          <GroupTable
+            rows={detail.group_table}
+            longGroup={q(s["long_quantile"])}
+            shortGroup={q(s["short_quantile"])}
+          />
         </Card>
       )}
-      <Card size="small" styles={{ body: { paddingTop: 0 } }}>
-        <Tabs
-          items={[
-            { key: "rank", label: "Rank IC", children: <IcSection block={detail.rank_ic} label="Rank IC" /> },
-            { key: "ic", label: "IC（Pearson）", children: <IcSection block={detail.ic} label="IC" /> },
-          ]}
-        />
-      </Card>
+      <IcCharts detail={detail} />
       <Card size="small" title="最新因子值">
         <LatestValues name={name} runId={runId} />
       </Card>
     </Space>
+  );
+}
+
+function CompareToggle({ name }: { name: string }) {
+  const basket = useBasket();
+  const inBasket = basket.includes(name);
+  return (
+    <Button
+      size="small"
+      type={inBasket ? "default" : "primary"}
+      ghost={!inBasket}
+      onClick={() => {
+        if (!toggleInBasket(name)) message.warning(`对比篮最多 ${MAX_COMPARE} 个因子`);
+      }}
+    >
+      {inBasket ? "移出对比" : "加入对比"}
+    </Button>
   );
 }
 
@@ -97,7 +155,13 @@ export default function FactorDetail() {
   const runs = info.data?.runs ?? [];
   const runId = params.get("run") ?? info.data?.default_run ?? undefined;
   const run = runs.find((r) => r.run_id === runId);
-  const period = params.get("period") ?? (run?.periods.includes("1D") ? "1D" : run?.periods[0]);
+  const wanted = params.get("period");
+  const period =
+    wanted && run?.periods.includes(wanted)
+      ? wanted
+      : run?.periods.includes("1D")
+        ? "1D"
+        : run?.periods[0];
 
   useEffect(() => {
     if (info.data && !params.get("run") && info.data.default_run) {
@@ -135,20 +199,50 @@ export default function FactorDetail() {
   return (
     <Space direction="vertical" size={16} style={{ width: "100%" }}>
       <Card size="small">
-        <Space direction="vertical" size={4} style={{ width: "100%" }}>
+        <Space direction="vertical" size={8} style={{ width: "100%" }}>
           <Typography.Text type="secondary">
             <Link to={boardHref()}>因子看板</Link> / {name}
           </Typography.Text>
-          <Space wrap>
-            <Typography.Title level={4} style={{ margin: 0, overflowWrap: "anywhere" }}>
-              {name}
-            </Typography.Title>
-            {meta?.category && <Tag color="blue">{meta.category}</Tag>}
-            {meta?.tags.map((t) => <Tag key={t}>{t}</Tag>)}
-            {detail.data?.direction === -1 && <Tag color="orange">反向因子</Tag>}
-          </Space>
+          <div style={{ display: "flex", gap: 8, alignItems: "flex-start", flexWrap: "wrap" }}>
+            <Space wrap style={{ flex: 1, minWidth: 0 }}>
+              <Typography.Title level={4} style={{ margin: 0, overflowWrap: "anywhere" }}>
+                {name}
+              </Typography.Title>
+              {meta?.category && <Tag color="blue">{meta.category}</Tag>}
+              {meta?.tags.map((t) => <Tag key={t}>{t}</Tag>)}
+              {detail.data?.direction === -1 && <Tag color="orange">反向因子</Tag>}
+            </Space>
+            <CompareToggle name={name} />
+          </div>
           <FactorChips name={name} link={false} copyable />
           {meta?.description && <Typography.Text type="secondary">{meta.description}</Typography.Text>}
+          <Siblings name={name} />
+          {runs.length > 0 && (
+            <div className="zf-run-bar">
+              <Select
+                style={{ width: 260, maxWidth: "100%" }}
+                value={runId}
+                onChange={(v) => setQuery("run", v)}
+                options={runs.map((r) => ({
+                  value: r.run_id,
+                  label: (
+                    <span title={runLabel(r)}>
+                      {r.standard && <Tag color="green">标准</Tag>}
+                      {r.run_id}
+                    </span>
+                  ),
+                }))}
+              />
+              {run && run.periods.length > 1 && (
+                <Segmented
+                  options={run.periods}
+                  value={period}
+                  onChange={(v) => setQuery("period", String(v))}
+                />
+              )}
+              {run && <ParamsSummary run={run} />}
+            </div>
+          )}
         </Space>
       </Card>
 
@@ -160,53 +254,19 @@ export default function FactorDetail() {
         <Card>
           <Empty description="该因子还没有任何评估结果，请先用 evaluate-factor / evaluate-batch 评估" />
         </Card>
-      ) : (
-        <Row gutter={[16, 16]}>
-          <Col xs={24} lg={6}>
-            <Card size="small" title="评估参数" style={{ position: "sticky", top: 56 + 16 }}>
-              <Space direction="vertical" style={{ width: "100%" }} size={12}>
-                <Select
-                  style={{ width: "100%" }}
-                  value={runId}
-                  onChange={(v) => setQuery("run", v)}
-                  options={runs.map((r) => ({
-                    value: r.run_id,
-                    label: (
-                      <span title={runLabel(r)}>
-                        {r.standard && <Tag color="green">标准</Tag>}
-                        {r.run_id}
-                      </span>
-                    ),
-                  }))}
-                />
-                {run && run.periods.length > 1 && (
-                  <Segmented
-                    block
-                    options={run.periods}
-                    value={period}
-                    onChange={(v) => setQuery("period", String(v))}
-                  />
-                )}
-                {run && <ParamsPanel run={run} />}
-              </Space>
-            </Card>
-          </Col>
-          <Col xs={24} lg={18}>
-            {detail.isLoading ? (
-              <Card>
-                <SlowLoading
-                  tip="正在加载图表数据…"
-                  hint="首次打开某个 run 的因子需要从原始数据计算图表（约 1–2 分钟），之后会直接读缓存。"
-                />
-              </Card>
-            ) : detail.error ? (
-              <ErrorState error={detail.error} title="图表数据加载失败" onRetry={() => detail.refetch()} />
-            ) : detail.data && runId ? (
-              <Results detail={detail.data} name={name} runId={runId} />
-            ) : null}
-          </Col>
-        </Row>
-      )}
+      ) : detail.isLoading ? (
+        <Card>
+          <SlowLoading
+            tip="正在加载图表数据…"
+            hint="首次打开某个 run 的因子需要从原始数据计算图表（约 1–2 分钟），之后会直接读缓存。"
+          />
+        </Card>
+      ) : detail.error ? (
+        <ErrorState error={detail.error} title="图表数据加载失败" onRetry={() => detail.refetch()} />
+      ) : detail.data && runId ? (
+        <Results detail={detail.data} name={name} runId={runId} />
+      ) : null}
+      <CompareBar />
     </Space>
   );
 }
