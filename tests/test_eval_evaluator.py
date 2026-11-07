@@ -90,3 +90,12 @@ def test_factor_evaluator_writes_outputs(tmp_path, monkeypatch):
     assert (result.output_dir / "daily_ic.parquet").exists()
     assert (result.output_dir / "quantile_returns.parquet").exists()
     assert (result.output_dir / "figures" / "quantile_returns_1D.png").exists()
+
+
+def test_evaluator_writes_chart_series(tmp_path, monkeypatch):
+    from zer0factor.eval.series import SERIES_FILES
+
+    test_factor_evaluator_writes_outputs(tmp_path, monkeypatch)
+    factor_dir = tmp_path / "evaluations" / "run_001" / "factors" / "factor_a"
+    for name in SERIES_FILES:
+        assert (factor_dir / name).exists(), name

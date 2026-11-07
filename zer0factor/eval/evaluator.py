@@ -11,6 +11,7 @@ from zer0factor.eval.alphalens_adapter import (
     filter_factor_by_universe,
 )
 from zer0factor.eval.domain import EvaluationRun, FactorEvaluationResult
+from zer0factor.eval.series import build_chart_series, write_chart_series
 
 
 @dataclass(frozen=True)
@@ -136,6 +137,12 @@ class FactorEvaluator:
             quantile_returns=quantile_returns,
         )
         self.artifact_store.write_factor_artifacts(result)
+        try:
+            write_chart_series(
+                result.output_dir, build_chart_series(clean_factor_data, summary)
+            )
+        except Exception as exc:  # chart series must never break an evaluation
+            self._log(f"evaluation_chart_series_failed factor={factor_name} error={exc!r}")
         figure_paths = self.figure_writer.write(
             result,
             rolling_ic_window=config.rolling_ic_window,
