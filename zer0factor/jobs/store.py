@@ -191,6 +191,14 @@ class TaskStore:
                 (status, exit_code, error, _now(), task_id, *sorted(TERMINAL)),
             )
 
+    def cancel_if_queued(self, task_id: str) -> bool:
+        with self._conn() as con:
+            cur = con.execute(
+                "UPDATE tasks SET status='cancelled', finished_at=? WHERE id=? AND status='queued'",
+                (_now(), task_id),
+            )
+            return cur.rowcount == 1
+
     def count_running(self, queue: str) -> int:
         with self._conn() as con:
             return con.execute(
