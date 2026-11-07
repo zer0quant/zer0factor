@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Space, Table, Tag, Typography, theme } from "antd";
 import { useQuery } from "@tanstack/react-query";
 import { fetchLatest } from "../api";
-import { fmtDate, isNum, num, pct, signColor } from "../format";
+import { fmtDate, isNum, num, pct, signColor, withSign } from "../format";
 import type { Detail, GroupRow, Num, RunSummary } from "../types";
 
 /** Read-only evaluation parameters as compact inline tags. */
@@ -29,7 +29,7 @@ export function ParamsSummary({ run }: { run: RunSummary }) {
 
 const cell = (text: string, v: Num | undefined, color = false) => (
   <span className="num" style={{ color: color ? signColor(v ?? null) : undefined }}>
-    {text}
+    {color ? withSign(text, v) : text}
   </span>
 );
 

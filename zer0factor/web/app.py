@@ -13,7 +13,14 @@ from loguru import logger
 
 from zer0factor.config import Config
 from zer0factor.web.catalog import Catalog, build_catalog
-from zer0factor.web.charts import cached_series, detail_payload, latest_values, load_stock_names
+from zer0factor.web.charts import (
+    cached_series,
+    detail_cached,
+    detail_payload,
+    latest_values,
+    load_stock_names,
+    ls_sparkline,
+)
 from zer0factor.web.correlation import _cached as _correlation_cache
 from zer0factor.web.correlation import factor_correlation
 from zer0factor.web.jsonsafe import to_jsonable
@@ -46,6 +53,9 @@ def _run_summary(run: RunInfo, catalog: Catalog) -> dict:
 def create_app(cfg: Config, static_dir: Path | None = None) -> FastAPI:
     app = FastAPI(title="zer0factor workbench")
     state = {"catalog": build_catalog(cfg), "names": None}
+    # (run_id, factor, period, points) -> downsampled long-short curve. Cached series files are
+    # written once and never change, so a curve found on disk can be memoised for good.
+    sparklines: dict[tuple[str, str, str, int], list] = {}
     names_lock = threading.Lock()
 
     def catalog() -> Catalog:
@@ -112,6 +122,28 @@ def create_app(cfg: Config, static_dir: Path | None = None) -> FastAPI:
     @app.get("/api/factors")
     def factors():
         return _json({"rows": catalog().board_rows()})
+
+    @app.get("/api/board/curves")
+    def board_curves(points: int = Query(60, ge=10, le=250)):
+        """Per standard-evaluated factor: is the detail page cached, and its LS sparkline.
+
+        Reads caches only (never derives), so it stays fast even for uncached factors.
+        """
+        c = catalog()
+        period = c.standard.period
+        items = {}
+        for name, (run, _row) in c.standard_rows().items():
+            key = (run.run_id, name, period, points)
+            curve = sparklines.get(key)
+            if curve is None:
+                curve = ls_sparkline(run, name, period, cfg.web.cache_dir, points)
+                if curve is not None:
+                    sparklines[key] = curve
+            items[name] = {
+                "cached": detail_cached(run, name, cfg.web.cache_dir),
+                "ls": curve,
+            }
+        return _json({"points": points, "items": items})
 
     @app.get("/api/factors/{name}")
     def factor(name: str):

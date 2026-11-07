@@ -6,7 +6,7 @@ import { MAX_COMPARE, compareHref, useBasket } from "../compareBasket";
 import { shortName } from "../factorName";
 import { FactorChips } from "../components/FactorName";
 import { boardHref } from "../boardState";
-import { fmtDate, isNum, num, pct, signColor } from "../format";
+import { fmtDate, isNum, num, pct, signColor, withSign } from "../format";
 import type { BoardRow, Num } from "../types";
 import { CompareCurves, CorrHeatmap, factorTag } from "../components/charts";
 import { ErrorState, SlowLoading } from "../components/states";
@@ -184,7 +184,13 @@ export default function Compare() {
                         borderRadius: 4,
                       }}
                     >
-                      {r.metric.fmt(v)}
+                      {r.best === i && (
+                        <span aria-hidden style={{ marginInlineEnd: 2 }}>
+                          ★
+                        </span>
+                      )}
+                      {r.metric.colored ? withSign(r.metric.fmt(v), v) : r.metric.fmt(v)}
+                      {r.best === i && <span className="zf-sr-only">（最优）</span>}
                     </span>
                   );
                 },

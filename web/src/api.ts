@@ -35,6 +35,10 @@ export const fetchLatest = (name: string, runId: string, page: number, size: num
   request<LatestValues>(
     `/api/factors/${enc(name)}/runs/${enc(runId)}/latest?page=${page}&size=${size}`,
   );
+export const fetchBoardCurves = () =>
+  request<{ points: number; items: Record<string, { cached: boolean; ls: (number | null)[] | null }> }>(
+    "/api/board/curves",
+  );
 export const fetchCompare = (fs: string[]) =>
   request<Compare>(`/api/compare?f=${enc(fs.join(","))}`);
 export const fetchCorrelation = (fs: string[]) =>

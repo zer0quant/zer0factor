@@ -144,3 +144,24 @@ def test_refresh_clears_correlation_cache(client):
     assert _cached.cache_info().currsize > 0
     client.post("/api/refresh")
     assert _cached.cache_info().currsize == 0
+
+
+def test_board_curves_reads_cache_only(stored, make_run, make_config):
+    make_run("20260101_000000", ["fa", "fb"])
+    cfg = make_config(None)
+    client = TestClient(create_app(cfg))
+    body = client.get("/api/board/curves").json()
+    assert set(body["items"]) == {"fa", "fb"}  # only standard-evaluated factors
+    assert body["items"]["fa"] == {"cached": False, "ls": None}
+    assert not cfg.web.cache_dir.exists()  # never derives
+    client.get("/api/factors/fa/runs/20260101_000000")  # detail derives fa's cache
+    body = client.get("/api/board/curves", params={"points": 20}).json()
+    fa = body["items"]["fa"]
+    assert fa["cached"] is True
+    assert 2 <= len(fa["ls"]) <= 20
+    assert all(v is None or isinstance(v, float) for v in fa["ls"])
+    assert body["items"]["fb"]["cached"] is False
+
+
+def test_board_curves_points_validated(client):
+    assert client.get("/api/board/curves", params={"points": 5}).status_code == 422

@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { Modal } from "antd";
+import { SHORTCUTS, useHotkeys } from "./hotkeys";
 import {
   Button,
   Drawer,
@@ -87,6 +89,8 @@ export default function App() {
   const screens = Grid.useBreakpoint();
   const { token } = theme.useToken();
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
+  useHotkeys({ "?": () => setHelpOpen((o) => !o) });
   const meta = useQuery({ queryKey: ["meta"], queryFn: fetchMeta });
   const doRefresh = useMutation({
     mutationFn: refresh,
@@ -220,12 +224,40 @@ export default function App() {
                 扫描于 {meta.data.scanned_at.replace("T", " ")}
               </Typography.Text>
             )}
+            {!compact && (
+              <Tooltip title="键盘快捷键（?）">
+                <Button size="small" type="text" aria-label="键盘快捷键" onClick={() => setHelpOpen(true)}>
+                  ?
+                </Button>
+              </Tooltip>
+            )}
             {!compact && <ThemeSwitch />}
             <Button size="small" loading={doRefresh.isPending} onClick={() => doRefresh.mutate()}>
               {compact ? "刷新" : "刷新数据"}
             </Button>
           </Space>
         </Header>
+        <Modal title="键盘快捷键" open={helpOpen} onCancel={() => setHelpOpen(false)} footer={null} width={420}>
+          {SHORTCUTS.map(([group, items]) => (
+            <div key={group} style={{ marginBottom: 12 }}>
+              <Typography.Text strong>{group}</Typography.Text>
+              {items.map(([k, desc]) => (
+                <div key={k} className="zf-metric-row">
+                  <Typography.Text type="secondary">{desc}</Typography.Text>
+                  <span>
+                    {k.split(" ").map((part, i) =>
+                      (part === "/" && k !== "/") || part === "或" ? (
+                        <span key={i} style={{ marginInline: 4 }}>{part === "或" ? "或" : "/"}</span>
+                      ) : (
+                        <kbd key={i} className="zf-kbd">{part}</kbd>
+                      ),
+                    )}
+                  </span>
+                </div>
+              ))}
+            </div>
+          ))}
+        </Modal>
         <Content style={{ padding: compact ? 12 : 24, minWidth: 0 }}>
           <Routes>
             <Route path="/" element={<Board />} />

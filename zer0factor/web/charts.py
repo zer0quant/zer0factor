@@ -14,7 +14,12 @@ import numpy as np
 import pandas as pd
 from loguru import logger
 
-from zer0factor.eval.series import build_chart_series, read_chart_series, write_chart_series
+from zer0factor.eval.series import (
+    SERIES_FILES,
+    build_chart_series,
+    read_chart_series,
+    write_chart_series,
+)
 from zer0factor.web.runs import RunInfo
 
 TRADING_DAYS = 252
@@ -67,6 +72,37 @@ def cached_series(run: RunInfo, factor: str, cache_dir: Path) -> dict[str, pd.Da
     return read_chart_series(run.factor_dir(factor)) or read_chart_series(
         _cache_path(cache_dir, run, factor)
     )
+
+
+def detail_cached(run: RunInfo, factor: str, cache_dir: Path) -> bool:
+    """True when the detail page can be served from disk (series + IC decay), without deriving."""
+    target = _cache_path(cache_dir, run, factor)
+    has_series = any(
+        all((Path(d) / name).exists() for name in SERIES_FILES)
+        for d in (run.factor_dir(factor), target)
+    )
+    return has_series and (target / "ic_decay.json").exists()
+
+
+def ls_sparkline(
+    run: RunInfo, factor: str, period: str, cache_dir: Path, points: int = 60
+) -> list[float | None] | None:
+    """Cumulative long-short return, evenly downsampled to ``points`` values. Cache only."""
+    for directory in (run.factor_dir(factor), _cache_path(cache_dir, run, factor)):
+        path = Path(directory) / "portfolio_daily_returns.parquet"
+        if path.exists():
+            break
+    else:
+        return None
+    column = f"{period}:ls"
+    frame = pd.read_parquet(path)
+    if column not in frame:
+        return None
+    cum = (1 + frame[column].fillna(0)).cumprod() - 1
+    if cum.empty:
+        return None
+    idx = np.unique(np.linspace(0, len(cum) - 1, min(points, len(cum))).round().astype(int))
+    return [_finite(v) for v in cum.iloc[idx]]
 
 
 def get_series(

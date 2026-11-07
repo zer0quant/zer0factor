@@ -1,6 +1,7 @@
 import { Space, Typography } from "antd";
 import { useQuery } from "@tanstack/react-query";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { useHotkeys } from "../hotkeys";
 import { fetchFactors } from "../api";
 import { comparePrep, parseFactorName, prepLabel, windowLabel } from "../factorName";
 import { num } from "../format";
@@ -27,8 +28,22 @@ function Chip({ row, label, current }: { row: BoardRow; label: string; current: 
 /** Same-family navigation: other windows (same preprocessing) and other preprocessings (same window). */
 export function Siblings({ name }: { name: string }) {
   const { data } = useQuery({ queryKey: ["factors"], queryFn: fetchFactors });
-  if (!data) return null;
+  const navigate = useNavigate();
+  const [params] = useSearchParams();
   const me = parseFactorName(name);
+  const sameFamily = (data ?? [])
+    .map((r) => ({ r, p: parseFactorName(r.name) }))
+    .filter(({ p }) => p.base === me.base && p.prep === me.prep)
+    .sort((a, b) => (a.p.window ?? Infinity) - (b.p.window ?? Infinity));
+  const hop = (delta: number) => {
+    const i = sameFamily.findIndex((x) => x.r.name === name);
+    const next = sameFamily[i + delta];
+    if (i < 0 || !next) return;
+    const period = params.get("period");
+    navigate(`/factor/${encodeURIComponent(next.r.name)}${period ? `?period=${encodeURIComponent(period)}` : ""}`);
+  };
+  useHotkeys({ h: () => hop(-1), l: () => hop(1) });
+  if (!data) return null;
   const parsed = data.map((r) => ({ r, p: parseFactorName(r.name) }));
   const windows = parsed
     .filter(({ p }) => p.base === me.base && p.prep === me.prep)

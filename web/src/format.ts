@@ -38,4 +38,9 @@ export function runLabel(r: {
   return `${r.run_id} · ${range} · ${r.universe ?? "全部"} · ${r.quantiles ?? "?"}组 · ${r.periods.join("/")}`;
 }
 
+/** Prefix "+" for positive values, so sign is not conveyed by colour alone. */
+export function withSign(text: string, v: Num | undefined): string {
+  return isNum(v) && v > 0 && !text.startsWith("+") ? `+${text}` : text;
+}
+
 export { isNum };

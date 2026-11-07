@@ -16,7 +16,8 @@ import {
   message,
 } from "antd";
 import { useQuery } from "@tanstack/react-query";
-import { Link, useParams, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { useHotkeys } from "../hotkeys";
 import { fetchDetail, fetchFactor } from "../api";
 import { runLabel } from "../format";
 import { boardHref } from "../boardState";
@@ -151,6 +152,13 @@ export default function FactorDetail() {
   const name = useParams().name ?? "";
   const [params, setParams] = useSearchParams();
   const info = useQuery({ queryKey: ["factor", name], queryFn: () => fetchFactor(name) });
+  const navigate = useNavigate();
+  useHotkeys({
+    a: () => {
+      if (!toggleInBasket(name)) message.warning(`对比篮最多 ${MAX_COMPARE} 个因子`);
+    },
+    b: () => navigate(boardHref()),
+  });
 
   const runs = info.data?.runs ?? [];
   const runId = params.get("run") ?? info.data?.default_run ?? undefined;

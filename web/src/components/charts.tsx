@@ -60,7 +60,7 @@ function Chart({ option, height = 300 }: { option: EChartsOption; height?: numbe
       // Re-create the instance when the theme flips: ECharts themes apply at init time.
       key={pal.dark ? "dark" : "light"}
       theme={pal.dark ? "dark" : undefined}
-      option={{ backgroundColor: "transparent", ...option }}
+      option={{ backgroundColor: "transparent", aria: { enabled: true }, ...option }}
       style={{ height }}
       notMerge
       lazyUpdate
