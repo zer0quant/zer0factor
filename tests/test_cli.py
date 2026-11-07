@@ -1085,3 +1085,55 @@ def test_web_warm_command_is_registered():
     result = CliRunner().invoke(cli, ["web-warm", "--help"])
     assert result.exit_code == 0
     assert "--run" in result.output
+
+
+def test_evaluate_factors_passes_run_id(monkeypatch, tmp_path):
+    from zer0factor.notify import NullNotifier
+
+    calls = {}
+
+    def fake_load_config(path):
+        return types.SimpleNamespace(
+            factor_dir=tmp_path / "factors",
+            db_path=tmp_path / "factor.duckdb",
+            log_path=tmp_path / "factor.log",
+            start_date="20240101",
+            end_date="",
+            zer0share_data_dir=tmp_path / "zer0share",
+            notify_webhook_url="",
+        )
+
+    class FakeAppContext:
+        storage = object()
+        pro = object()
+
+        def __init__(self, cfg):
+            pass
+
+        def configure_logging(self):
+            pass
+
+    class FakeService:
+        @classmethod
+        def from_dependencies(cls, **kwargs):
+            return cls()
+
+        def run(self, request, **kwargs):
+            calls["kwargs"] = kwargs
+            return types.SimpleNamespace(
+                run=types.SimpleNamespace(run_id="r1", run_dir=tmp_path / "r1"),
+                factor_results=(),
+                report=None,
+            )
+
+    monkeypatch.setattr("zer0factor.cli.evaluate_cmds.load_config", fake_load_config)
+    monkeypatch.setattr("zer0factor.cli.evaluate_cmds.AppContext", FakeAppContext)
+    monkeypatch.setattr("zer0factor.cli.evaluate_cmds.EvaluationService", FakeService)
+    monkeypatch.setattr("zer0factor.cli.evaluate_cmds.load_notifier", lambda cfg: NullNotifier())
+
+    result = CliRunner().invoke(
+        cli,
+        ["--config", str(tmp_path / "s.toml"), "evaluate-factors", "fa", "fb", "--run-id", "r1"],
+    )
+    assert result.exit_code == 0, result.output
+    assert calls["kwargs"] == {"run_id": "r1"}

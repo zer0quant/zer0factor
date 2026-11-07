@@ -48,6 +48,8 @@ def _run_evaluation_command(
     output_dir: str,
     transaction_cost_bps: float,
     benchmark_index: str | None = None,
+    workers: int = 1,
+    run_id: str | None = None,
 ) -> None:
     result = _run_evaluation_job(
         ctx,
@@ -62,6 +64,8 @@ def _run_evaluation_command(
         output_dir=Path(output_dir),
         transaction_cost_bps=transaction_cost_bps,
         benchmark_index=benchmark_index,
+        workers=workers,
+        run_id=run_id,
     )
     click.echo(f"Evaluation run {_result_run_id(result)} written to {_result_output_dir(result)}")
 
@@ -81,6 +85,7 @@ def _run_evaluation_job(
     transaction_cost_bps: float,
     benchmark_index: str | None = None,
     workers: int = 1,
+    run_id: str | None = None,
 ):
     request = EvaluationRequest(
         factor_names=factor_names,
@@ -96,10 +101,10 @@ def _run_evaluation_job(
         transaction_cost_bps=transaction_cost_bps,
         workers=workers,
     )
-    return _run_evaluation_request(ctx, request)
+    return _run_evaluation_request(ctx, request, run_id=run_id)
 
 
-def _run_evaluation_request(ctx, request: EvaluationRequest):
+def _run_evaluation_request(ctx, request: EvaluationRequest, run_id: str | None = None):
     cfg = load_config(ctx.obj["config_path"])
     app = AppContext(cfg)
     app.configure_logging()
@@ -119,7 +124,8 @@ def _run_evaluation_request(ctx, request: EvaluationRequest):
         log_info=log_progress,
         notifier=notifier,
     )
-    result = service.run(request)
+    # Only pass run_id when given: the service default (timestamp) stays the CLI behaviour.
+    result = service.run(request, run_id=run_id) if run_id else service.run(request)
     logger.info(
         "factor_evaluation_job_finished run_id={} output_dir={} factors={}",
         _result_run_id(result),
@@ -223,6 +229,8 @@ def evaluate_factor_command(
     default=None,
     help="指数代码，如 000300.SH，用于计算多头指数超额收益",
 )
+@click.option("--workers", default=1, show_default=True, type=int, help="并行评估进程数")
+@click.option("--run-id", default=None, help="指定 run 目录名（默认按当前时间生成）")
 @click.pass_context
 def evaluate_factors_command(
     ctx,
@@ -237,6 +245,8 @@ def evaluate_factors_command(
     output_dir,
     transaction_cost_bps,
     benchmark_index,
+    workers,
+    run_id,
 ):
     """Evaluate one or more stored factors."""
     _run_evaluation_command(
@@ -252,6 +262,8 @@ def evaluate_factors_command(
         output_dir=output_dir,
         transaction_cost_bps=transaction_cost_bps,
         benchmark_index=benchmark_index,
+        workers=workers,
+        run_id=run_id,
     )
 
 
