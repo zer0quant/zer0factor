@@ -72,12 +72,18 @@ def _load_run(run_dir: Path) -> RunInfo | None:
         return None
 
 
-def scan_runs(evaluations_dir: Path) -> list[RunInfo]:
+CANCELLED_MARKER = ".cancelled"
+
+
+def scan_runs(evaluations_dir: Path, exclude: frozenset[str] | set[str] = frozenset()) -> list[RunInfo]:
+    """Evaluation runs on disk, skipping cancelled runs and ``exclude`` (runs still being written)."""
     evaluations_dir = Path(evaluations_dir)
     if not evaluations_dir.exists():
         return []
     runs = []
     for run_dir in sorted(p for p in evaluations_dir.iterdir() if p.is_dir()):
+        if run_dir.name in exclude or (run_dir / CANCELLED_MARKER).exists():
+            continue
         run = _load_run(run_dir)
         if run is not None:
             runs.append(run)

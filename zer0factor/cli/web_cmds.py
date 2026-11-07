@@ -18,7 +18,7 @@ STATIC_DIR = Path(__file__).resolve().parent.parent / "web" / "static"
 @click.option("--port", default=8600, show_default=True, type=int)
 @click.pass_context
 def serve(ctx, host, port):
-    """Serve the read-only factor workbench (API + web UI)."""
+    """Serve the factor workbench (API + web UI + background task scheduler)."""
     import uvicorn
 
     from zer0factor.web.app import create_app
@@ -27,7 +27,10 @@ def serve(ctx, host, port):
     if not (STATIC_DIR / "index.html").exists():
         click.echo("前端未构建：cd web && npm install && npm run build（API 照常启动）")
     click.echo(f"zer0factor workbench: http://{host}:{port}")
-    uvicorn.run(create_app(cfg, static_dir=STATIC_DIR), host=host, port=port)
+    config_path = Path(ctx.obj["config_path"]).resolve()
+    uvicorn.run(
+        create_app(cfg, static_dir=STATIC_DIR, config_path=config_path), host=host, port=port
+    )
 
 
 def _warm_one(config_path: str, run_id: str, factor: str) -> str:

@@ -102,14 +102,14 @@ class Catalog:
         return [self.board_row(name, hits.get(name)) for name in self.factor_names]
 
 
-def build_catalog(cfg: Config) -> Catalog:
+def build_catalog(cfg: Config, exclude_runs: frozenset[str] | set[str] = frozenset()) -> Catalog:
     factor_dir = cfg.factor_dir
     names = (
         sorted(p.name for p in factor_dir.iterdir() if p.is_dir()) if factor_dir.exists() else []
     )
     return Catalog(
         factor_names=names,
-        runs=scan_runs(cfg.web.evaluations_dir),
+        runs=scan_runs(cfg.web.evaluations_dir, exclude=exclude_runs),
         scanned_at=datetime.now(),
         standard=cfg.web.standard,
         registry=_load_registry(cfg),

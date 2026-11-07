@@ -131,7 +131,7 @@ def make_config(tmp_path, evaluations_dir):
             evaluations_dir=evaluations_dir,
             registry_path=registry,
             standard=StandardSetting(quantiles=5),
-            **web_overrides,
+            **{"state_dir": tmp_path / "workbench", **web_overrides},
         )
         return Config(
             zer0share_data_dir=tmp_path / "zer0share",

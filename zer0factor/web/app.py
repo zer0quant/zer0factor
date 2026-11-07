@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import threading
+from contextlib import asynccontextmanager
 from dataclasses import asdict
 from pathlib import Path
 
@@ -24,7 +25,10 @@ from zer0factor.web.charts import (
 from zer0factor.web.correlation import _cached as _correlation_cache
 from zer0factor.web.correlation import factor_correlation
 from zer0factor.web.jsonsafe import to_jsonable
+from zer0factor.jobs.scheduler import Scheduler
+from zer0factor.jobs.store import TaskStore
 from zer0factor.web.runs import RunInfo, is_standard, summary_row
+from zer0factor.web.tasks_api import TaskContext, active_run_ids, register_task_routes
 
 MIN_COMPARE, MAX_COMPARE = 2, 8
 _EMPTY_SUMMARY = pd.DataFrame(columns=["factor_name", "period"])
@@ -50,13 +54,51 @@ def _run_summary(run: RunInfo, catalog: Catalog) -> dict:
     }
 
 
-def create_app(cfg: Config, static_dir: Path | None = None) -> FastAPI:
-    app = FastAPI(title="zer0factor workbench")
-    state = {"catalog": build_catalog(cfg), "names": None}
+REFRESH_KINDS = {"evaluate", "warm"}
+
+
+def create_app(
+    cfg: Config,
+    static_dir: Path | None = None,
+    *,
+    config_path: Path | None = None,
+    scheduler: bool = True,
+) -> FastAPI:
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        if scheduler:
+            app.state.scheduler.start()
+        try:
+            yield
+        finally:
+            if scheduler:
+                app.state.scheduler.stop()
+
+    app = FastAPI(title="zer0factor workbench", lifespan=lifespan)
+    store = TaskStore(Path(cfg.web.state_dir) / "workbench.db")
+    state = {"catalog": build_catalog(cfg, exclude_runs=active_run_ids(store)), "names": None}
     # (run_id, factor, period, points) -> downsampled long-short curve. Cached series files are
     # written once and never change, so a curve found on disk can be memoised for good.
     sparklines: dict[tuple[str, str, str, int], list] = {}
     names_lock = threading.Lock()
+
+    def refresh_catalog() -> None:
+        state["catalog"] = build_catalog(cfg, exclude_runs=active_run_ids(store))
+        _correlation_cache.cache_clear()
+        sparklines.clear()
+
+    def on_task_finished(task: dict) -> None:
+        if task["kind"] in REFRESH_KINDS:
+            refresh_catalog()
+
+    sched = Scheduler(
+        store,
+        slots={"heavy": cfg.web.heavy_slots, "light": cfg.web.light_slots},
+        on_finished=on_task_finished,
+    )
+    app.state.store = store
+    app.state.scheduler = sched
+    app.state.refresh_catalog = refresh_catalog
 
     def catalog() -> Catalog:
         return state["catalog"]
@@ -115,9 +157,22 @@ def create_app(cfg: Config, static_dir: Path | None = None) -> FastAPI:
 
     @app.post("/api/refresh")
     def refresh():
-        state["catalog"] = build_catalog(cfg)
-        _correlation_cache.cache_clear()
+        refresh_catalog()
         return _json(meta_payload())
+
+    register_task_routes(
+        app,
+        TaskContext(
+            cfg=cfg,
+            config_path=Path(config_path or "config/settings.toml"),
+            store=store,
+            scheduler=sched,
+            known_factors=lambda: set(catalog().factor_names),
+            known_runs=lambda: {r.run_id: len(r.factor_names) for r in catalog().runs},
+            known_families=lambda: app.state.known_families(),
+        ),
+    )
+    app.state.known_families = lambda: set()
 
     @app.get("/api/factors")
     def factors():

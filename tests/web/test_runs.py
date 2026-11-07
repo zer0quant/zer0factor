@@ -79,3 +79,11 @@ def test_summary_cache_reloads_on_mtime_change(make_run, evaluations_dir):
     future = time.time() + 5
     os.utime(summary, (future, future))
     assert cache.get(run)["factor_name"].tolist() == ["changed"]
+
+
+def test_scan_runs_skips_cancelled_and_excluded(make_run, evaluations_dir):
+    make_run("r1", ["fa"])
+    make_run("r2", ["fa"])
+    make_run("r3", ["fa"])
+    (evaluations_dir / "r2" / ".cancelled").write_text("x")
+    assert [r.run_id for r in scan_runs(evaluations_dir, exclude={"r3"})] == ["r1"]
