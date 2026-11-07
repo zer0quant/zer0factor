@@ -19,15 +19,15 @@ type Metric = {
   colored?: boolean;
 };
 
-// ls_max_dd is stored negative, so "higher" (closer to 0) is better.
+// long_max_dd is stored negative, so "higher" (closer to 0) is better.
 const METRICS: Metric[] = [
   { key: "ic_adj", label: "方向调整 IC", fmt: (v) => num(v, 4), better: "high" },
   { key: "icir", label: "ICIR", fmt: (v) => num(v, 3), better: "high" },
   { key: "t_stat", label: "t 值", fmt: (v) => num(v, 2), better: "high" },
   { key: "ic_win_rate", label: "IC 胜率", fmt: (v) => (isNum(v) ? `${v.toFixed(1)}%` : "—"), better: "high" },
-  { key: "ls_ann_ret", label: "多空年化", fmt: (v) => pct(v), better: "high", colored: true },
-  { key: "ls_max_dd", label: "多空最大回撤", fmt: (v) => pct(v), better: "high" },
-  { key: "ls_sharpe", label: "多空夏普", fmt: (v) => num(v, 2), better: "high", colored: true },
+  { key: "long_ann_ret", label: "多头年化", fmt: (v) => pct(v), better: "high", colored: true },
+  { key: "long_max_dd", label: "多头最大回撤", fmt: (v) => pct(v), better: "high" },
+  { key: "long_sharpe", label: "多头夏普", fmt: (v) => num(v, 2), better: "high", colored: true },
   { key: "long_exc_ann_ret", label: "多头超额年化", fmt: (v) => pct(v), better: "high", colored: true },
   { key: "monotonicity", label: "单调性", fmt: (v) => num(v, 2), better: "high" },
   { key: "turnover_long", label: "多头日均换手", fmt: (v) => pct(v, 1), better: "low" },

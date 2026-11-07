@@ -22,6 +22,9 @@ def test_factors_endpoint_returns_rows(client):
     rows = client.get("/api/factors").json()["rows"]
     assert [r["name"] for r in rows] == ["fa", "fb", "fc"]
     assert rows[0]["evaluated"] is True
+    for key in ("long_ann_ret", "long_max_dd", "long_sharpe"):
+        assert isinstance(rows[0][key], float), key
+        assert rows[2][key] is None, key  # unevaluated
 
 
 def test_meta_endpoint(client):

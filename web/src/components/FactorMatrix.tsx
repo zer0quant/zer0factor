@@ -29,9 +29,9 @@ export const MATRIX_METRICS: MatrixMetric[] = [
   { key: "icir", label: "ICIR", fmt: (v) => num(v, 3), center: 0 },
   { key: "ic_adj", label: "方向调整 IC", fmt: (v) => num(v, 4), center: 0 },
   { key: "ic_win_rate", label: "IC 胜率", fmt: (v) => (isNum(v) ? `${v.toFixed(1)}%` : "—"), center: 50 },
-  { key: "ls_ann_ret", label: "多空年化", fmt: (v) => pct(v, 1), center: 0 },
-  { key: "ls_sharpe", label: "多空夏普", fmt: (v) => num(v, 2), center: 0 },
-  { key: "ls_max_dd", label: "多空回撤", fmt: (v) => pct(v, 1), center: null, better: "high" },
+  { key: "long_ann_ret", label: "多头年化", fmt: (v) => pct(v, 1), center: 0 },
+  { key: "long_sharpe", label: "多头夏普", fmt: (v) => num(v, 2), center: 0 },
+  { key: "long_max_dd", label: "多头回撤", fmt: (v) => pct(v, 1), center: null, better: "high" },
   { key: "long_exc_ann_ret", label: "多头超额", fmt: (v) => pct(v, 1), center: 0 },
   { key: "monotonicity", label: "单调性", fmt: (v) => num(v, 2), center: 0 },
   { key: "turnover_long", label: "多头换手", fmt: (v) => pct(v, 1), center: null, better: "low" },
@@ -154,7 +154,7 @@ export function FactorMatrix({
                               <div style={{ overflowWrap: "anywhere" }}>{r.name}</div>
                               {r.evaluated ? (
                                 <div className="num">
-                                  ICIR {num(r.icir, 3)} · 多空年化 {pct(r.ls_ann_ret)} ·{" "}
+                                  ICIR {num(r.icir, 3)} · 多头年化 {pct(r.long_ann_ret)} ·{" "}
                                   {r.direction === -1 ? "反向" : "正向"}
                                 </div>
                               ) : (

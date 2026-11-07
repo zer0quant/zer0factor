@@ -43,6 +43,9 @@ export interface BoardRow {
   ls_ann_ret: Num;
   ls_max_dd: Num;
   ls_sharpe: Num;
+  long_ann_ret: Num;
+  long_max_dd: Num;
+  long_sharpe: Num;
   long_exc_ann_ret: Num;
   monotonicity: Num;
   turnover_long: Num;
