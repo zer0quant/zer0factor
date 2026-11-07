@@ -98,6 +98,28 @@ uv run python main.py show-summary
 
 评估结果写入 `data/evaluations/<run_id>/`，指标口径详见 [docs/evaluation.md](docs/evaluation.md)。
 
+## Web 工作台
+
+只读的浏览器界面，包含三个页面：**因子看板**（按标准设定排序、筛选、勾选）、**单因子详情**（分组累计收益、核心指标、IC / Rank IC 四件套、分组收益、最新因子值）、**因子对比**（指标并排、多空曲线叠加、截面相关性热力图）。
+
+```bash
+# 首次使用：构建前端（需要 Node 18+）
+cd web && npm install && npm run build && cd ..
+
+# 启动（默认只监听 127.0.0.1:8600）
+uv run python main.py serve
+
+# 服务跑在远程服务器上时，在自己电脑上做端口转发，然后打开 http://localhost:8600
+ssh -L 8600:localhost:8600 <服务器>
+
+# 可选：预先为一次评估的所有因子生成图表缓存（首次打开单个因子约需 1–2 分钟）
+uv run python main.py web-warm --run <run_id> --workers 12
+```
+
+- **标准设定**：看板的指标统一取自满足 `config/settings.toml` 中 `[web.standard]`（区间起点、组数、持有期、收益口径、股票池，且评估到最新）的最新一次评估；没有标准评估的因子显示“未评估”。
+- **缓存**：详情页需要的日度序列会派生到 `data/web_cache/`，可随时删除重建；新的评估会直接写出这些序列。
+- **前端开发**：先启动 `serve`，再在 `web/` 下运行 `npm run dev`（Vite 把 `/api` 代理到 8600 端口）。
+
 ## CLI 命令一览
 
 | 命令 | 说明 |
@@ -115,6 +137,8 @@ uv run python main.py show-summary
 | `evaluate-batch --file <file>` | 按配置文件批量评估因子 |
 | `evaluate-summary` | 汇总一次评估 run 的 summary |
 | `analyze-evaluation` | 分析评估 summary 并输出分组诊断 |
+| `serve` | 启动只读 Web 工作台 |
+| `web-warm --run <run_id>` | 预生成 Web 图表缓存 |
 | `show-summary` | 查看最近一次评估的完整 summary |
 
 所有命令通过 `uv run python main.py <命令>` 执行，加 `--help` 查看完整参数。

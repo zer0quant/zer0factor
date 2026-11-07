@@ -98,6 +98,28 @@ uv run python main.py show-summary
 
 Evaluation artifacts are written to `data/evaluations/<run_id>/`. See [docs/evaluation.md](docs/evaluation.md) for metric definitions (Chinese).
 
+## Web Workbench
+
+A read-only browser UI with three pages: a **factor board** (sort, filter and select by standard-setting metrics), a **factor detail** page (quantile cumulative returns, key metrics, IC / Rank IC series, distribution, autocorrelation and decay, quantile return table, latest factor values) and a **compare** page (metrics side by side, long-short curves, cross-sectional correlation heatmap).
+
+```bash
+# First time: build the frontend (Node 18+)
+cd web && npm install && npm run build && cd ..
+
+# Start (listens on 127.0.0.1:8600 by default)
+uv run python main.py serve
+
+# On a remote server, forward the port from your machine, then open http://localhost:8600
+ssh -L 8600:localhost:8600 <server>
+
+# Optional: precompute chart caches for every factor of one run (first open takes ~1-2 min each)
+uv run python main.py web-warm --run <run_id> --workers 12
+```
+
+- **Standard setting**: board metrics come from the latest run matching `[web.standard]` in `config/settings.toml` (start date, quantiles, period, return type, universe, evaluated to the latest date). Factors without one show as unevaluated.
+- **Cache**: daily series for the detail page are derived into `data/web_cache/`, safe to delete; new evaluations write them directly.
+- **Frontend dev**: run `serve`, then `npm run dev` in `web/` (Vite proxies `/api` to port 8600).
+
 ## CLI
 
 | Command | Description |
@@ -115,6 +137,8 @@ Evaluation artifacts are written to `data/evaluations/<run_id>/`. See [docs/eval
 | `evaluate-batch --file <file>` | Batch-evaluate factors from a config file |
 | `evaluate-summary` | Summarize an evaluation run |
 | `analyze-evaluation` | Analyze an evaluation summary and write grouped diagnostics |
+| `serve` | Start the read-only web workbench |
+| `web-warm --run <run_id>` | Precompute web chart caches |
 | `show-summary` | Show the full summary of the latest evaluation run |
 
 Run every command as `uv run python main.py <command>`; add `--help` for full options.
