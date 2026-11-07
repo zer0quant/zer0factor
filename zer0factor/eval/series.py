@@ -61,6 +61,7 @@ def portfolio_daily_returns(clean_factor_data: pd.DataFrame, summary_row: Mappin
         long_quantile=int(summary_row["long_quantile"]),
         short_quantile=int(summary_row["short_quantile"]),
         transaction_cost_bps=float(summary_row.get("transaction_cost_bps") or 0.0),
+        include_full=False,
     )
     frame = pd.DataFrame({"long": series.long, "short": series.short, "ls": series.ls})
     frame["benchmark"] = (

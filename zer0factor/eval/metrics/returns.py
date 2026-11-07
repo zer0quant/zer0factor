@@ -30,12 +30,12 @@ class PortfolioDailyReturns:
     long: pd.Series
     short: pd.Series
     ls: pd.Series
-    full: pd.Series
+    full: pd.Series | None
     benchmark: pd.Series | None
     long_positions: pd.DataFrame
     short_positions: pd.DataFrame
     ls_positions: pd.DataFrame
-    full_positions: pd.DataFrame
+    full_positions: pd.DataFrame | None
     ls_benchmark: pd.Series | None
     full_benchmark: pd.Series | None
 
@@ -48,6 +48,7 @@ def build_portfolio_daily_returns(
     long_quantile: int,
     short_quantile: int,
     transaction_cost_bps: float = 0.0,
+    include_full: bool = True,
 ) -> PortfolioDailyReturns:
     """
     Daily-equivalent, cost-adjusted portfolio returns used by the summary metrics.
@@ -77,22 +78,25 @@ def build_portfolio_daily_returns(
             equal_weight=True,
             quantiles=sorted([long_quantile, short_quantile]),
         )
-        full_returns, full_positions, full_benchmark = _create_long_short_pyfolio_returns(
-            clean_factor_data,
-            direction=direction,
-            period=period,
-            equal_weight=False,
-            quantiles=None,
-        )
+        full_returns = full_positions = full_benchmark = None
+        if include_full:
+            full_returns, full_positions, full_benchmark = _create_long_short_pyfolio_returns(
+                clean_factor_data,
+                direction=direction,
+                period=period,
+                equal_weight=False,
+                quantiles=None,
+            )
 
     period_int = _parse_period_int(period)
     long_returns = _daily_equivalent_returns(long_returns, period_int)
     short_returns = _daily_equivalent_returns(short_returns, period_int)
     ls_returns = _daily_equivalent_returns(ls_returns, period_int)
-    full_returns = _daily_equivalent_returns(full_returns, period_int)
     benchmark = _daily_equivalent_returns(benchmark, period_int)
     ls_benchmark = _daily_equivalent_returns(ls_benchmark, period_int)
-    full_benchmark = _daily_equivalent_returns(full_benchmark, period_int)
+    if include_full:
+        full_returns = _daily_equivalent_returns(full_returns, period_int)
+        full_benchmark = _daily_equivalent_returns(full_benchmark, period_int)
 
     if transaction_cost_bps > 0:
         long_returns = _apply_transaction_costs(long_returns, long_positions, transaction_cost_bps)
@@ -100,7 +104,10 @@ def build_portfolio_daily_returns(
             short_returns, short_positions, transaction_cost_bps
         )
         ls_returns = _apply_transaction_costs(ls_returns, ls_positions, transaction_cost_bps)
-        full_returns = _apply_transaction_costs(full_returns, full_positions, transaction_cost_bps)
+        if include_full:
+            full_returns = _apply_transaction_costs(
+                full_returns, full_positions, transaction_cost_bps
+            )
 
     return PortfolioDailyReturns(
         long=long_returns,

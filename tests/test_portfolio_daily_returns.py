@@ -38,3 +38,12 @@ def test_daily_returns_reproduce_ls_ann_ret():
         metrics["ls_ann_ret"]
     )
     assert r.long.index.equals(r.short.index)
+
+
+def test_daily_returns_can_skip_full_portfolio():
+    cfd = make_clean_factor_data()
+    kwargs = dict(direction=1, period="1D", long_quantile=5, short_quantile=1)
+    lean = build_portfolio_daily_returns(cfd, include_full=False, **kwargs)
+    full = build_portfolio_daily_returns(cfd, **kwargs)
+    assert lean.full is None and lean.full_positions is None
+    pd.testing.assert_series_equal(lean.ls, full.ls)

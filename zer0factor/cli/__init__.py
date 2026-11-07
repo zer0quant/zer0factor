@@ -5,6 +5,7 @@ from zer0factor.cli import (  # noqa: F401  (imports register commands on the gr
     evaluate_cmds,
     preprocess_cmds,
     registry_cmds,
+    web_cmds,
 )
 from zer0factor.cli.root import cli
 

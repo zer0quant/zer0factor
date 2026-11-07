@@ -146,3 +146,25 @@ def test_latest_values_sorted_and_paged(run_fa, tmp_path):
     assert out["date"] == "2024-04-22"
     named = [i for i in out["items"] + page4["items"] if i["ts_code"] == "000001.SZ"]
     assert not named or named[0]["name"] in ("平安银行", None)
+
+
+def test_ic_decay_samples_dates_on_long_history():
+    cfd = make_clean_factor_data(n_dates=1200, n_assets=12, quantiles=3, periods=("1D",))
+    decay = ic_decay(cfd, max_lag=1)
+    factor = cfd["factor"].unstack()
+    ret = cfd["1D"].unstack()
+    rows = range(0, len(factor), 2)  # 1200 // 500 = step 2
+    manual = [factor.iloc[i].corr(ret.iloc[i + 1], method="spearman") for i in rows if i + 1 < 1200]
+    assert decay["rank"][1] == pytest.approx(np.mean(manual))
+    assert decay["sampled_step"] == 2
+
+
+def test_detail_payload_notes_decay_sampling(run_fa, tmp_path):
+    run, summary = run_fa
+    cache = tmp_path / "cache"
+    target = cache / run.run_id / "fa"
+    target.mkdir(parents=True)
+    decay = {"rank": [0.1], "ic": [0.1], "sampled_step": 5}
+    (target / "ic_decay.json").write_text(json.dumps(decay))
+    payload = detail_payload(run, "fa", "1D", cache, summary)
+    assert any("每 5 个交易日" in n for n in payload["notes"])

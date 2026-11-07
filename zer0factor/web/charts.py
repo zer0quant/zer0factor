@@ -19,6 +19,7 @@ from zer0factor.web.runs import RunInfo
 
 TRADING_DAYS = 252
 MONTHLY_THRESHOLD = 500
+DECAY_MAX_ROWS = 500
 _locks: dict[Path, threading.Lock] = defaultdict(threading.Lock)
 _locks_guard = threading.Lock()
 
@@ -100,17 +101,25 @@ def _row_corr(a: pd.DataFrame, b: pd.DataFrame) -> pd.Series:
     return num / den.replace(0, np.nan)
 
 
-def ic_decay(clean_factor_data: pd.DataFrame, max_lag: int = 20) -> dict[str, list]:
-    """Mean cross-sectional IC of factor_t against the 1-day return k days later."""
+def ic_decay(clean_factor_data: pd.DataFrame, max_lag: int = 20) -> dict:
+    """Mean cross-sectional IC of factor_t against the 1-day return k days later.
+
+    On long histories the factor dates are sampled evenly (every ``step``-th day,
+    ~DECAY_MAX_ROWS rows) — an unbiased estimate of the mean that keeps the
+    per-lag cross-sectional ranking affordable.
+    """
     periods = [c for c in clean_factor_data.columns if c not in ("factor", "factor_quantile")]
     ret_col = "1D" if "1D" in periods else periods[0]
     factor = clean_factor_data["factor"].unstack()
     ret = clean_factor_data[ret_col].unstack().reindex(index=factor.index, columns=factor.columns)
-    out: dict[str, list] = {"rank": [], "ic": []}
+    step = max(1, len(factor) // DECAY_MAX_ROWS)
+    rows = factor.index[::step]
+    out: dict[str, list] = {"rank": [], "ic": [], "sampled_step": step}
     for lag in range(max_lag + 1):
-        shifted = ret.shift(-lag)
-        mask = factor.notna() & shifted.notna()
-        f, r = factor.where(mask), shifted.where(mask)
+        shifted = ret.shift(-lag).loc[rows]
+        sampled = factor.loc[rows]
+        mask = sampled.notna() & shifted.notna()
+        f, r = sampled.where(mask), shifted.where(mask)
         pearson = _row_corr(f, r)
         spearman = _row_corr(f.rank(axis=1), r.rank(axis=1))
         out["ic"].append(_finite(pearson.mean()))
@@ -241,6 +250,9 @@ def detail_payload(
     except Exception as exc:
         logger.warning(f"chart series unavailable for {run.run_id}/{factor}: {exc!r}")
         series, decay = None, None
+
+    if decay and decay.get("sampled_step", 1) > 1:
+        notes.append(f"IC 衰减按每 {decay['sampled_step']} 个交易日抽样计算")
 
     cumulative = None
     table = None

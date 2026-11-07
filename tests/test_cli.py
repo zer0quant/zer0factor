@@ -1073,3 +1073,15 @@ end_date = ""
         encoding="utf-8",
     )
     return config_path
+
+
+def test_serve_command_is_registered():
+    result = CliRunner().invoke(cli, ["serve", "--help"])
+    assert result.exit_code == 0
+    assert "--port" in result.output
+
+
+def test_web_warm_command_is_registered():
+    result = CliRunner().invoke(cli, ["web-warm", "--help"])
+    assert result.exit_code == 0
+    assert "--run" in result.output
