@@ -62,6 +62,13 @@ def _derive(run: RunInfo, factor: str, cache_dir: Path, summary: pd.DataFrame) -
     return True
 
 
+def cached_series(run: RunInfo, factor: str, cache_dir: Path) -> dict[str, pd.DataFrame] | None:
+    """Series already on disk (run dir or web cache); never derives."""
+    return read_chart_series(run.factor_dir(factor)) or read_chart_series(
+        _cache_path(cache_dir, run, factor)
+    )
+
+
 def get_series(
     run: RunInfo, factor: str, cache_dir: Path, summary: pd.DataFrame
 ) -> dict[str, pd.DataFrame] | None:
@@ -163,7 +170,7 @@ def _perf(r: pd.Series, benchmark: pd.Series | None) -> dict:
     years = len(r) / TRADING_DAYS
     nav = (1 + r).cumprod()
     ann_ret = nav.iloc[-1] ** (1 / years) - 1
-    max_dd = float(1 - (nav / nav.cummax()).min())
+    max_dd = float((nav / nav.cummax() - 1).min())  # negative, same sign as summary *_max_dd
     std = r.std()
     exc = None
     if benchmark is not None:
@@ -174,7 +181,7 @@ def _perf(r: pd.Series, benchmark: pd.Series | None) -> dict:
     return {
         "ann_ret": _finite(ann_ret),
         "exc_ann_ret": _finite(exc),
-        "max_dd": max(max_dd, 0.0),
+        "max_dd": min(max_dd, 0.0),
         "ann_vol": _finite(std * np.sqrt(TRADING_DAYS)),
         "sharpe": _finite(r.mean() / std * np.sqrt(TRADING_DAYS)) if std else None,
     }

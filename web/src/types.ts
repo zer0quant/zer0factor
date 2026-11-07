@@ -103,6 +103,7 @@ export interface Compare {
   rows: BoardRow[];
   inconsistent: string[];
   unevaluated: string[];
+  missing_curve: string[];
   curves: { dates: string[]; series: Record<string, Num[]> };
 }
 

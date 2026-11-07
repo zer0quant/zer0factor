@@ -85,7 +85,7 @@ def test_compare_ok_and_marks_inconsistent(stored, make_run, make_config):
     body = client.get("/api/compare", params={"f": "fa,fb"}).json()
     assert body["factors"] == ["fa", "fb"]
     assert body["inconsistent"] == ["fb"]
-    assert set(body["curves"]["series"]) == {"fa", "fb"}
+    assert body["missing_curve"] == ["fa", "fb"]  # compare never derives caches
 
 
 def test_compare_unknown_factor_404(client):
@@ -121,3 +121,26 @@ def test_responses_have_no_nan(client):
         assert r.status_code == 200, url
         assert "NaN" not in r.text and "Infinity" not in r.text
         json.loads(r.text)
+
+
+def test_compare_reads_cache_only_and_reports_missing_curve(stored, make_run, make_config):
+    make_run("20260101_000000", ["fa", "fb"])
+    cfg = make_config(None)
+    client = TestClient(create_app(cfg))
+    body = client.get("/api/compare", params={"f": "fa,fb"}).json()
+    assert body["missing_curve"] == ["fa", "fb"]
+    assert body["curves"]["series"] == {}
+    assert not cfg.web.cache_dir.exists()
+    client.get("/api/factors/fa/runs/20260101_000000")  # detail derives fa's cache
+    body = client.get("/api/compare", params={"f": "fa,fb"}).json()
+    assert body["missing_curve"] == ["fb"]
+    assert set(body["curves"]["series"]) == {"fa"}
+
+
+def test_refresh_clears_correlation_cache(client):
+    from zer0factor.web.correlation import _cached
+
+    assert client.get("/api/compare/correlation", params={"f": "fa,fb"}).status_code == 200
+    assert _cached.cache_info().currsize > 0
+    client.post("/api/refresh")
+    assert _cached.cache_info().currsize == 0

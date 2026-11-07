@@ -122,7 +122,16 @@ export default function Compare() {
         {cmp.isLoading ? (
           <Skeleton active />
         ) : data && Object.keys(data.curves.series).length ? (
-          <CompareCurves dates={data.curves.dates} series={data.curves.series} />
+          <>
+            {data.missing_curve.length > 0 && (
+              <Alert
+                type="info"
+                style={{ marginBottom: 8 }}
+                message={`${data.missing_curve.join("、")} 的收益序列尚未生成：打开其详情页一次，或运行 web-warm 预热后再刷新。`}
+              />
+            )}
+            <CompareCurves dates={data.curves.dates} series={data.curves.series} />
+          </>
         ) : (
           <Empty description="无可用的收益序列" />
         )}

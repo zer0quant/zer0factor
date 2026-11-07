@@ -11,8 +11,8 @@ import pandas as pd
 
 
 def to_jsonable(obj: object) -> object:
-    if obj is None or isinstance(obj, (bool, str)):
-        return obj
+    if obj is None or obj is pd.NaT or isinstance(obj, (bool, str)):
+        return None if obj is pd.NaT else obj
     if isinstance(obj, Mapping):
         return {str(k): to_jsonable(v) for k, v in obj.items()}
     if isinstance(obj, (list, tuple, set)):

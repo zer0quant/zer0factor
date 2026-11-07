@@ -20,3 +20,7 @@ def test_to_jsonable_converts_numpy_and_timestamps():
     )
     assert out == {"i": 3, "t": "2024-01-02", "arr": [1.0, None]}
     assert type(out["i"]) is int
+
+
+def test_to_jsonable_nat_is_none():
+    assert to_jsonable({"d": pd.NaT}) == {"d": None}

@@ -13,7 +13,8 @@ from loguru import logger
 
 from zer0factor.config import Config
 from zer0factor.web.catalog import Catalog, build_catalog
-from zer0factor.web.charts import detail_payload, get_series, latest_values, load_stock_names
+from zer0factor.web.charts import cached_series, detail_payload, latest_values, load_stock_names
+from zer0factor.web.correlation import _cached as _correlation_cache
 from zer0factor.web.correlation import factor_correlation
 from zer0factor.web.jsonsafe import to_jsonable
 from zer0factor.web.runs import RunInfo, is_standard, summary_row
@@ -105,6 +106,7 @@ def create_app(cfg: Config, static_dir: Path | None = None) -> FastAPI:
     @app.post("/api/refresh")
     def refresh():
         state["catalog"] = build_catalog(cfg)
+        _correlation_cache.cache_clear()
         return _json(meta_payload())
 
     @app.get("/api/factors")
@@ -157,7 +159,7 @@ def create_app(cfg: Config, static_dir: Path | None = None) -> FastAPI:
     def compare(f: str):
         names = parse_factors(f)
         c = catalog()
-        rows, inconsistent, unevaluated = [], [], []
+        rows, inconsistent, unevaluated, missing_curve = [], [], [], []
         curves: dict[str, pd.Series] = {}
         for n in names:
             run, period, standard = chosen_run(n)
@@ -169,11 +171,15 @@ def create_app(cfg: Config, static_dir: Path | None = None) -> FastAPI:
                 inconsistent.append(n)
             row = summary_row(run, n, period, c.summary_cache)
             rows.append(c.board_row(n, (run, row) if row else None))
-            series = get_series(run, n, cfg.web.cache_dir, summary_of(run))
+            # Read caches only: deriving here would take ~1 min per factor and one bad
+            # clean_factor_data would fail the whole comparison.
+            series = cached_series(run, n, cfg.web.cache_dir)
             column = f"{period}:ls"
             if series is not None and column in series["portfolio_daily_returns"]:
                 ls = series["portfolio_daily_returns"][column]
                 curves[n] = (1 + ls.fillna(0)).cumprod() - 1
+            else:
+                missing_curve.append(n)
         index = sorted(set().union(*(s.index for s in curves.values()))) if curves else []
         return _json(
             {
@@ -181,6 +187,7 @@ def create_app(cfg: Config, static_dir: Path | None = None) -> FastAPI:
                 "rows": rows,
                 "inconsistent": inconsistent,
                 "unevaluated": unevaluated,
+                "missing_curve": missing_curve,
                 "curves": {
                     "dates": [pd.Timestamp(d).strftime("%Y-%m-%d") for d in index],
                     "series": {n: s.reindex(index).ffill().tolist() for n, s in curves.items()},

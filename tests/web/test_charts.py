@@ -80,7 +80,7 @@ def test_cumulative_ls_matches_portfolio(run_fa, tmp_path):
     assert any("10bps" in n for n in payload["notes"])
 
 
-def test_group_table_has_ls_row_and_positive_max_dd():
+def test_group_table_has_ls_row_and_negative_max_dd():
     dates = pd.bdate_range("2024-01-02", periods=60)
     rng = np.random.default_rng(1)
     qret = pd.DataFrame(rng.normal(0, 0.01, (60, 3)), index=dates, columns=[1, 2, 3])
@@ -89,7 +89,7 @@ def test_group_table_has_ls_row_and_positive_max_dd():
     )
     table = group_table(qret, port)
     assert [r["group"] for r in table] == ["1", "2", "3", "多空"]
-    assert all(r["max_dd"] >= 0 for r in table)
+    assert all(r["max_dd"] <= 0 for r in table)  # same sign as summary *_max_dd
     first = table[0]
     assert first["ann_vol"] == pytest.approx(qret[1].std() * np.sqrt(252))
 
