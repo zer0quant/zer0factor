@@ -1,8 +1,9 @@
 import { useMemo, useState } from "react";
 import {
-  Alert,
   Button,
   Card,
+  Empty,
+  Grid,
   Input,
   Segmented,
   Select,
@@ -21,6 +22,7 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { fetchFactors } from "../api";
 import { fmtDate, isNum, num, pct, signColor } from "../format";
 import type { BoardRow, Num } from "../types";
+import { ErrorState } from "../components/states";
 
 const MAX_COMPARE = 8;
 
@@ -46,11 +48,9 @@ function nullsLast(get: (r: BoardRow) => Num) {
 }
 
 const colored = (fmt: (v: Num) => string) => (v: Num) => (
-  <span style={{ color: signColor(v), fontVariantNumeric: "tabular-nums" }}>{fmt(v)}</span>
+  <span className="num" style={{ color: signColor(v) }}>{fmt(v)}</span>
 );
-const plain = (fmt: (v: Num) => string) => (v: Num) => (
-  <span style={{ fontVariantNumeric: "tabular-nums" }}>{fmt(v)}</span>
-);
+const plain = (fmt: (v: Num) => string) => (v: Num) => <span className="num">{fmt(v)}</span>;
 
 function metricCol(
   title: string,
@@ -73,7 +73,12 @@ function metricCol(
 }
 
 export default function Board() {
-  const { data, isLoading, error } = useQuery({ queryKey: ["factors"], queryFn: fetchFactors });
+  const { data, isLoading, error, refetch, isRefetching } = useQuery({
+    queryKey: ["factors"],
+    queryFn: fetchFactors,
+  });
+  const screens = Grid.useBreakpoint();
+  const compact = screens.md === false;
   const [params, setParams] = useSearchParams();
   const navigate = useNavigate();
   const [search, setSearch] = useState("");
@@ -118,6 +123,16 @@ export default function Board() {
   }, [rows, search, categories, tags, evaluatedOnly, prefix]);
 
   const evaluatedCount = rows.filter((r) => r.evaluated).length;
+  const hasLabels = allCategories.length > 0 || allTags.length > 0;
+  const filtersActive =
+    !!search.trim() || categories.length > 0 || tags.length > 0 || evaluatedOnly || prefix !== "全部";
+  const resetFilters = () => {
+    setSearch("");
+    setCategories([]);
+    setTags([]);
+    setEvaluatedOnly(false);
+    setPrefix("全部");
+  };
 
   const columns: ColumnsType<BoardRow> = [
     {
@@ -125,35 +140,45 @@ export default function Board() {
       dataIndex: "name",
       key: "name",
       fixed: "left",
-      width: 260,
+      width: compact ? 230 : 360,
       sorter: (a, b) => a.name.localeCompare(b.name),
       render: (name: string, r) => (
-        <Space size={4} wrap>
-          <Link to={`/factor/${encodeURIComponent(name)}`}>{name}</Link>
+        <div className={compact ? "zf-name-cell zf-wrap" : "zf-name-cell"}>
+          <Link to={`/factor/${encodeURIComponent(name)}`} title={name}>
+            {name}
+          </Link>
           {r.direction === -1 && (
-            <Tooltip title="IC 为负，多头取低分组">
-              <Tag color="orange" style={{ marginInlineEnd: 0 }}>
-                反向
-              </Tag>
+            <Tooltip title="反向因子：IC 为负，多头取低分组">
+              <Tag color="orange">{compact ? "反" : "反向"}</Tag>
             </Tooltip>
           )}
-          {!r.evaluated && <Tag style={{ marginInlineEnd: 0 }}>未评估</Tag>}
-        </Space>
+          {!r.evaluated && <Tag>未评估</Tag>}
+        </div>
       ),
     },
-    {
-      title: "分类 / 标签",
-      key: "category",
-      width: 160,
-      render: (_, r) => (
-        <Space size={2} wrap>
-          {r.category && <Tag color="blue">{r.category}</Tag>}
-          {r.tags.map((t) => (
-            <Tag key={t}>{t}</Tag>
-          ))}
-        </Space>
-      ),
-    },
+    ...(hasLabels
+      ? [
+          {
+            title: "分类 / 标签",
+            key: "category",
+            width: 150,
+            render: (_: unknown, r: BoardRow) => {
+              const labels = [...(r.category ? [r.category] : []), ...r.tags];
+              if (!labels.length) return null;
+              return (
+                <Tooltip title={labels.join(" · ")}>
+                  <div className="zf-tags-cell">
+                    {r.category && <Tag color="blue">{r.category}</Tag>}
+                    {r.tags.map((t) => (
+                      <Tag key={t}>{t}</Tag>
+                    ))}
+                  </div>
+                </Tooltip>
+              );
+            },
+          },
+        ]
+      : []),
     metricCol("方向调整 IC", "ic_adj", plain((v) => num(v, 4)), "Rank IC 均值 × 因子方向", {
       width: 130,
     }),
@@ -190,7 +215,10 @@ export default function Board() {
     },
   ];
 
-  if (error) return <Alert type="error" message={`加载失败：${(error as Error).message}`} />;
+  const scrollX = columns.reduce((w, c) => w + (Number(c.width) || 110), 48);
+
+  if (error && !data)
+    return <ErrorState error={error} title="因子列表加载失败" onRetry={() => refetch()} />;
 
   return (
     <Card
@@ -202,20 +230,19 @@ export default function Board() {
           </Typography.Text>
         </Space>
       }
-      styles={{ body: { paddingTop: 12 } }}
+      styles={{ body: compact ? { padding: 12 } : { paddingTop: 12 } }}
     >
-      <Space wrap style={{ marginBottom: 12 }} size="middle">
+      <Space wrap style={{ marginBottom: 12, width: "100%" }} size={compact ? 8 : "middle"}>
         <Input.Search
           allowClear
           placeholder="搜索因子名或描述"
-          style={{ width: 240 }}
+          style={{ width: compact ? "calc(100vw - 48px)" : 240 }}
+          value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
-        <Segmented<string>
-          options={allPrefixes}
-          value={prefix}
-          onChange={setPrefix}
-        />
+        <div className="zf-hscroll" style={{ maxWidth: compact ? "calc(100vw - 48px)" : undefined }}>
+          <Segmented<string> options={allPrefixes} value={prefix} onChange={setPrefix} />
+        </div>
         <Select
           mode="multiple"
           allowClear
@@ -242,11 +269,33 @@ export default function Board() {
       <Table<BoardRow>
         rowKey="name"
         size="middle"
-        loading={isLoading}
+        loading={isLoading || isRefetching}
         columns={columns}
         dataSource={filtered}
-        scroll={{ x: 1900 }}
-        pagination={{ defaultPageSize: 50, showSizeChanger: true, pageSizeOptions: [20, 50, 100, 200] }}
+        scroll={{ x: scrollX }}
+        sticky={{ offsetHeader: 56 }}
+        locale={{
+          emptyText: isLoading ? (
+            " "
+          ) : (
+            <Empty
+              description={filtersActive ? "没有符合筛选条件的因子" : "还没有注册任何因子"}
+            >
+              {filtersActive && (
+                <Button size="small" onClick={resetFilters}>
+                  清除筛选
+                </Button>
+              )}
+            </Empty>
+          ),
+        }}
+        pagination={{
+          defaultPageSize: 50,
+          showSizeChanger: true,
+          pageSizeOptions: [20, 50, 100, 200],
+          showTotal: compact ? undefined : (n) => `共 ${n} 个`,
+          size: compact ? "small" : undefined,
+        }}
         rowSelection={{
           selectedRowKeys: selected,
           preserveSelectedRowKeys: true,
@@ -270,8 +319,8 @@ export default function Board() {
             bottom: 24,
             left: "50%",
             transform: "translateX(-50%)",
-            background: "#1f2937",
-            color: "#fff",
+            background: "var(--zf-bar-bg)",
+            color: "var(--zf-bar-fg)",
             padding: "10px 16px",
             borderRadius: 12,
             boxShadow: "0 8px 24px rgba(0,0,0,.18)",
@@ -293,7 +342,7 @@ export default function Board() {
             size="small"
             type="primary"
             disabled={selected.length < 2}
-            style={{ background: "#fff", color: "#1f2937" }}
+            style={{ background: "var(--zf-bar-fg)", color: "var(--zf-bar-bg)" }}
             onClick={() => navigate(`/compare?f=${encodeURIComponent(selected.join(","))}`)}
           >
             开始对比

@@ -1,8 +1,9 @@
 import type { Num } from "./types";
 
-export const RED = "#cf1322";
-export const GREEN = "#389e0d";
-export const GREY = "#8c8c8c";
+/** CSS colour tokens (defined in index.css, switch with the theme). For DOM text only. */
+export const RED = "var(--zf-up)";
+export const GREEN = "var(--zf-down)";
+export const GREY = "var(--zf-muted)";
 
 const isNum = (v: Num | undefined): v is number => typeof v === "number" && Number.isFinite(v);
 

@@ -1,10 +1,11 @@
-import { Alert, Card, Empty, List, Skeleton, Space, Table, Typography } from "antd";
+import { Alert, Card, Empty, Grid, List, Skeleton, Space, Table, Tag, Typography } from "antd";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useSearchParams } from "react-router-dom";
 import { fetchCompare, fetchCorrelation } from "../api";
 import { fmtDate, isNum, num, pct, signColor } from "../format";
 import type { BoardRow, Num } from "../types";
-import { CompareCurves, CorrHeatmap } from "../components/charts";
+import { CompareCurves, CorrHeatmap, factorTag } from "../components/charts";
+import { ErrorState, SlowLoading } from "../components/states";
 
 type Metric = {
   key: keyof BoardRow;
@@ -42,6 +43,8 @@ export default function Compare() {
   const [params] = useSearchParams();
   const fs = (params.get("f") ?? "").split(",").filter(Boolean);
   const valid = fs.length >= 2 && fs.length <= 8;
+  const screens = Grid.useBreakpoint();
+  const compact = screens.md === false;
 
   const cmp = useQuery({ queryKey: ["compare", fs], queryFn: () => fetchCompare(fs), enabled: valid });
   const corr = useQuery({
@@ -67,7 +70,7 @@ export default function Compare() {
 
   return (
     <Space direction="vertical" size={16} style={{ width: "100%" }}>
-      {cmp.error && <Alert type="error" message={`加载失败：${(cmp.error as Error).message}`} />}
+      {cmp.error && <ErrorState error={cmp.error} title="对比数据加载失败" onRetry={() => cmp.refetch()} />}
       {data && data.inconsistent.length > 0 && (
         <Alert
           type="warning"
@@ -92,20 +95,27 @@ export default function Compare() {
             columns={[
               { title: "指标", key: "metric", fixed: "left", width: 130, render: (_, r) => r.metric.label },
               ...(data?.factors ?? fs).map((f, i) => ({
-                title: <Link to={`/factor/${encodeURIComponent(f)}`}>{f}</Link>,
+                title: (
+                  <Link to={`/factor/${encodeURIComponent(f)}`} title={f}>
+                    <Typography.Text type="secondary" style={{ marginInlineEnd: 4, fontWeight: 400 }}>
+                      {factorTag(i)}
+                    </Typography.Text>
+                    {f}
+                  </Link>
+                ),
                 key: f,
                 align: "right" as const,
                 render: (_: unknown, r: (typeof tableRows)[number]) => {
                   const v = r.values[i];
                   return (
                     <span
+                      className="num"
                       style={{
                         color: r.metric.colored ? signColor(v) : undefined,
                         fontWeight: r.best === i ? 700 : 400,
-                        background: r.best === i ? "#fef9c3" : undefined,
+                        background: r.best === i ? "var(--zf-best)" : undefined,
                         padding: "2px 6px",
                         borderRadius: 4,
-                        fontVariantNumeric: "tabular-nums",
                       }}
                     >
                       {r.metric.fmt(v)}
@@ -140,21 +150,20 @@ export default function Compare() {
       <Card
         size="small"
         title="因子相关性（截面 Spearman）"
-        extra={
-          corr.data && (
-            <Typography.Text type="secondary">
-              {fmtDate(corr.data.start)} → {fmtDate(corr.data.end)} 抽样 {corr.data.dates_used} 个交易日 ·
-              univ_trade_base 成分股
-            </Typography.Text>
-          )
-        }
       >
         {corr.isLoading ? (
-          <Skeleton active />
+          <SlowLoading
+            tip="正在计算截面相关性…"
+            hint="需要读取各因子在抽样交易日的截面数据，首次计算可能需要数十秒；结果会缓存。"
+          />
         ) : corr.error ? (
-          <Alert type="error" message={(corr.error as Error).message} />
+          <ErrorState error={corr.error} title="相关性计算失败" onRetry={() => corr.refetch()} />
         ) : corr.data ? (
           <>
+            <Typography.Text type="secondary" style={{ fontSize: 12, display: "block", marginBottom: 8 }}>
+              {fmtDate(corr.data.start)} → {fmtDate(corr.data.end)} 抽样 {corr.data.dates_used} 个交易日 ·
+              univ_trade_base 成分股{compact ? "" : " · 横轴编号对应纵轴因子名，悬停查看完整信息"}
+            </Typography.Text>
             <CorrHeatmap
               factors={corr.data.factors}
               matrix={corr.data.matrix}
@@ -165,11 +174,24 @@ export default function Compare() {
               header={<b>疑似重复（|ρ| ≥ {corr.data.threshold}）</b>}
               dataSource={corr.data.pairs_over_threshold}
               locale={{ emptyText: "没有高度相关的因子对" }}
-              renderItem={(p) => (
-                <List.Item extra={<Typography.Text strong>ρ = {p.rho.toFixed(3)}</Typography.Text>}>
-                  {p.a} ↔ {p.b}
-                </List.Item>
-              )}
+              renderItem={(p) => {
+                const ia = corr.data!.factors.indexOf(p.a);
+                const ib = corr.data!.factors.indexOf(p.b);
+                return (
+                  <List.Item>
+                    <span style={{ minWidth: 0, overflowWrap: "anywhere" }}>
+                      {ia >= 0 && <Tag>{factorTag(ia)}</Tag>}
+                      {p.a}
+                      <Typography.Text type="secondary"> ↔ </Typography.Text>
+                      {ib >= 0 && <Tag>{factorTag(ib)}</Tag>}
+                      {p.b}
+                    </span>
+                    <Typography.Text strong className="num" style={{ flex: "none", marginInlineStart: 16 }}>
+                      ρ = {p.rho.toFixed(3)}
+                    </Typography.Text>
+                  </List.Item>
+                );
+              }}
             />
           </>
         ) : null}

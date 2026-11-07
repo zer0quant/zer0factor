@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Descriptions, Table, Tag, Typography } from "antd";
+import { Descriptions, Table, Tag, Typography, theme } from "antd";
 import { useQuery } from "@tanstack/react-query";
 import { fetchLatest } from "../api";
 import { fmtDate, num, pct, signColor } from "../format";
@@ -36,12 +36,13 @@ export function ParamsPanel({ run }: { run: RunSummary }) {
 }
 
 const cell = (text: string, v: Num | undefined, color = false) => (
-  <span style={{ color: color ? signColor(v ?? null) : undefined, fontVariantNumeric: "tabular-nums" }}>
+  <span className="num" style={{ color: color ? signColor(v ?? null) : undefined }}>
     {text}
   </span>
 );
 
 export function MetricCards({ detail }: { detail: Detail }) {
+  const { token } = theme.useToken();
   const s = detail.summary as Record<string, Num>;
   const dir = detail.direction;
   const items: [string, string, Num, boolean][] = [
@@ -66,7 +67,7 @@ export function MetricCards({ detail }: { detail: Detail }) {
     <div
       style={{
         display: "grid",
-        gridTemplateColumns: "repeat(auto-fill, minmax(190px, 1fr))",
+        gridTemplateColumns: "repeat(auto-fill, minmax(min(190px, 100%), 1fr))",
         gap: 10,
       }}
     >
@@ -74,7 +75,7 @@ export function MetricCards({ detail }: { detail: Detail }) {
         <div
           key={label}
           style={{
-            border: "1px solid #f0f0f0",
+            border: `1px solid ${token.colorBorderSecondary}`,
             borderRadius: 8,
             padding: "8px 12px",
             display: "flex",
@@ -143,7 +144,7 @@ export function LatestValues({ name, runId }: { name: string; runId: string }) {
       columns={[
         { title: "股票代码", dataIndex: "ts_code" },
         { title: "名称", dataIndex: "name", render: (v: string | null) => v ?? "—" },
-        { title: "因子值", dataIndex: "value", align: "right", render: (v: Num) => num(v) },
+        { title: "因子值", dataIndex: "value", align: "right", render: (v: Num) => <span className="num">{num(v)}</span> },
         { title: "所在分组", dataIndex: "quantile", align: "right" },
       ]}
     />

@@ -1,0 +1,74 @@
+/* Colour tokens for DOM text (charts use the Palette in theme.tsx). */
+:root,
+:root[data-theme="light"] {
+  --zf-up: #cf1322;
+  --zf-down: #389e0d;
+  --zf-muted: #8c8c8c;
+  --zf-page: #f5f6f8;
+  --zf-best: #fef9c3;
+  --zf-bar-bg: #1f2937;
+  --zf-bar-fg: #ffffff;
+}
+
+:root[data-theme="dark"] {
+  --zf-up: #f5544a;
+  --zf-down: #49aa19;
+  --zf-muted: #8c8c8c;
+  --zf-page: #000000;
+  --zf-best: rgba(250, 219, 20, 0.18);
+  --zf-bar-bg: #262626;
+  --zf-bar-fg: #f5f5f5;
+}
+
+html,
+body {
+  margin: 0;
+  background: var(--zf-page);
+}
+
+.num {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Board: one-line factor name, ellipsis when it does not fit. */
+.zf-name-cell {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  white-space: nowrap;
+}
+.zf-name-cell > a {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+/* Narrow screens: show the whole name, wrapping anywhere (names differ mid-string and at the end). */
+.zf-name-cell.zf-wrap {
+  white-space: normal;
+  align-items: flex-start;
+}
+.zf-name-cell.zf-wrap > a {
+  overflow-wrap: anywhere;
+}
+.zf-name-cell .ant-tag {
+  margin-inline-end: 0;
+  flex: none;
+}
+
+.zf-tags-cell {
+  display: flex;
+  gap: 4px;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.zf-tags-cell .ant-tag {
+  margin-inline-end: 0;
+}
+
+/* Horizontal scroller for wide filter controls on narrow screens. */
+.zf-hscroll {
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}

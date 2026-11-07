@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import {
-  Alert,
+  Button,
   Card,
   Col,
   Empty,
@@ -26,6 +26,7 @@ import {
   IcSeriesChart,
 } from "../components/charts";
 import { GroupTable, LatestValues, MetricCards, ParamsPanel } from "../components/panels";
+import { ErrorState, SlowLoading } from "../components/states";
 
 function IcSection({ block, label }: { block: IcBlock; label: string }) {
   const cards: [string, React.ReactNode][] = [
@@ -118,7 +119,15 @@ export default function FactorDetail() {
     setParams(next);
   };
 
-  if (info.error) return <Alert type="error" message={(info.error as Error).message} />;
+  if (info.error)
+    return (
+      <Space direction="vertical" size={16} style={{ width: "100%" }}>
+        <ErrorState error={info.error} title={`因子 ${name} 加载失败`} onRetry={() => info.refetch()} />
+        <Link to="/">
+          <Button>回到因子看板</Button>
+        </Link>
+      </Space>
+    );
   const meta = info.data?.meta;
 
   return (
@@ -129,7 +138,7 @@ export default function FactorDetail() {
             <Link to="/">因子看板</Link> / {name}
           </Typography.Text>
           <Space wrap>
-            <Typography.Title level={4} style={{ margin: 0 }}>
+            <Typography.Title level={4} style={{ margin: 0, overflowWrap: "anywhere" }}>
               {name}
             </Typography.Title>
             {meta?.category && <Tag color="blue">{meta.category}</Tag>}
@@ -141,15 +150,17 @@ export default function FactorDetail() {
       </Card>
 
       {info.isLoading ? (
-        <Skeleton active />
+        <Card>
+          <Skeleton active />
+        </Card>
       ) : runs.length === 0 ? (
         <Card>
           <Empty description="该因子还没有任何评估结果，请先用 evaluate-factor / evaluate-batch 评估" />
         </Card>
       ) : (
-        <Row gutter={16}>
+        <Row gutter={[16, 16]}>
           <Col xs={24} lg={6}>
-            <Card size="small" title="评估参数" style={{ position: "sticky", top: 16 }}>
+            <Card size="small" title="评估参数" style={{ position: "sticky", top: 56 + 16 }}>
               <Space direction="vertical" style={{ width: "100%" }} size={12}>
                 <Select
                   style={{ width: "100%" }}
@@ -180,13 +191,13 @@ export default function FactorDetail() {
           <Col xs={24} lg={18}>
             {detail.isLoading ? (
               <Card>
-                <Skeleton active paragraph={{ rows: 10 }} />
-                <Typography.Text type="secondary">
-                  首次打开某个 run 的因子需要从原始数据计算图表（约 1–2 分钟），之后会直接读缓存。
-                </Typography.Text>
+                <SlowLoading
+                  tip="正在加载图表数据…"
+                  hint="首次打开某个 run 的因子需要从原始数据计算图表（约 1–2 分钟），之后会直接读缓存。"
+                />
               </Card>
             ) : detail.error ? (
-              <Alert type="error" message={`加载失败：${(detail.error as Error).message}`} />
+              <ErrorState error={detail.error} title="图表数据加载失败" onRetry={() => detail.refetch()} />
             ) : detail.data && runId ? (
               <Results detail={detail.data} name={name} runId={runId} />
             ) : null}
