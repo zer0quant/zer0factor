@@ -35,6 +35,7 @@ import { GroupTable, LatestValues, MetricCards, ParamsSummary } from "../compone
 import { ErrorState, SlowLoading } from "../components/states";
 import { FactorChips } from "../components/FactorName";
 import { Siblings } from "../components/Siblings";
+import { useEvaluate } from "../components/EvaluateDrawer";
 import { CompareBar } from "../components/CompareBar";
 
 function IcSection({ block, label }: { block: IcBlock; label: string }) {
@@ -153,6 +154,7 @@ export default function FactorDetail() {
   const [params, setParams] = useSearchParams();
   const info = useQuery({ queryKey: ["factor", name], queryFn: () => fetchFactor(name) });
   const navigate = useNavigate();
+  const evaluate = useEvaluate();
   useHotkeys({
     a: () => {
       if (!toggleInBasket(name)) message.warning(`对比篮最多 ${MAX_COMPARE} 个因子`);
@@ -220,7 +222,30 @@ export default function FactorDetail() {
               {meta?.tags.map((t) => <Tag key={t}>{t}</Tag>)}
               {detail.data?.direction === -1 && <Tag color="orange">反向因子</Tag>}
             </Space>
-            <CompareToggle name={name} />
+            <Space size={8}>
+              <Button
+                size="small"
+                onClick={() =>
+                  evaluate.open(
+                    [name],
+                    run
+                      ? {
+                          start_date: run.start_date ?? undefined,
+                          end_date: run.end_date,
+                          quantiles: run.quantiles ?? undefined,
+                          periods: run.periods.map((p) => Number.parseInt(p, 10)).filter((n) => n > 0),
+                          return_type: run.return_type ?? undefined,
+                          universe: run.universe,
+                          transaction_cost_bps: run.transaction_cost_bps ?? undefined,
+                        }
+                      : {},
+                  )
+                }
+              >
+                重新评估
+              </Button>
+              <CompareToggle name={name} />
+            </Space>
           </div>
           <FactorChips name={name} link={false} copyable />
           {meta?.description && <Typography.Text type="secondary">{meta.description}</Typography.Text>}

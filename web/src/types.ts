@@ -119,3 +119,85 @@ export interface Correlation {
   threshold: number;
   pairs_over_threshold: { a: string; b: string; rho: number }[];
 }
+
+export type TaskStatus = "queued" | "running" | "succeeded" | "failed" | "cancelled" | "lost";
+export type TaskKind = "evaluate" | "build" | "base" | "warm";
+
+export interface Task {
+  id: string;
+  kind: TaskKind;
+  queue: string;
+  title: string;
+  params: Record<string, unknown>;
+  command: string[];
+  cwd: string;
+  status: TaskStatus;
+  created_at: string;
+  started_at: string | null;
+  finished_at: string | null;
+  pid: number | null;
+  exit_code: number | null;
+  progress_done: number;
+  progress_total: number | null;
+  last_line: string | null;
+  run_id: string | null;
+  parent_id: string | null;
+  error: string | null;
+  source: string;
+}
+
+export interface TaskList {
+  tasks: Task[];
+  running: number;
+  queued: number;
+}
+
+export interface TaskLog {
+  text: string;
+  offset: number;
+  size: number;
+  done: boolean;
+}
+
+export interface EvaluateParams {
+  factors: string[];
+  start_date: string;
+  end_date: string | null;
+  periods: number[];
+  quantiles: number;
+  return_type: string;
+  universe: string | null;
+  max_loss: number;
+  transaction_cost_bps: number;
+  benchmark_index: string | null;
+  workers: number;
+}
+
+export interface EvalOptions {
+  standard: StandardSetting;
+  defaults: Omit<EvaluateParams, "factors">;
+  universes: string[];
+  return_types: string[];
+}
+
+export interface Family {
+  name: string;
+  module: string;
+  origin: "builtin" | "package" | "explicit";
+  error: string | null;
+  base_factors: string[];
+  windows: number[];
+  profiles: string[];
+  raw_names: string[];
+  outputs: string[];
+  uses_data_provider: boolean;
+  source: Record<string, string> | null;
+  status: "enabled" | "archived";
+  note: string;
+  first_seen: string | null;
+  is_new: boolean;
+  stored: number;
+  stored_names: string[];
+  data_end: string | null;
+  last_task: { id: string; status: TaskStatus; created_at: string } | null;
+}

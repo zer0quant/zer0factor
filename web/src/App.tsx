@@ -27,6 +27,10 @@ import type { Meta } from "./types";
 import Board from "./pages/Board";
 import FactorDetail from "./pages/FactorDetail";
 import Compare from "./pages/Compare";
+import Tasks from "./pages/Tasks";
+import Families from "./pages/Families";
+import { TaskBadge } from "./components/TaskBadge";
+import { EvaluateProvider } from "./components/EvaluateDrawer";
 
 const { Sider, Header, Content } = Layout;
 const HEADER_H = 56;
@@ -105,11 +109,16 @@ export default function App() {
   const wide = screens.lg !== false;
   const compact = screens.md === false;
 
-  const selected = location.pathname.startsWith("/compare")
+  const path = location.pathname;
+  const selected = path.startsWith("/compare")
     ? "compare"
-    : location.pathname.startsWith("/factor")
-      ? "detail"
-      : "board";
+    : path.startsWith("/families")
+      ? "families"
+      : path.startsWith("/tasks")
+        ? "tasks"
+        : path.startsWith("/factor")
+          ? "detail"
+          : "board";
   const std = meta.data?.standard;
 
   const menu = (
@@ -121,11 +130,14 @@ export default function App() {
       items={[
         { key: "board", label: <Link to={boardHref()}>因子看板</Link> },
         { key: "compare", label: <Link to="/compare">因子对比</Link> },
+        { key: "families", label: <Link to="/families">因子族</Link> },
+        { key: "tasks", label: <Link to="/tasks">任务</Link> },
       ]}
     />
   );
 
   return (
+    <EvaluateProvider>
     <Layout style={{ minHeight: "100vh" }}>
       {wide && (
         <Sider
@@ -224,6 +236,7 @@ export default function App() {
                 扫描于 {meta.data.scanned_at.replace("T", " ")}
               </Typography.Text>
             )}
+            <TaskBadge />
             {!compact && (
               <Tooltip title="键盘快捷键（?）">
                 <Button size="small" type="text" aria-label="键盘快捷键" onClick={() => setHelpOpen(true)}>
@@ -263,10 +276,14 @@ export default function App() {
             <Route path="/" element={<Board />} />
             <Route path="/factor/:name" element={<FactorDetail />} />
             <Route path="/compare" element={<Compare />} />
+            <Route path="/families" element={<Families />} />
+            <Route path="/tasks" element={<Tasks />} />
+            <Route path="/tasks/:id" element={<Tasks />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </Content>
       </Layout>
     </Layout>
+    </EvaluateProvider>
   );
 }

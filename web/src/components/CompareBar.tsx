@@ -2,11 +2,13 @@ import { Button, Popover, Space, Typography } from "antd";
 import { useNavigate } from "react-router-dom";
 import { compareHref, setBasket, toggleInBasket, useBasket } from "../compareBasket";
 import { shortName } from "../factorName";
+import { useEvaluate } from "./EvaluateDrawer";
 
 /** Floating bar showing the compare basket, with a popover listing its factors. */
 export function CompareBar() {
   const basket = useBasket();
   const navigate = useNavigate();
+  const evaluate = useEvaluate();
   if (!basket.length) return null;
   const list = (
     <Space direction="vertical" size={4} style={{ maxWidth: 360 }}>
@@ -34,6 +36,14 @@ export function CompareBar() {
         onClick={() => setBasket([])}
       >
         清空
+      </Button>
+      <Button
+        size="small"
+        ghost
+        style={{ color: "var(--zf-bar-fg)", borderColor: "var(--zf-bar-fg)" }}
+        onClick={() => evaluate.open(basket)}
+      >
+        评估
       </Button>
       <Button
         size="small"

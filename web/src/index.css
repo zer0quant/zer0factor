@@ -355,3 +355,52 @@ body {
   clip: rect(0 0 0 0);
   white-space: nowrap;
 }
+
+/* ---- tasks ---------------------------------------------------------------- */
+.zf-log {
+  margin: 0;
+  padding: 10px 12px;
+  max-height: 60vh;
+  min-height: 120px;
+  overflow: auto;
+  font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  white-space: pre-wrap;
+  word-break: break-all;
+  background: var(--zf-log-bg, rgba(0, 0, 0, 0.04));
+  border-radius: 6px;
+}
+.zf-log-short {
+  min-height: 0;
+  max-height: 200px;
+  background: transparent;
+  padding: 4px 0 0;
+}
+.zf-tasks-layout {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+}
+.zf-tasks-list {
+  width: 340px;
+  flex: none;
+}
+.zf-tasks-detail {
+  flex: 1;
+  min-width: 0;
+}
+@media (max-width: 991px) {
+  .zf-tasks-list {
+    width: 100%;
+  }
+}
+.zf-task-item {
+  cursor: pointer;
+  border-radius: 6px;
+  padding-inline: 8px !important;
+}
+.zf-task-item:hover {
+  background: rgba(127, 127, 127, 0.08);
+}
+.zf-task-item-active {
+  background: rgba(22, 119, 255, 0.1);
+}
