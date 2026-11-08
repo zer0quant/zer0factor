@@ -21,6 +21,7 @@ import type { ColumnsType } from "antd/es/table";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "react-router-dom";
 import { createTask, fetchFamilies, patchFamily } from "../api";
+import { factorHref } from "../factorName";
 import { useEvaluate } from "../components/EvaluateDrawer";
 import { ErrorState } from "../components/states";
 import { STATUS_COLOR, STATUS_LABEL, fmtTime } from "../taskStatus";
@@ -388,7 +389,7 @@ function FamilyOutputs({ family }: { family: Family }) {
         {family.outputs.map((n) =>
           stored.has(n) ? (
             <Tag key={n} color="blue" style={{ marginBottom: 4 }}>
-              <Link to={`/factor/${encodeURIComponent(n)}`}>{n}</Link>
+              <Link to={factorHref(n)}>{n}</Link>
             </Tag>
           ) : (
             <Tag key={n} style={{ marginBottom: 4, opacity: 0.6 }}>

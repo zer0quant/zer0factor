@@ -28,6 +28,7 @@ import { useTheme, type ThemeMode } from "./theme";
 import type { Meta } from "./types";
 import Board from "./pages/Board";
 import FactorDetail from "./pages/FactorDetail";
+import BaseHome from "./pages/BaseHome";
 import Compare from "./pages/Compare";
 import Tasks from "./pages/Tasks";
 import Families from "./pages/Families";
@@ -118,7 +119,7 @@ export default function App() {
       ? "families"
       : path.startsWith("/tasks")
         ? "tasks"
-        : path.startsWith("/factor")
+        : path.startsWith("/factor") || path.startsWith("/base")
           ? "detail"
           : "board";
   const std = meta.data?.standard;
@@ -276,6 +277,7 @@ export default function App() {
         <Content style={{ padding: compact ? 12 : 24, minWidth: 0 }}>
           <Routes>
             <Route path="/" element={<Board />} />
+            <Route path="/base/:base" element={<BaseHome />} />
             <Route path="/factor/:name" element={<FactorDetail />} />
             <Route path="/compare" element={<Compare />} />
             <Route path="/families" element={<Families />} />

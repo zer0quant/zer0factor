@@ -34,11 +34,22 @@ class StandardSetting:
 
 
 @dataclass(frozen=True)
+class BoardSetting:
+    """Which preprocessing is a base factor's primary version on the board."""
+
+    primary_prep: str = "z_size_industry_neu"
+    # Size-like factors cannot be size-neutralised; they use industry-only neutralisation.
+    industry_only_prep: str = "z_industry_neu"
+    industry_only_bases: tuple[str, ...] = ("log_total_market_cap", "log_circulating_market_cap")
+
+
+@dataclass(frozen=True)
 class WebConfig:
     cache_dir: Path = Path("data/web_cache")
     evaluations_dir: Path = Path("data/evaluations")
     registry_path: Path = Path("config/factors.toml")
     standard: StandardSetting = StandardSetting()
+    board: BoardSetting = BoardSetting()
     state_dir: Path = Path("data/workbench")
     heavy_slots: int = 1
     light_slots: int = 2
@@ -57,6 +68,8 @@ def _parse_web(raw: dict) -> WebConfig:
         if key in web
     }
     tasks = web.get("tasks", {})
+    board = web.get("board", {})
+    board_defaults = BoardSetting()
     return WebConfig(
         **paths,
         heavy_slots=int(tasks.get("heavy_slots", 1)),
@@ -68,6 +81,15 @@ def _parse_web(raw: dict) -> WebConfig:
             period=str(standard.get("period", defaults.period)),
             return_type=str(standard.get("return_type", defaults.return_type)),
             universe=str(standard.get("universe", defaults.universe)),
+        ),
+        board=BoardSetting(
+            primary_prep=str(board.get("primary_prep", board_defaults.primary_prep)),
+            industry_only_prep=str(
+                board.get("industry_only_prep", board_defaults.industry_only_prep)
+            ),
+            industry_only_bases=tuple(
+                str(b) for b in board.get("industry_only_bases", board_defaults.industry_only_bases)
+            ),
         ),
     )
 

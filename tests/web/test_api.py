@@ -168,3 +168,23 @@ def test_board_curves_reads_cache_only(stored, make_run, make_config):
 
 def test_board_curves_points_validated(client):
     assert client.get("/api/board/curves", params={"points": 5}).status_code == 422
+
+
+def test_bases_endpoint_lists_bases(client):
+    rows = client.get("/api/bases").json()["rows"]
+    assert [r["base"] for r in rows] == ["fa", "fb", "fc"]
+    for r in rows:
+        assert r["status"] in {"ok", "mixed", "unevaluated", "missing"}
+        assert r["status"] == "missing"  # no z_size_industry_neu_ versions stored
+
+
+def test_base_versions_endpoint(client):
+    body = client.get("/api/bases/fa").json()
+    assert body["default_prep"] == "raw"
+    assert [(v["name"], v["prep"], v["window"], v["evaluated"]) for v in body["versions"]] == [
+        ("fa", "raw", None, True)
+    ]
+
+
+def test_base_versions_unknown_404(client):
+    assert client.get("/api/bases/nope").status_code == 404

@@ -9,7 +9,6 @@
   --zf-bar-bg: #1f2937;
   --zf-bar-fg: #ffffff;
   --zf-line: #e5e7eb;
-  --zf-family: #fafafa;
 }
 
 :root[data-theme="dark"] {
@@ -21,7 +20,6 @@
   --zf-bar-bg: #262626;
   --zf-bar-fg: #f5f5f5;
   --zf-line: #303030;
-  --zf-family: #1a1a1a;
 }
 
 html,
@@ -32,49 +30,6 @@ body {
 
 .num {
   font-variant-numeric: tabular-nums;
-}
-
-/* Board: one-line factor name, ellipsis when it does not fit. */
-.zf-name-cell {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  min-width: 0;
-  white-space: nowrap;
-}
-.zf-name-cell > a {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  min-width: 0;
-}
-/* Narrow screens: show the whole name, wrapping anywhere (names differ mid-string and at the end). */
-.zf-name-cell.zf-wrap {
-  white-space: normal;
-  align-items: flex-start;
-}
-.zf-name-cell.zf-wrap > a {
-  overflow-wrap: anywhere;
-}
-.zf-name-cell .ant-tag {
-  margin-inline-end: 0;
-  flex: none;
-}
-
-.zf-tags-cell {
-  display: flex;
-  gap: 4px;
-  overflow: hidden;
-  white-space: nowrap;
-}
-.zf-tags-cell .ant-tag {
-  margin-inline-end: 0;
-}
-
-/* Horizontal scroller for wide filter controls on narrow screens. */
-.zf-hscroll {
-  max-width: 100%;
-  overflow-x: auto;
-  scrollbar-width: thin;
 }
 
 /* Factor name as segments: [preprocessing tag] base · MA<N>. */
@@ -110,66 +65,6 @@ body {
 }
 .zf-wrap .zf-chips-text {
   white-space: normal;
-}
-
-/* Board direction arrow. */
-.zf-dir {
-  font-weight: 700;
-  color: var(--zf-muted);
-}
-.zf-dir-neg {
-  color: #d46b08;
-}
-:root[data-theme="dark"] .zf-dir-neg {
-  color: #e89a3c;
-}
-
-/* Board matrix view: return type × preprocessing rows, window columns. */
-.zf-matrix-wrap {
-  overflow-x: auto;
-}
-.zf-matrix {
-  border-collapse: separate;
-  border-spacing: 2px;
-  font-size: 13px;
-}
-.zf-matrix th {
-  font-weight: 500;
-  color: var(--zf-muted);
-  padding: 6px 8px;
-  white-space: nowrap;
-  text-align: center;
-}
-.zf-matrix .zf-matrix-rowhead {
-  text-align: left;
-}
-.zf-matrix .zf-matrix-base {
-  font-weight: 600;
-  color: inherit;
-  vertical-align: middle;
-  border-inline-end: 2px solid var(--zf-line);
-}
-.zf-matrix tr.zf-matrix-groupstart > * {
-  border-top: 6px solid transparent;
-}
-.zf-matrix-cell {
-  min-width: 72px;
-  padding: 7px 8px;
-  text-align: center;
-  border-radius: 4px;
-  cursor: pointer;
-  outline-offset: -2px;
-}
-.zf-matrix-cell:hover,
-.zf-matrix-cell:focus-visible {
-  outline: 2px solid var(--zf-muted);
-}
-.zf-matrix-cell.zf-matrix-sel {
-  outline: 2px solid #1677ff;
-  font-weight: 700;
-}
-.zf-matrix-empty {
-  min-width: 72px;
 }
 
 /* Detail: headline KPI tiles + grouped metric lists. */
@@ -243,6 +138,11 @@ body {
   line-height: 1.35;
   color: inherit;
   min-width: 56px;
+}
+button.zf-sib {
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
 }
 .zf-sib:hover {
   border-color: #1677ff;
@@ -325,9 +225,6 @@ body {
 }
 .ant-table-tbody > tr.zf-row-active > td:first-child {
   box-shadow: inset 3px 0 0 #1677ff, inset 0 1px 0 #1677ff, inset 0 -1px 0 #1677ff;
-}
-.ant-table-tbody > tr.zf-row-family > td {
-  background: var(--zf-family);
 }
 .ant-table-tbody > tr {
   scroll-margin-top: 120px;

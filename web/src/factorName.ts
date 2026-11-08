@@ -118,3 +118,23 @@ export function shortName(name: string): string {
   const p = parseFactorName(name);
   return [prepLabel(p.prep), baseLabel(p.base), ...(p.window != null ? [`MA${p.window}`] : [])].join(" · ");
 }
+
+/** URL of a base factor's home page, optionally selecting a version and run / period. */
+export function baseHref(
+  base: string,
+  q: { prep?: string; win?: number | null; run?: string | null; period?: string | null } = {},
+): string {
+  const params = new URLSearchParams();
+  if (q.prep) params.set("prep", q.prep);
+  if (q.win !== undefined) params.set("win", q.win == null ? "none" : String(q.win));
+  if (q.run) params.set("run", q.run);
+  if (q.period) params.set("period", q.period);
+  const qs = params.toString();
+  return `/base/${encodeURIComponent(base)}${qs ? `?${qs}` : ""}`;
+}
+
+/** URL of one factor version: its base factor's home page with that version selected. */
+export function factorHref(name: string, q: { run?: string | null; period?: string | null } = {}): string {
+  const p = parseFactorName(name);
+  return baseHref(p.base, { prep: p.prep, win: p.window, ...q });
+}

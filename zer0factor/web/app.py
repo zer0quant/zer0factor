@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field
 from loguru import logger
 
 from zer0factor.config import Config
+from zer0factor.web.bases import base_versions, summarize_bases
 from zer0factor.web.catalog import Catalog, build_catalog
 from zer0factor.web.charts import (
     cached_series,
@@ -204,6 +205,17 @@ def create_app(
     @app.get("/api/factors")
     def factors():
         return _json({"rows": catalog().board_rows()})
+
+    @app.get("/api/bases")
+    def bases():
+        return _json({"rows": summarize_bases(catalog().board_rows(), cfg.web.board)})
+
+    @app.get("/api/bases/{base}")
+    def base(base: str):
+        body = base_versions(catalog().board_rows(), base, cfg.web.board)
+        if body is None:
+            raise HTTPException(404, f"unknown base factor: {base}")
+        return _json(body)
 
     @app.get("/api/board/curves")
     def board_curves(points: int = Query(60, ge=10, le=250)):

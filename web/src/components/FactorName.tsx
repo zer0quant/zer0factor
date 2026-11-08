@@ -1,6 +1,6 @@
 import { Tag, Tooltip, Typography } from "antd";
 import { Link } from "react-router-dom";
-import { baseLabel, parseFactorName, prepColor, prepLabel } from "../factorName";
+import { baseLabel, factorHref, parseFactorName, prepColor, prepLabel } from "../factorName";
 
 /**
  * A factor name as segments: coloured preprocessing tag, base factor, window.
@@ -29,7 +29,7 @@ export function FactorChips({
       </Tag>
       <Tooltip title={name} mouseEnterDelay={0.4}>
         {link ? (
-          <Link to={`/factor/${encodeURIComponent(name)}`} aria-label={name}>
+          <Link to={factorHref(name)} aria-label={name}>
             {body}
           </Link>
         ) : (

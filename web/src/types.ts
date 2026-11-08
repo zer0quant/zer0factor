@@ -54,6 +54,56 @@ export interface BoardRow {
   run_id: string | null;
 }
 
+export type BaseMetricKey =
+  | "ic_adj"
+  | "icir"
+  | "t_stat"
+  | "ic_win_rate"
+  | "long_ann_ret"
+  | "long_max_dd"
+  | "long_sharpe"
+  | "long_exc_ann_ret"
+  | "monotonicity"
+  | "turnover_long";
+
+export type BaseStatus = "ok" | "mixed" | "unevaluated" | "missing";
+
+export interface BaseWindow {
+  name: string;
+  window: number | null;
+  evaluated: boolean;
+  icir: Num;
+  direction: Num;
+}
+
+/** One board row: a base factor summarised by its primary version (see zer0factor/web/bases.py). */
+export interface BaseRow {
+  base: string;
+  primary_prep: string;
+  status: BaseStatus;
+  direction: Num;
+  icir_median: Num;
+  /** Board metrics: median over the primary version's scored windows (all null without a number). */
+  metrics: Record<BaseMetricKey, Num>;
+  start_date: string | null;
+  end_date: string | null;
+  run_ids: string[];
+  windows: BaseWindow[];
+  preps: { prep: string; n_versions: number; n_evaluated: number }[];
+}
+
+export interface BaseVersion extends BaseWindow {
+  prep: string;
+  run_id: string | null;
+}
+
+export interface BaseInfo {
+  base: string;
+  primary_prep: string;
+  default_prep: string;
+  versions: BaseVersion[];
+}
+
 export interface FactorInfo {
   name: string;
   meta: { category: string | null; tags: string[]; description: string };

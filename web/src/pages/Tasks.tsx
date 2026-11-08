@@ -18,6 +18,7 @@ import {
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { cancelTask, fetchTask, fetchTaskLog, fetchTasks, retryTask } from "../api";
+import { factorHref } from "../factorName";
 import { TaskProgress } from "../components/TaskBadge";
 import { ErrorState } from "../components/states";
 import { KIND_LABEL, STATUS_COLOR, STATUS_LABEL, duration, fmtTime, isActive } from "../taskStatus";
@@ -125,7 +126,7 @@ function ParamsView({ task }: { task: Task }) {
           <div style={{ maxHeight: 120, overflow: "auto" }}>
             {factors.map((f) => (
               <Tag key={f} style={{ marginBottom: 4 }}>
-                <Link to={`/factor/${encodeURIComponent(f)}`}>{f}</Link>
+                <Link to={factorHref(f)}>{f}</Link>
               </Tag>
             ))}
           </div>
@@ -209,7 +210,7 @@ function TaskDetail({ id }: { id: string }) {
                 </Button>
               )}
               {t.kind === "evaluate" && t.status === "succeeded" && firstFactor && t.run_id && (
-                <Link to={`/factor/${encodeURIComponent(firstFactor)}?run=${encodeURIComponent(t.run_id)}`}>
+                <Link to={factorHref(firstFactor, { run: t.run_id })}>
                   <Button type="primary">查看结果</Button>
                 </Link>
               )}

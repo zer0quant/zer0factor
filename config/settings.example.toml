@@ -25,6 +25,11 @@ period      = "1D"
 return_type = "open_t1"
 universe    = "univ_trade_base"
 
+[web.board]             # 看板按原始因子列出，取主版本（以下处理方式）各窗口 ICIR 的中位数
+primary_prep        = "z_size_industry_neu"
+industry_only_prep  = "z_industry_neu"   # 市值类因子做不了市值中性，主版本改用行业中性
+industry_only_bases = ["log_total_market_cap", "log_circulating_market_cap"]
+
 [web.tasks]             # 后台任务并发上限
 heavy_slots = 1         # 评估 / 构建
 light_slots = 2         # 预热缓存
