@@ -4,15 +4,17 @@ import { useQuery } from "@tanstack/react-query";
 import { fetchLatest } from "../api";
 import { fmtDate, isNum, num, pct, signColor, withSign } from "../format";
 import type { Detail, GroupRow, Num, RunSummary } from "../types";
+import { returnTypeLabel } from "../vocab";
+import { UniverseTag } from "./UniverseTag";
 
 /** Read-only evaluation parameters as compact inline tags. */
 export function ParamsSummary({ run }: { run: RunSummary }) {
   const items: [string, React.ReactNode][] = [
     ["区间", `${fmtDate(run.start_date)} → ${run.end_date ? fmtDate(run.end_date) : "最新"}`],
-    ["股票池", run.universe ?? "全部"],
+    ["股票池", <UniverseTag code={run.universe} plain />],
     ["分组", run.quantiles != null ? `${run.quantiles} 组` : "—"],
     ["持有期", run.periods.join(" / ")],
-    ["收益口径", run.return_type ?? "—"],
+    ["成交价", returnTypeLabel(run.return_type)],
     ["交易成本", run.transaction_cost_bps != null ? `单边 ${run.transaction_cost_bps} bps` : "—"],
   ];
   return (

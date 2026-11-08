@@ -232,7 +232,6 @@ export default function Board() {
   const bases = list(params.get("base"));
   const wins = list(params.get("win"));
   const dir = params.get("dir") ?? "";
-  const evaluatedOnly = params.get("ev") === "1";
   const categories = list(params.get("cat"));
   const tags = list(params.get("tag"));
   const view = params.get("view") === "matrix" ? "matrix" : "list";
@@ -263,7 +262,9 @@ export default function Board() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const rows = data ?? [];
+  // The board lists only factors that have a standard evaluation; unevaluated ones live on the
+  // family and detail pages.
+  const rows = useMemo(() => (data ?? []).filter((r) => r.evaluated), [data]);
   const allCategories = useMemo(
     () => [...new Set(rows.map((r) => r.category).filter((c): c is string => !!c))].sort(),
     [rows],
@@ -305,8 +306,7 @@ export default function Board() {
         (!wins.length || wins.includes(winKey(p.window))) &&
         (!dir || (r.evaluated && String(r.direction) === dir)) &&
         (!categories.length || (r.category && categories.includes(r.category))) &&
-        (!tags.length || tags.every((t) => r.tags.includes(t))) &&
-        (!evaluatedOnly || r.evaluated)
+        (!tags.length || tags.every((t) => r.tags.includes(t)))
       );
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -355,17 +355,15 @@ export default function Board() {
     [tableRows, expanded],
   );
 
-  const evaluated = rows.filter((r) => r.evaluated);
-  const runIds = [...new Set(evaluated.map((r) => r.run_id))];
+  const runIds = [...new Set(rows.map((r) => r.run_id))];
   const singleRun = runIds.length === 1 ? runIds[0] : null;
 
   const filtersActive =
     !!search.trim() ||
     preps.length + bases.length + wins.length + categories.length + tags.length > 0 ||
-    !!dir ||
-    evaluatedOnly;
+    !!dir;
   const resetFilters = () =>
-    patch({ q: null, prep: null, base: null, win: null, dir: null, ev: null, cat: null, tag: null });
+    patch({ q: null, prep: null, base: null, win: null, dir: null, cat: null, tag: null });
 
   // ---- prefetch on hover: only cached factors, whose detail is a cheap disk read ----
   const hoverTimer = useRef<number>();
@@ -571,7 +569,6 @@ export default function Board() {
       return (
         <div className={compact ? "zf-name-cell zf-wrap" : "zf-name-cell"}>
           <FactorChips name={name} />
-          {!r.evaluated && <Tag bordered={false}>未评估</Tag>}
           {r.evaluated && status && !status.cached && (
             <Tooltip title="该因子的详情图表尚未缓存，首次打开需从原始数据计算（约 1–2 分钟）">
               <Tag bordered={false} color="warning">
@@ -669,7 +666,7 @@ export default function Board() {
         <Space wrap size={[8, 0]}>
           因子看板
           <Typography.Text type="secondary" style={{ fontWeight: 400 }}>
-            共 {rows.length} 个因子，{evaluated.length} 个有标准评估
+            共 {rows.length} 个因子
             {singleRun && !compact && ` · 评估 run ${singleRun}`}
           </Typography.Text>
         </Space>
@@ -763,17 +760,6 @@ export default function Board() {
             onChange={(v) => patch({ tag: v.join(",") || null })}
           />
         )}
-        <Space size={6}>
-          <Switch
-            size="small"
-            id="zf-ev"
-            checked={evaluatedOnly}
-            onChange={(v) => patch({ ev: v ? "1" : null })}
-          />
-          <label htmlFor="zf-ev" style={{ cursor: "pointer" }}>
-            只看已评估
-          </label>
-        </Space>
         {filtersActive && (
           <Button size="small" type="link" onClick={resetFilters} style={{ paddingInline: 0 }}>
             清除筛选（{filtered.length} / {rows.length}）

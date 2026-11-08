@@ -140,7 +140,7 @@ export default function Compare() {
         <Alert
           type="warning"
           showIcon
-          message={`口径不一致：${data.inconsistent.join("、")} 没有标准设定的评估，使用的是其最新一次评估，数字与其他因子不可直接比较。`}
+          message={`口径不一致：${data.inconsistent.join("、")} 没有统一口径的评估，使用的是其最新一次评估，数字与其他因子不可直接比较。`}
         />
       )}
       {data && data.unevaluated.length > 0 && (

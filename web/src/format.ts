@@ -1,3 +1,4 @@
+import { universeLabel } from "./vocab";
 import type { Num } from "./types";
 
 /** CSS colour tokens (defined in index.css, switch with the theme). For DOM text only. */
@@ -35,7 +36,7 @@ export function runLabel(r: {
   periods: string[];
 }): string {
   const range = `${fmtDate(r.start_date)} → ${r.end_date ? fmtDate(r.end_date) : "最新"}`;
-  return `${r.run_id} · ${range} · ${r.universe ?? "全部"} · ${r.quantiles ?? "?"}组 · ${r.periods.join("/")}`;
+  return `${r.run_id} · ${range} · ${universeLabel(r.universe)} · ${r.quantiles ?? "?"}组 · ${r.periods.join("/")}`;
 }
 
 /** Prefix "+" for positive values, so sign is not conveyed by colour alone. */

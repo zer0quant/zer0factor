@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { periodLabel, returnTypeLabel, universeLabel } from "../vocab";
 import {
   Alert,
   Button,
@@ -180,11 +181,11 @@ function EvaluateForm({
       </Form.Item>
 
       <Form.Item name="standard" valuePropName="checked" style={{ marginBottom: 8 }}>
-        <Switch checkedChildren="标准设定" unCheckedChildren="自定义" />
+        <Switch checkedChildren="统一口径" unCheckedChildren="自定义" />
       </Form.Item>
       <Typography.Paragraph type="secondary" style={{ fontSize: 12 }}>
         {standard
-          ? `起始日、分组数、收益口径、股票池锁定为标准设定，结果会进入看板。持有期需包含 ${options.standard.period}。`
+          ? `起始日、分组数、成交价、股票池锁定为统一评估口径，结果会进入看板。持有期需包含 ${periodLabel(options.standard.period)}。`
           : "自定义设定的结果不进入看板主表，只在因子详情页的 run 列表里出现，用于稳健性对比。"}
       </Typography.Paragraph>
 
@@ -209,7 +210,7 @@ function EvaluateForm({
             validator: (_, v: number[] = []) =>
               !standard || v.map(Number).includes(stdPeriod)
                 ? Promise.resolve()
-                : Promise.reject(new Error(`标准设定需包含持有期 ${stdPeriod}`)),
+                : Promise.reject(new Error(`统一口径需包含持有期 ${stdPeriod} 日`)),
           },
         ]}
       >
@@ -227,11 +228,11 @@ function EvaluateForm({
       </Form.Item>
 
       <Space wrap size={12} style={{ width: "100%" }}>
-        <Form.Item name="return_type" label="收益口径">
+        <Form.Item name="return_type" label="成交价">
           <Select
             disabled={standard}
-            style={{ width: 130 }}
-            options={options.return_types.map((r) => ({ value: r, label: r }))}
+            style={{ width: 150 }}
+            options={options.return_types.map((r) => ({ value: r, label: returnTypeLabel(r) }))}
           />
         </Form.Item>
         <Form.Item name="universe" label="股票池">
@@ -240,7 +241,7 @@ function EvaluateForm({
             allowClear
             placeholder="全部股票"
             style={{ width: 200 }}
-            options={options.universes.map((u) => ({ value: u, label: u }))}
+            options={options.universes.map((u) => ({ value: u, label: universeLabel(u), title: u }))}
           />
         </Form.Item>
       </Space>

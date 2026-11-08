@@ -22,6 +22,8 @@ import { Link, Route, Routes, useLocation } from "react-router-dom";
 import { fetchMeta, refresh } from "./api";
 import { boardHref } from "./boardState";
 import { fmtDate } from "./format";
+import { periodLabel, returnTypeLabel } from "./vocab";
+import { UniverseTag } from "./components/UniverseTag";
 import { useTheme, type ThemeMode } from "./theme";
 import type { Meta } from "./types";
 import Board from "./pages/Board";
@@ -49,11 +51,11 @@ function Brand() {
 function StandardTags({ std }: { std: Meta["standard"] }) {
   return (
     <Space size={4} wrap>
-      <Tag>{std.universe}</Tag>
-      <Tag>{fmtDate(std.start_date)} 起</Tag>
-      <Tag>{std.quantiles} 组</Tag>
-      <Tag>持有 {std.period}</Tag>
-      <Tag>{std.return_type}</Tag>
+      <UniverseTag code={std.universe} />
+      <Tag>{fmtDate(std.start_date)} 至今</Tag>
+      <Tag>{std.quantiles} 分位</Tag>
+      <Tag>持有 {periodLabel(std.period)}</Tag>
+      <Tag>{returnTypeLabel(std.return_type)}</Tag>
     </Space>
   );
 }
@@ -208,27 +210,27 @@ export default function App() {
           <Space size={compact ? 8 : "middle"}>
             {std &&
               (screens.xl ? (
-                <Tooltip title="看板指标统一取自满足此设定、且评估到最新的 run">
-                  <Space size={4}>
-                    <Typography.Text type="secondary">标准设定</Typography.Text>
-                    <StandardTags std={std} />
-                  </Space>
-                </Tooltip>
+                <Space size={4}>
+                  <Tooltip title="看板指标统一取自满足此口径的最新一次评估">
+                    <Typography.Text type="secondary">统一评估口径</Typography.Text>
+                  </Tooltip>
+                  <StandardTags std={std} />
+                </Space>
               ) : (
                 <Popover
                   trigger="click"
-                  title="标准设定"
+                  title="统一评估口径"
                   content={
                     <Space direction="vertical" size={8} style={{ maxWidth: 260 }}>
                       <StandardTags std={std} />
                       <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                        看板指标统一取自满足此设定、且评估到最新的 run
+                        看板指标统一取自满足此口径的最新一次评估
                         {meta.data && `；扫描于 ${meta.data.scanned_at.replace("T", " ")}`}
                       </Typography.Text>
                     </Space>
                   }
                 >
-                  <Button size="small">标准设定</Button>
+                  <Button size="small">评估口径</Button>
                 </Popover>
               ))}
             {meta.data && screens.xl && (
