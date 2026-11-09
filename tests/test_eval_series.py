@@ -100,3 +100,43 @@ def test_read_returns_none_when_any_file_missing(tmp_path):
 def test_write_leaves_no_tmp_files(tmp_path):
     write_chart_series(tmp_path, build_chart_series(make_clean_factor_data(), _summary()))
     assert not list(tmp_path.glob("*.tmp-*"))
+
+
+def test_chart_series_reusing_summary_portfolio_equals_rebuilt(monkeypatch):
+    from zer0factor.eval.metrics import build_summary, calculate_daily_ic, calculate_quantile_returns
+    import zer0factor.eval.series as series_module
+
+    cfd = make_clean_factor_data()
+    daily_ic = calculate_daily_ic(cfd)
+    kwargs = dict(
+        factor_name="fa", return_type="open_t1", clean_factor_data_sample_count=len(cfd),
+        clean_factor_data_start=cfd.index.get_level_values("date").min(),
+        clean_factor_data_end=cfd.index.get_level_values("date").max(),
+        quantiles=5, daily_ic=daily_ic, quantile_returns=calculate_quantile_returns(cfd),
+        clean_factor_data=cfd, transaction_cost_bps=10.0,
+    )
+    sink: dict = {}
+    summary_with_sink = build_summary(**kwargs, portfolio_sink=sink)
+    summary_plain = build_summary(**kwargs)
+    assert_frame_equal(summary_with_sink, summary_plain)
+    assert len(sink) == len(summary_plain)
+
+    rebuilt = build_chart_series(cfd, summary_plain)
+
+    def must_not_rebuild(*args, **kwargs):
+        raise AssertionError("portfolio series must come from the summary")
+
+    monkeypatch.setattr(series_module, "build_portfolio_daily_returns", must_not_rebuild)
+    reused = build_chart_series(cfd, summary_with_sink, sink)
+    for name in rebuilt:
+        assert_frame_equal(reused[name], rebuilt[name])
+
+
+def test_chart_series_rebuilds_when_precomputed_does_not_match():
+    cfd = make_clean_factor_data()
+    summary = _summary(direction=1, periods=("1D",))
+    stale = {("1D", -1, 1, 5, 10.0): object()}  # different direction: must be ignored
+    assert_frame_equal(
+        build_chart_series(cfd, summary, stale)["portfolio_daily_returns"],
+        build_chart_series(cfd, summary)["portfolio_daily_returns"],
+    )

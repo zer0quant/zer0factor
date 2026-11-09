@@ -143,6 +143,23 @@ def build_portfolio_daily_returns(
     )
 
 
+def portfolio_key(
+    period: str,
+    direction: int,
+    long_quantile: int,
+    short_quantile: int,
+    transaction_cost_bps: float,
+) -> tuple:
+    """Identifies one build_portfolio_daily_returns computation."""
+    return (
+        str(period),
+        int(direction),
+        int(long_quantile),
+        int(short_quantile),
+        float(transaction_cost_bps or 0.0),
+    )
+
+
 def build_pyfolio_return_metrics(
     clean_factor_data: pd.DataFrame,
     *,
@@ -152,8 +169,13 @@ def build_pyfolio_return_metrics(
     short_quantile: int,
     index_returns: pd.Series | None = None,
     transaction_cost_bps: float = 0.0,
+    portfolio_sink: dict | None = None,
 ) -> dict[str, float]:
-    """Build all portfolio performance stats from Alphalens daily returns."""
+    """Build all portfolio performance stats from Alphalens daily returns.
+
+    ``portfolio_sink``, when given, receives the computed daily series under
+    ``portfolio_key(...)`` so chart series can reuse them instead of rebuilding.
+    """
     try:
         series = build_portfolio_daily_returns(
             clean_factor_data,
@@ -165,6 +187,9 @@ def build_pyfolio_return_metrics(
         )
     except Exception:
         return _empty_pyfolio_return_metrics(index_returns is not None)
+    if portfolio_sink is not None:
+        key = portfolio_key(period, direction, long_quantile, short_quantile, transaction_cost_bps)
+        portfolio_sink[key] = series
 
     period_int = _parse_period_int(period)
     long_returns, long_positions = series.long, series.long_positions

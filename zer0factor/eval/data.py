@@ -71,7 +71,14 @@ class EvaluationDataLoader:
         self, factor_names: Iterable[str], *, start_date: str
     ) -> str:
         max_dates = []
+        partition_last_date = getattr(self.storage, "last_date", None)
         for factor_name in factor_names:
+            # Partition directory names answer this without reading any data.
+            last = partition_last_date(factor_name) if callable(partition_last_date) else None
+            if last is not None and len(last) == 8 and last.isdigit():
+                if last >= start_date:
+                    max_dates.append(last)
+                continue
             factor_data = self.load_factor(
                 factor_name,
                 start_date=start_date,

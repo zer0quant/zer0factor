@@ -113,3 +113,17 @@ def test_data_loader_max_factor_trade_date_accepts_float_dates(tmp_path):
         loader.max_factor_trade_date(("factor_a",), start_date="20240101")
         == "20240220"
     )
+
+
+def test_data_loader_max_factor_trade_date_uses_partitions_without_reading(tmp_path):
+    storage = FactorStorage(tmp_path / "factors", tmp_path / "factor.duckdb")
+    for name, dates in {"a": ["20240102", "20240301"], "b": ["20240105"], "old": ["20231229"]}.items():
+        storage.write(name, pd.DataFrame({"trade_date": dates, "ts_code": ["X"] * len(dates), "value": 1.0}))
+
+    class NoRead(EvaluationDataLoader):
+        def load_factor(self, *args, **kwargs):
+            raise AssertionError("must not read factor data")
+
+    loader = NoRead(storage, FakePro())
+    assert loader.max_factor_trade_date(("a", "b"), start_date="20240101") == "20240301"
+    assert loader.max_factor_trade_date(("old",), start_date="20240101") == "20240101"

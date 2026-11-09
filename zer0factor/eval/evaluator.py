@@ -112,7 +112,9 @@ class FactorEvaluator:
             quantiles=config.quantiles,
             periods=config.periods,
             max_loss=config.max_loss,
+            clean_factor_data=clean_factor_data,
         )
+        portfolio_series: dict = {}
         summary = self.metric_calculator.build_factor_summary(
             factor_name=factor_name,
             return_type=config.return_type,
@@ -126,6 +128,7 @@ class FactorEvaluator:
             index_returns=index_returns,
             transaction_cost_bps=config.transaction_cost_bps,
             period_sample_counts=period_sample_counts,
+            portfolio_sink=portfolio_series,
         )
 
         result = FactorEvaluationResult(
@@ -139,7 +142,8 @@ class FactorEvaluator:
         self.artifact_store.write_factor_artifacts(result)
         try:
             write_chart_series(
-                result.output_dir, build_chart_series(clean_factor_data, summary)
+                result.output_dir,
+                build_chart_series(clean_factor_data, summary, portfolio_series),
             )
         except Exception as exc:  # chart series must never break an evaluation
             self._log(f"evaluation_chart_series_failed factor={factor_name} error={exc!r}")
