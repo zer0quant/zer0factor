@@ -169,7 +169,17 @@ uv run python main.py build-factors --family rolling_return --incremental
 
 - `--incremental` 从各输出中截止日最早的那个开始续算，默认重算已有的最后 1 个日期（`--rebuild-tail N`）。任何输出从未构建过时，退回全量构建。
 - 直接读行情的因子族（`uses_data_provider = True`）按 `FactorFamily.lookback` 往前多读若干交易日；没有声明时重读全部历史，结果正确但较慢。使用 qfq 价格的族不支持增量。
-- 增量评估尚未实现，见 `docs/superpowers/specs/2026-11-09-incremental-update-design.md`。
+
+增量评估：
+
+```bash
+uv run python main.py evaluate-factors <因子...> --periods 1 --universe univ_trade_base --incremental --workers 8
+```
+
+- `--incremental` 以 `--output-dir` 下最新的同口径 run 为底（起始日、持有期、分组数、收益口径、股票池、max_loss 必须一致）；`--base-run <run_id>` 手动指定底 run。找不到底 run 时退回全量。
+- 只重算底 run 的最后几个交易日和新日期，再用全部明细重算汇总指标；新 run 的 `metadata.json` 标 `"mode": "incremental"` 和 `base_run_id`，仍是标准口径的 run。只支持单一持有期。
+- 逐日明细 `clean_factor_data.parquet` 是按年拆分的目录，`pd.read_parquet` 照常读取；没变的年份硬链接到底 run，每次只多占当年的数据量。
+- 与全量的差别：alphalens 按每只股票全段历史剔除极端收益（`filter_zscore`），全量重跑时历史行会随新数据小幅变化，增量保持底 run 的历史不变。实测单因子汇总指标相对差异 < 0.02%。按设计每月跑一次全量对账。
 
 ## 标准因子长什么样
 

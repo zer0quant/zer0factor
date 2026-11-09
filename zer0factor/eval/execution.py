@@ -59,24 +59,25 @@ class SerialEvaluationExecutor:
             return None
 
         config = run.config
+        start_date = run.data_start_date
         price_end_date = config.end_date or self.data_loader.max_factor_trade_date(
             config.factor_names,
-            start_date=config.start_date,
+            start_date=start_date,
         )
         _log(
             self.log_info,
             "evaluation_price_load_started "
-            f"start_date={config.start_date} end_date={price_end_date}",
+            f"start_date={start_date} end_date={price_end_date}",
         )
         price_data = self.data_loader.load_prices(
-            start_date=config.start_date,
+            start_date=start_date,
             end_date=price_end_date,
             periods=config.periods,
         )
         _log(self.log_info, f"evaluation_price_load_finished rows={len(price_data)}")
         universe_panel = self.data_loader.load_universe(
             universe_name=config.universe,
-            start_date=config.start_date,
+            start_date=start_date,
             end_date=config.end_date,
         )
         return EvaluationSharedData(
@@ -137,24 +138,25 @@ class ProcessPoolEvaluationExecutor:
 
     def _load_shared_data(self, run: EvaluationRun) -> EvaluationSharedData:
         config = run.config
+        start_date = run.data_start_date
         price_end_date = config.end_date or self.data_loader.max_factor_trade_date(
             config.factor_names,
-            start_date=config.start_date,
+            start_date=start_date,
         )
         _log(
             self.log_info,
             "evaluation_price_load_started "
-            f"start_date={config.start_date} end_date={price_end_date}",
+            f"start_date={start_date} end_date={price_end_date}",
         )
         price_data = self.data_loader.load_prices(
-            start_date=config.start_date,
+            start_date=start_date,
             end_date=price_end_date,
             periods=config.periods,
         )
         _log(self.log_info, f"evaluation_price_load_finished rows={len(price_data)}")
         universe_panel = self.data_loader.load_universe(
             universe_name=config.universe,
-            start_date=config.start_date,
+            start_date=start_date,
             end_date=config.end_date,
         )
         return EvaluationSharedData(

@@ -326,3 +326,31 @@ compute-market-cap ┼─> build-factors raw ─> build-factors preprocess
 - 第 2 步的 `FactorStorage.last_date()` 已实现；`FactorSpec.lookback` 没有加，回看期在族（`FactorFamily.lookback`）和内置因子组上声明就够了。
 - `docs/factor-contract.md` 需要补充：直接读行情的族要声明 `lookback`，递归指标保持 `None`。这一条留给 zer0alpha 给各族声明 lookback 时一起做。
 
+### 2026-11-10：第 5、6 步完成（评估提速 + 增量评估）
+
+**评估提速**（b7696e2）：单因子 z_size_industry_neu_daily_return_ma20，从 2016 年评到 2026 年，**334 秒 → 136 秒**。不含开头加载行情和股票池的约 45 秒，这部分整个 run 只做一次。全部 7 个产出文件与旧代码逐项比对，完全一致。
+
+- 股票池过滤改为按索引批量查找（原逐行 Python 循环约 136 秒）。
+- 整数日期走快速解析；`max_factor_trade_date` 改为看分区目录名。
+- 单一持有期的样本数直接用已有的 clean 数据计数。
+- 图表序列直接复用汇总指标已经算好的组合日收益，原来同样的组合收益要算两遍。
+- 剩下的大头是 alphalens `create_pyfolio_input`（`factor_weights` 按日 groupby apply），汇总阶段 4 次调用约 90 秒。这是库内实现，暂不处理，列为后续优化。
+
+**增量评估**（`zer0factor/eval/incremental.py`、`evaluator.py`、`workflow.py`）：
+
+- `evaluate-factors --incremental`：自动找 output-dir 下最新的同口径 run 做底；`--base-run <id>` 手动指定。
+- 底 run 的设定不一致、或者是多持有期的配置时报错。单一持有期的限制是因为多持有期的逐期样本数无法从底 run 还原。
+- 每个因子的流程：
+  1. 读底 run 的 clean 数据，重算它最后 `horizon = max(period) + (open_t1 ? 1 : 0)` 个交易日，以及之后的新日期；
+  2. 新数据块的 `max_loss` 放宽为 1.0：短块末尾必然有算不出前向收益的日期，比例没有意义，底 run 已经通过了全样本检查；
+  3. 和底 run 的历史拼接后，所有汇总指标用原有代码重算。
+- 底 run 里没有的因子自动走全量，并单独加载完整的行情和股票池。
+- 共享的行情和股票池只从底 run summary 的最早 end_date 往前约 `2*horizon+20` 天开始读，耗时约 3 秒，原来约 45 秒。
+- `clean_factor_data.parquet` 改为按年拆分的目录（`2016.parquet` …），所有 run 都用这种布局。`pd.read_parquet` 读出的结果与单文件逐位一致，web 侧不用改（决定 3 不需要跨会话协调）。增量 run 对拆分起点之前的年份做硬链接。
+- 真实数据验证：先全量评到 20260930 做底，再增量补到 20261106，与全量评到 20261106 比较：
+  - 新数据块 0929–1106 与全量**逐行一致**；
+  - 历史部分与底 run 一致；与"全量评到 1106"相比有 13 行不同，与"全量评到 0930"相比的差异也正是这 13 行，这就是 `filter_zscore` 的漂移；
+  - 汇总指标最大相对差 0.011%（IC Mean -0.0379893 / -0.0379895）；
+  - 增量单因子约 100 秒，全量约 136 秒，再加上共享数据的 45 秒。
+- **实测结论**：提速以后，增量相比全量省得不多。剩下的时间主要花在汇总指标上（alphalens 组合构造），每次都要全量重算。要再明显提速，需要优化 alphalens 组合收益部分的实现，可以作为下一项。
+
