@@ -40,10 +40,20 @@ const DARK: Palette = {
 interface ThemeState {
   mode: ThemeMode;
   setMode: (m: ThemeMode) => void;
+  /** Whether the dark palette is in effect (explicitly, or by following the system). */
+  dark: boolean;
+  /** Flip light/dark; landing on the system's own scheme goes back to following the system. */
+  toggle: () => void;
   palette: Palette;
 }
 
-const ThemeContext = createContext<ThemeState>({ mode: "system", setMode: () => {}, palette: LIGHT });
+const ThemeContext = createContext<ThemeState>({
+  mode: "system",
+  setMode: () => {},
+  dark: false,
+  toggle: () => {},
+  palette: LIGHT,
+});
 
 function readStored(): ThemeMode {
   try {
@@ -87,7 +97,14 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const value = useMemo(() => ({ mode, setMode, palette: dark ? DARK : LIGHT }), [mode, dark]);
+  const toggle = () => {
+    const next = !dark;
+    setMode(next === sysDark ? "system" : next ? "dark" : "light");
+  };
+
+  // setMode/toggle close over state only through `dark`/`sysDark`, which are dependencies.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const value = useMemo(() => ({ mode, setMode, dark, toggle, palette: dark ? DARK : LIGHT }), [mode, dark, sysDark]);
 
   return (
     <ThemeContext.Provider value={value}>
