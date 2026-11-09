@@ -95,6 +95,18 @@ export interface BaseRow {
 export interface BaseVersion extends BaseWindow {
   prep: string;
   run_id: string | null;
+  /** Latest standard evaluation's board metrics (all null when unevaluated). */
+  metrics: Record<BaseMetricKey, Num>;
+}
+
+export type CurveKind = "long_excess" | "long" | "ls";
+
+/** Overlay curves of several versions of one base factor (cache only). */
+export interface BaseCurves {
+  kind: CurveKind;
+  dates: string[];
+  series: Record<string, Num[]>;
+  missing: string[];
 }
 
 export interface BaseInfo {

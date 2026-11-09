@@ -9,6 +9,7 @@
   --zf-bar-bg: #1f2937;
   --zf-bar-fg: #ffffff;
   --zf-line: #e5e7eb;
+  --zf-card: #ffffff;
 }
 
 :root[data-theme="dark"] {
@@ -20,6 +21,7 @@
   --zf-bar-bg: #262626;
   --zf-bar-fg: #f5f5f5;
   --zf-line: #303030;
+  --zf-card: #141414;
 }
 
 html,
@@ -122,40 +124,6 @@ body {
 }
 
 /* Detail: sibling navigation chips. */
-.zf-sibs {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-}
-.zf-sib {
-  display: inline-flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 2px 10px;
-  border: 1px solid var(--zf-line);
-  border-radius: 6px;
-  line-height: 1.35;
-  color: inherit;
-  min-width: 56px;
-}
-button.zf-sib {
-  background: transparent;
-  font: inherit;
-  cursor: pointer;
-}
-.zf-sib:hover {
-  border-color: #1677ff;
-}
-.zf-sib.zf-sib-cur {
-  border-color: #1677ff;
-  background: rgba(22, 119, 255, 0.08);
-  font-weight: 600;
-}
-.zf-sib small {
-  color: var(--zf-muted);
-  font-size: 11px;
-}
 
 .zf-compare-bar {
   position: fixed;
@@ -208,16 +176,7 @@ button.zf-sib {
   margin-inline-end: 0;
 }
 @media (max-width: 767px) {
-  .zf-sibs {
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    scrollbar-width: thin;
-    padding-bottom: 2px;
-  }
-  .zf-sib {
-    flex: none;
-  }
-}
+    }
 
 /* Board: keyboard-active row, family rows, scroll margin under the sticky header. */
 .ant-table-tbody > tr.zf-row-active > td {
@@ -300,4 +259,90 @@ button.zf-sib {
 }
 .zf-task-item-active {
   background: rgba(22, 119, 255, 0.1);
+}
+
+/* Version matrix on the base factor home page (no colour scale on purpose). */
+.zf-vm-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin: 8px 0;
+}
+.zf-vm-wrap {
+  overflow-x: auto;
+  padding-bottom: 8px;
+}
+.zf-vm {
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+  font-size: 13px;
+}
+.zf-vm th {
+  font-weight: 500;
+  color: var(--zf-muted);
+  padding: 4px 10px;
+  white-space: nowrap;
+  text-align: center;
+}
+.zf-vm th.zf-vm-prep {
+  text-align: left;
+  color: inherit;
+  position: sticky;
+  left: 0;
+  background: var(--zf-card);
+  z-index: 1;
+}
+.zf-vm tr.zf-vm-primary th.zf-vm-prep {
+  font-weight: 600;
+}
+.zf-vm td {
+  border: 1px solid var(--zf-line);
+  text-align: center;
+  padding: 0;
+  min-width: 68px;
+}
+.zf-vm td button {
+  width: 100%;
+  padding: 5px 10px;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+.zf-vm td button:hover {
+  background: rgba(22, 119, 255, 0.06);
+}
+.zf-vm td.zf-vm-cur {
+  outline: 2px solid #1677ff;
+  outline-offset: -2px;
+  font-weight: 600;
+}
+.zf-vm td.zf-vm-none,
+.zf-vm .zf-vm-muted {
+  color: var(--zf-muted);
+}
+.zf-vm td.zf-vm-none {
+  padding: 5px 10px;
+}
+.zf-vm .zf-vm-median {
+  padding: 5px 10px;
+  font-weight: 600;
+  border-left-width: 2px;
+}
+.zf-vm th.zf-vm-median {
+  border: 0;
+}
+.zf-kpis.zf-kpis-5 {
+  grid-template-columns: repeat(auto-fit, minmax(min(150px, 100%), 1fr));
+}
+.zf-vm tr.zf-vm-primary > * {
+  background: rgba(22, 119, 255, 0.05);
+}
+.zf-vm tr.zf-vm-primary th.zf-vm-prep {
+  background: linear-gradient(rgba(22, 119, 255, 0.05), rgba(22, 119, 255, 0.05)), var(--zf-card);
+}
+.zf-vm tr.zf-vm-attr-first > * {
+  border-top: 2px solid var(--zf-line);
 }

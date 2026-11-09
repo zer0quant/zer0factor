@@ -1,5 +1,5 @@
 import { useEffect, useMemo } from "react";
-import { Button, Card, Skeleton, Space, Tabs, Tag, Tooltip, Typography } from "antd";
+import { Button, Card, Skeleton, Space, Tag, Tooltip, Typography } from "antd";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { fetchBase, fetchBases } from "../api";
@@ -8,8 +8,10 @@ import { CompareBar } from "../components/CompareBar";
 import { DirectionTag, STATUS_LABEL } from "../components/DirectionTag";
 import { useEvaluate } from "../components/EvaluateDrawer";
 import { ErrorState } from "../components/states";
+import { VersionCurves } from "../components/VersionCurves";
 import { VersionDetail } from "../components/VersionDetail";
-import { baseLabel, comparePrep, prepLabel, windowLabel } from "../factorName";
+import { VersionMatrix, matrixRows, matrixWindows, useAttrOpen, versionAxes } from "../components/VersionMatrix";
+import { baseLabel, prepLabel } from "../factorName";
 import { isNum, num } from "../format";
 import { useHotkeys } from "../hotkeys";
 import type { BaseVersion } from "../types";
@@ -23,33 +25,43 @@ function defaultVersion(versions: BaseVersion[]): BaseVersion | undefined {
 
 /**
  * A base factor's home page: preprocessing tabs × window buttons select one version, whose
- * evaluation is shown below. URL: /base/:base?prep=&win=&run=&period=
+ * evaluation is shown below. URL: /base/:base?prep=&win=&period= (always the latest standard run)
  */
 export default function BaseHome() {
   const base = useParams().base ?? "";
   const [params, setParams] = useSearchParams();
   const navigate = useNavigate();
   const evaluate = useEvaluate();
-  const info = useQuery({ queryKey: ["base", base], queryFn: () => fetchBase(base), retry: false });
+  const info = useQuery({
+    queryKey: ["base", base],
+    queryFn: () => fetchBase(base),
+    retry: false,
+  });
   const bases = useQuery({ queryKey: ["bases"], queryFn: fetchBases });
   const summary = bases.data?.find((b) => b.base === base);
 
   const versions = info.data?.versions ?? [];
-  const preps = useMemo(
-    () => [...new Set(versions.map((v) => v.prep))].sort(comparePrep),
-    [versions],
-  );
+  const { preps } = useMemo(() => versionAxes(versions), [versions]);
   const wantedPrep = params.get("prep");
   const prep = wantedPrep && preps.includes(wantedPrep) ? wantedPrep : info.data?.default_prep;
   const windows = versions.filter((v) => v.prep === prep);
+  const primaryPrep = info.data?.primary_prep ?? "";
+  const [attrOpen] = useAttrOpen();
+  // Preps on screen, in matrix order (j/k and the overlay curves use only these).
+  const visiblePreps = matrixRows(preps, primaryPrep, attrOpen, prep)
+    .rows.map((r) => r.prep)
+    .filter((p) => preps.includes(p));
   const wantedWin = params.get("win");
   const current = windows.find((v) => winParam(v.window) === wantedWin) ?? defaultVersion(windows);
+  const visibleWindows = matrixWindows(versions, visiblePreps, current);
 
   // Write the resolved selection back, so the URL always names the version on screen.
   useEffect(() => {
     if (!current || !prep) return;
-    if (params.get("prep") === prep && params.get("win") === winParam(current.window)) return;
+    const stale = params.has("run"); // old links carried a run; only the latest standard one is shown
+    if (!stale && params.get("prep") === prep && params.get("win") === winParam(current.window)) return;
     const next = new URLSearchParams(params);
+    next.delete("run");
     next.set("prep", prep);
     next.set("win", winParam(current.window));
     setParams(next, { replace: true });
@@ -60,7 +72,6 @@ export default function BaseHome() {
     next.set("prep", nextPrep);
     if (win === undefined) next.delete("win");
     else next.set("win", winParam(win));
-    next.delete("run"); // another version has its own runs; the holding period carries over
     setParams(next);
   };
   const hop = (delta: number) => {
@@ -68,7 +79,21 @@ export default function BaseHome() {
     const next = windows[i + delta];
     if (i >= 0 && next && prep) select(prep, next.window);
   };
-  useHotkeys({ h: () => hop(-1), l: () => hop(1), b: () => navigate(boardHref()) });
+  // Next prep that exists; keep the window when that prep has it, else its default window.
+  const hopPrep = (delta: number) => {
+    const i = prep ? visiblePreps.indexOf(prep) : -1;
+    const nextPrep = visiblePreps[i + delta];
+    if (i < 0 || !nextPrep || !current) return;
+    const same = versions.some((v) => v.prep === nextPrep && v.window === current.window);
+    select(nextPrep, same ? current.window : undefined);
+  };
+  useHotkeys({
+    h: () => hop(-1),
+    l: () => hop(1),
+    j: () => hopPrep(1),
+    k: () => hopPrep(-1),
+    b: () => navigate(boardHref()),
+  });
 
   if (info.error)
     return (
@@ -84,7 +109,11 @@ export default function BaseHome() {
       </Space>
     );
 
-  const unevaluated = windows.filter((v) => !v.evaluated).map((v) => v.name);
+  // Primary version only; windows without a number count as unevaluated too (evaluated but
+  // ICIR is empty).
+  const unevaluated = versions
+    .filter((v) => v.prep === primaryPrep && (!v.evaluated || !isNum(v.icir)))
+    .map((v) => v.name);
   const label = baseLabel(base);
 
   return (
@@ -112,70 +141,34 @@ export default function BaseHome() {
                 </Typography.Text>
               </Tooltip>
             )}
+            {unevaluated.length > 0 && !(unevaluated.length === 1 && unevaluated[0] === current?.name) && (
+              <Button size="small" style={{ marginInlineStart: 8 }} onClick={() => evaluate.open(unevaluated, {})}>
+                评估主版本全部未评估窗口（{unevaluated.length}）
+              </Button>
+            )}
           </Space>
           {info.isLoading ? (
             <Skeleton active paragraph={{ rows: 2 }} />
           ) : (
-            <>
-              <Tabs
-                size="small"
-                activeKey={prep}
-                onChange={(k) => select(k, undefined)}
-                items={preps.map((p) => ({
-                  key: p,
-                  label: (
-                    <span>
-                      {p === "z_neu" ? "中性化（旧）" : prepLabel(p)}
-                      {p === info.data?.primary_prep && (
-                        <Tag bordered={false} color="blue" style={{ marginInlineStart: 6, marginInlineEnd: 0 }}>
-                          主版本
-                        </Tag>
-                      )}
-                    </span>
-                  ),
-                }))}
-                style={{ marginBottom: 0 }}
-              />
-              <div className="zf-sibs" style={{ paddingBottom: 8 }}>
-                <Typography.Text type="secondary" style={{ flex: "none" }}>
-                  周期
-                </Typography.Text>
-                {windows.map((v) => {
-                  const cur = v.name === current?.name;
-                  return (
-                    <button
-                      type="button"
-                      key={v.name}
-                      className={`zf-sib${cur ? " zf-sib-cur" : ""}`}
-                      title={v.name}
-                      aria-current={cur ? "page" : undefined}
-                      onClick={() => prep && select(prep, v.window)}
-                    >
-                      <span>{windowLabel(v.window)}</span>
-                      <small className="num">
-                        {v.evaluated && isNum(v.icir) ? `ICIR ${num(v.icir, 2)}` : "未评估"}
-                      </small>
-                    </button>
-                  );
-                })}
-              </div>
-            </>
+            <VersionMatrix
+              versions={versions}
+              primaryPrep={primaryPrep}
+              current={current}
+              onSelect={(v) => select(v.prep, v.window)}
+            />
           )}
         </Space>
       </Card>
-      {current && (
-        <VersionDetail
-          key={current.name}
-          name={current.name}
-          extra={
-            unevaluated.length > 1 && (
-              <Button size="small" onClick={() => evaluate.open(unevaluated, {})}>
-                评估全部未评估窗口（{unevaluated.length}）
-              </Button>
-            )
-          }
+      {current && versions.some((v) => v.evaluated) && (
+        <VersionCurves
+          base={base}
+          current={current}
+          versions={versions}
+          preps={visiblePreps}
+          windows={visibleWindows}
         />
       )}
+      {current && <VersionDetail key={current.name} name={current.name} />}
       <CompareBar />
     </Space>
   );

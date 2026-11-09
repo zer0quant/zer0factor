@@ -3,11 +3,19 @@ import ReactECharts from "echarts-for-react";
 import type { EChartsOption } from "echarts";
 import { Empty, Grid, Segmented, Space, Typography } from "antd";
 import { usePalette, type Palette } from "../theme";
-import type { IcBlock, Num } from "../types";
+import type { GroupRow, IcBlock, Num } from "../types";
 
 const GROUP_COLORS = [
-  "#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6",
-  "#06b6d4", "#ec4899", "#84cc16", "#f97316", "#6366f1",
+  "#3b82f6",
+  "#10b981",
+  "#f59e0b",
+  "#ef4444",
+  "#8b5cf6",
+  "#06b6d4",
+  "#ec4899",
+  "#84cc16",
+  "#f97316",
+  "#6366f1",
 ];
 /**
  * Ordered palette for quantile groups (plasma ramp): group 1 → N reads as a
@@ -15,12 +23,28 @@ const GROUP_COLORS = [
  * the darkest end so lines stay visible on a dark background.
  */
 const GROUP_RAMP_LIGHT = [
-  "#0d0887", "#41049d", "#6a00a8", "#8f0da4", "#b12a90",
-  "#cc4778", "#e16462", "#f1834b", "#fca636", "#e3a10b",
+  "#0d0887",
+  "#41049d",
+  "#6a00a8",
+  "#8f0da4",
+  "#b12a90",
+  "#cc4778",
+  "#e16462",
+  "#f1834b",
+  "#fca636",
+  "#e3a10b",
 ];
 const GROUP_RAMP_DARK = [
-  "#7b6cf6", "#9a5cf0", "#b14fd8", "#c44bb8", "#d4549a",
-  "#e16462", "#ec7a52", "#f59342", "#fbae34", "#f9d23c",
+  "#7b6cf6",
+  "#9a5cf0",
+  "#b14fd8",
+  "#c44bb8",
+  "#d4549a",
+  "#e16462",
+  "#ec7a52",
+  "#f59342",
+  "#fbae34",
+  "#f9d23c",
 ];
 export function groupColors(n: number, dark: boolean): string[] {
   const ramp = dark ? GROUP_RAMP_DARK : GROUP_RAMP_LIGHT;
@@ -70,19 +94,8 @@ function Chart({ option, height = 300 }: { option: EChartsOption; height?: numbe
 
 const barColor = (pal: Palette) => (v: Num) => ((v ?? 0) >= 0 ? pal.up : pal.down);
 
-export function CumulativeChart({
-  dates,
-  groups,
-  long,
-  short,
-  ls,
-}: {
-  dates: string[];
-  groups: Record<string, Num[]>;
-  long?: Num[];
-  short?: Num[];
-  ls?: Num[];
-}) {
+/** Gross equal-weight cumulative return of each quantile group (net long/short lines live elsewhere). */
+export function CumulativeChart({ dates, groups }: { dates: string[]; groups: Record<string, Num[]> }) {
   const pal = usePalette();
   const [scale, setScale] = useState<"linear" | "log">("linear");
   const log = scale === "log";
@@ -90,30 +103,14 @@ export function CumulativeChart({
   const tf = (d: Num[]) => (log ? d.map((v) => (typeof v === "number" && v > -1 ? 1 + v : null)) : d);
   const keys = Object.keys(groups).sort((a, b) => +a - +b);
   const ramp = groupColors(keys.length, pal.dark);
-  const series = [
-    ...keys.map((k, i) => ({
-      name: `组${k}`,
-      type: "line" as const,
-      data: tf(groups[k]),
-      showSymbol: false,
-      lineStyle: { width: 1.2 },
-      color: ramp[i],
-    })),
-    ...([
-      ["多空", ls, pal.ink],
-      ["多头", long, pal.up],
-      ["空头", short, pal.down],
-    ] as const)
-      .filter(([, d]) => d)
-      .map(([name, data, color]) => ({
-        name,
-        type: "line" as const,
-        data: tf(data as Num[]),
-        showSymbol: false,
-        color,
-        lineStyle: { width: 2.2, type: name === "多空" ? ("solid" as const) : ("dashed" as const) },
-      })),
-  ];
+  const series = keys.map((k, i) => ({
+    name: `组${k}`,
+    type: "line" as const,
+    data: tf(groups[k]),
+    showSymbol: false,
+    lineStyle: { width: 1.5 },
+    color: ramp[i],
+  }));
   const toRet = (v: unknown) => (typeof v === "number" && log ? v - 1 : v);
   return (
     <>
@@ -128,14 +125,14 @@ export function CumulativeChart({
           ]}
         />
         <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-          分组颜色由深到浅对应组1→组{keys.length}；空头默认隐藏，点击图例可显示
+          分组颜色由深到浅对应组1→组{keys.length}
         </Typography.Text>
       </Space>
       <Chart
         height={380}
         option={{
           tooltip: { trigger: "axis", valueFormatter: (v) => pctTip(toRet(v)) },
-          legend: { type: "scroll", top: 0, selected: { 空头: false } },
+          legend: { type: "scroll", top: 0 },
           grid: { left: 56, right: 24, top: 40, bottom: 56 },
           xAxis: { type: "category", data: dates, boundaryGap: false },
           yAxis: log
@@ -150,6 +147,86 @@ export function CumulativeChart({
         }}
       />
     </>
+  );
+}
+
+/** Several cumulative-return lines on one chart; `bold` names the highlighted one. */
+export function OverlayChart({
+  dates,
+  lines,
+  bold,
+  height = 300,
+}: {
+  dates: string[];
+  lines: { key: string; label: string; data: Num[] }[];
+  bold?: string;
+  height?: number;
+}) {
+  const pal = usePalette();
+  return (
+    <Chart
+      height={height}
+      option={{
+        tooltip: { trigger: "axis", valueFormatter: pctTip },
+        legend: { type: "scroll", top: 0 },
+        grid: { left: 56, right: 24, top: 36, bottom: 56 },
+        xAxis: { type: "category", data: dates, boundaryGap: false },
+        yAxis: { type: "value", scale: true, ...pctAxis },
+        dataZoom: [{ type: "inside" }, { type: "slider", height: 18, bottom: 8 }],
+        color: pal.dark ? GROUP_RAMP_DARK.filter((_, i) => i % 2 === 0).concat(GROUP_COLORS) : GROUP_COLORS,
+        series: lines.map((l) => ({
+          name: l.label,
+          type: "line" as const,
+          data: l.data,
+          showSymbol: false,
+          lineStyle: { width: l.key === bold ? 3 : 1.3 },
+          z: l.key === bold ? 3 : 2,
+        })),
+      }}
+    />
+  );
+}
+
+/** Per-group annualised return bars (excluding the long-short row): is the factor monotonic? */
+export function GroupBars({
+  rows,
+  field,
+  height = 330,
+}: {
+  rows: GroupRow[];
+  field: "exc_ann_ret" | "ann_ret";
+  height?: number;
+}) {
+  const pal = usePalette();
+  const groups = rows.filter((r) => r.group !== "多空");
+  if (!groups.length) return <Empty description="无分组收益数据" />;
+  return (
+    <Chart
+      height={height}
+      option={{
+        tooltip: { trigger: "axis", valueFormatter: pctTip },
+        grid: { left: 52, right: 16, top: 28, bottom: 30 },
+        xAxis: { type: "category", data: groups.map((r) => `组${r.group}`) },
+        yAxis: { type: "value", ...pctAxis },
+        series: [
+          {
+            name: field === "exc_ann_ret" ? "超额年化" : "年化收益",
+            type: "bar",
+            data: groups.map((r) => ({
+              value: r[field],
+              itemStyle: { color: barColor(pal)(r[field]) },
+              label: { position: (r[field] ?? 0) >= 0 ? ("top" as const) : ("bottom" as const) },
+            })),
+            label: {
+              show: true,
+              fontSize: 10,
+              formatter: (p: { value: unknown }) =>
+                typeof p.value === "number" ? `${(p.value * 100).toFixed(1)}%` : "",
+            },
+          },
+        ],
+      }}
+    />
   );
 }
 
@@ -181,65 +258,6 @@ export function IcSeriesChart({ block, label }: { block: IcBlock; label: string 
             data: s.cumulative,
             showSymbol: false,
             color: pal.dark ? "#60a5fa" : "#2563eb",
-          },
-        ],
-      }}
-    />
-  );
-}
-
-export function IcHistChart({ block }: { block: IcBlock }) {
-  const h = block.hist;
-  if (!h || !h.density.length) return <Empty description="无 IC 数据" />;
-  const centers = h.edges.slice(0, -1).map((e, i) => ((e + h.edges[i + 1]) / 2).toFixed(3));
-  return (
-    <Chart
-      option={{
-        tooltip: { trigger: "axis", valueFormatter: numTip },
-        legend: { top: 0, data: ["密度", "正态拟合"] },
-        grid: { left: 48, right: 16, top: 36, bottom: 30 },
-        xAxis: { type: "category", data: centers },
-        yAxis: { type: "value" },
-        series: [
-          { name: "密度", type: "bar", data: h.density, color: "#60a5fa", barCategoryGap: "5%" },
-          { name: "正态拟合", type: "line", data: h.normal, showSymbol: false, smooth: true, color: "#10b981" },
-        ],
-      }}
-    />
-  );
-}
-
-export function AcfChart({ block }: { block: IcBlock }) {
-  const pal = usePalette();
-  const a = block.acf;
-  if (!a || !a.acf.length) return <Empty description="无 IC 数据" />;
-  const lags = a.acf.map((_, i) => String(i));
-  const ci = a.ci ?? 0;
-  return (
-    <Chart
-      option={{
-        tooltip: { trigger: "axis", valueFormatter: numTip },
-        legend: { top: 0, data: ["自相关系数", "95% 置信区间"] },
-        grid: { left: 48, right: 16, top: 36, bottom: 30 },
-        xAxis: { type: "category", data: lags, name: "滞后" },
-        yAxis: { type: "value", min: -1, max: 1 },
-        series: [
-          { name: "自相关系数", type: "line", data: a.acf, color: "#3b82f6" },
-          {
-            name: "95% 置信区间",
-            type: "line",
-            data: lags.map(() => ci),
-            showSymbol: false,
-            lineStyle: { type: "dashed" },
-            color: pal.muted,
-          },
-          {
-            name: "95% 置信区间",
-            type: "line",
-            data: lags.map(() => -ci),
-            showSymbol: false,
-            lineStyle: { type: "dashed" },
-            color: pal.muted,
           },
         ],
       }}

@@ -44,7 +44,7 @@ const METRIC_COLS: {
     title: "多头超额",
     fmt: (v) => pct(v),
     signed: true,
-    tip: "多头相对全市场等权的年化超额",
+    tip: "多头相对全市场等权的年化超额（扣费后）",
   },
   { key: "monotonicity", title: "单调性", fmt: (v) => num(v, 2) },
   { key: "turnover_long", title: "多头换手", fmt: (v) => pct(v, 1), tip: "多头组日均换手" },

@@ -49,7 +49,7 @@ export function TaskBadge() {
     client.invalidateQueries({ queryKey: ["tasks"] });
     client.invalidateQueries({ queryKey: ["families"] });
     if (finished.some((t) => REFRESHING.has(t.kind))) {
-      for (const key of ["meta", "factors", "bases", "base", "factor", "detail"]) {
+      for (const key of ["meta", "factors", "bases", "base", "baseCurves", "factor", "detail"]) {
         client.invalidateQueries({ queryKey: [key] });
       }
     }

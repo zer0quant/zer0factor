@@ -1,7 +1,9 @@
 import type {
+  BaseCurves,
   BaseInfo,
   BaseRow,
   BoardRow,
+  CurveKind,
   Compare,
   Correlation,
   Detail,
@@ -34,19 +36,26 @@ const enc = encodeURIComponent;
 
 export const fetchMeta = () => request<Meta>("/api/meta");
 export const refresh = () => request<Meta>("/api/refresh", { method: "POST" });
-export const fetchFactors = () =>
-  request<{ rows: BoardRow[] }>("/api/factors").then((r) => r.rows);
+export const fetchFactors = () => request<{ rows: BoardRow[] }>("/api/factors").then((r) => r.rows);
 export const fetchBases = () => request<{ rows: BaseRow[] }>("/api/bases").then((r) => r.rows);
 export const fetchBase = (base: string) => request<BaseInfo>(`/api/bases/${enc(base)}`);
+export function fetchBaseCurves(
+  base: string,
+  q: { prep?: string; win?: number | null; kind: CurveKind },
+): Promise<BaseCurves> {
+  const p = new URLSearchParams({ kind: q.kind });
+  if (q.prep !== undefined) p.set("prep", q.prep);
+  else p.set("win", q.win == null ? "none" : String(q.win));
+  return request<BaseCurves>(`/api/bases/${enc(base)}/curves?${p}`);
+}
 export const fetchFactor = (name: string) => request<FactorInfo>(`/api/factors/${enc(name)}`);
 export const fetchDetail = (name: string, runId: string, period: string) =>
   request<Detail>(`/api/factors/${enc(name)}/runs/${enc(runId)}?period=${enc(period)}`);
-export const fetchLatest = (name: string, runId: string, page: number, size: number) =>
+export const fetchLatest = (name: string, runId: string, page: number, size: number, ascending = false) =>
   request<LatestValues>(
-    `/api/factors/${enc(name)}/runs/${enc(runId)}/latest?page=${page}&size=${size}`,
+    `/api/factors/${enc(name)}/runs/${enc(runId)}/latest?page=${page}&size=${size}${ascending ? "&ascending=true" : ""}`,
   );
-export const fetchCompare = (fs: string[]) =>
-  request<Compare>(`/api/compare?f=${enc(fs.join(","))}`);
+export const fetchCompare = (fs: string[]) => request<Compare>(`/api/compare?f=${enc(fs.join(","))}`);
 export const fetchCorrelation = (fs: string[]) =>
   request<Correlation>(`/api/compare/correlation?f=${enc(fs.join(","))}`);
 

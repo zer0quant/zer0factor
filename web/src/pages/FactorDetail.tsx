@@ -5,5 +5,5 @@ import { factorHref } from "../factorName";
 export default function FactorDetail() {
   const name = useParams().name ?? "";
   const [params] = useSearchParams();
-  return <Navigate replace to={factorHref(name, { run: params.get("run"), period: params.get("period") })} />;
+  return <Navigate replace to={factorHref(name, { period: params.get("period") })} />;
 }

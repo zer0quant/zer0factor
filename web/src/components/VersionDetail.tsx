@@ -1,93 +1,63 @@
-import { useState } from "react";
-import {
-  Button,
-  Card,
-  Col,
-  Collapse,
-  Empty,
-  Row,
-  Segmented,
-  Select,
-  Skeleton,
-  Space,
-  Switch,
-  Tag,
-  Typography,
-  message,
-} from "antd";
-import { useQuery } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
+import { Button, Card, Col, Empty, Row, Segmented, Skeleton, Space, Switch, Tag, Typography, message } from "antd";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 import { useHotkeys } from "../hotkeys";
 import { fetchDetail, fetchFactor } from "../api";
-import { runLabel } from "../format";
+import { isNum, pct, runLabel, signColor, withSign } from "../format";
 import { MAX_COMPARE, toggleInBasket, useBasket } from "../compareBasket";
-import type { Detail, IcBlock } from "../types";
-import {
-  AcfChart,
-  CumulativeChart,
-  DecayChart,
-  IcHistChart,
-  IcSeriesChart,
-  adjustIcBlock,
-} from "./charts";
-import { GroupTable, LatestValues, MetricCards, ParamsSummary } from "./panels";
+import type { BaseCurves, Detail } from "../types";
+import { CumulativeChart, DecayChart, GroupBars, IcSeriesChart, adjustIcBlock } from "./charts";
+import { GroupTable, KeyMetrics, LatestValues, MetricCards, ParamsSummary } from "./panels";
 import { ErrorState, SlowLoading } from "./states";
 import { FactorChips } from "./FactorName";
 import { useEvaluate } from "./EvaluateDrawer";
 
-function IcSection({ block, label }: { block: IcBlock; label: string }) {
-  const cards: [string, React.ReactNode][] = [
-    [`${label} 序列${block.monthly ? "（月度均值）" : ""}`, <IcSeriesChart block={block} label={label} />],
-    [`${label} 分布`, <IcHistChart block={block} />],
-    [`${label} 自相关`, <AcfChart block={block} />],
-    [`${label} 衰减（因子对 k 日后的 1 日收益）`, <DecayChart block={block} />],
-  ];
-  return (
-    <Row gutter={[16, 16]}>
-      {cards.map(([title, chart]) => (
-        <Col key={title} xs={24} xl={12}>
-          <Card size="small" title={title}>
-            {chart}
-          </Card>
-        </Col>
-      ))}
-    </Row>
-  );
-}
+/** Notes about the IC decay belong under the decay chart, the rest under the group curves. */
+const isDecayNote = (note: string) => note.startsWith("IC 衰减");
 
+/**
+ * Rank IC only, two charts: the IC series with its cumulative sum (is the factor stable, when
+ * did it weaken?) and the IC decay (how long the signal lasts, i.e. turnover pressure). The IC
+ * distribution / autocorrelation and Pearson IC were dropped: the headline numbers (IC mean,
+ * std, win rate, HAC t) already summarise them.
+ */
 function IcCharts({ detail }: { detail: Detail }) {
   const reverse = detail.direction === -1;
   const [adjusted, setAdjusted] = useState(true);
   const adj = reverse && adjusted;
-  const block = (b: IcBlock) => (adj ? adjustIcBlock(b, -1) : b);
-  const suffix = adj ? "（方向调整）" : "";
+  const block = adj ? adjustIcBlock(detail.rank_ic, -1) : detail.rank_ic;
+  const label = `Rank IC${adj ? "（方向调整）" : ""}`;
+  const decayNotes = detail.notes.filter(isDecayNote);
+  const toggle = reverse && (
+    <Space size={6}>
+      <Switch size="small" checked={adjusted} onChange={setAdjusted} />
+      <Typography.Text style={{ fontSize: 12 }}>按方向调整（× −1）</Typography.Text>
+    </Space>
+  );
   return (
-    <Card
-      size="small"
-      title="IC 分析"
-      extra={
-        reverse && (
-          <Space size={6}>
-            <Switch size="small" checked={adjusted} onChange={setAdjusted} />
-            <Typography.Text style={{ fontSize: 12 }}>按方向调整（× −1）</Typography.Text>
-          </Space>
-        )
-      }
-    >
-      <Space direction="vertical" size={16} style={{ width: "100%" }}>
-        <IcSection block={block(detail.rank_ic)} label={`Rank IC${suffix}`} />
-        <Collapse
+    <Row gutter={[16, 16]}>
+      <Col xs={24} xl={15}>
+        <Card
           size="small"
-          items={[
-            {
-              key: "pearson",
-              label: "IC（Pearson）图表",
-              children: <IcSection block={block(detail.ic)} label={`IC${suffix}`} />,
-            },
-          ]}
-        />
-      </Space>
-    </Card>
+          title={`${label} 序列与累计${block.monthly ? "（柱为月度均值）" : ""}`}
+          extra={toggle}
+          style={{ height: "100%" }}
+        >
+          <IcSeriesChart block={block} label={label} />
+        </Card>
+      </Col>
+      <Col xs={24} xl={9}>
+        <Card size="small" title={`${label} 衰减（因子对 k 日后的 1 日收益）`} style={{ height: "100%" }}>
+          <DecayChart block={block} />
+          {decayNotes.length > 0 && (
+            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+              {decayNotes.join("；")}
+            </Typography.Text>
+          )}
+        </Card>
+      </Col>
+    </Row>
   );
 }
 
@@ -95,35 +65,102 @@ function Results({ detail, name, runId }: { detail: Detail; name: string; runId:
   const c = detail.cumulative;
   const s = detail.summary;
   const q = (v: unknown) => (typeof v === "number" ? String(Math.round(v)) : null);
+  const [barField, setBarField] = useState<"exc_ann_ret" | "ann_ret">("exc_ann_ret");
+  // Bars are gross (no costs); the headline long-group numbers are net of transaction costs.
+  const longGroup = q(s["long_quantile"]);
+  const grossLong = detail.group_table?.find((r) => r.group === longGroup)?.[barField];
+  const asNum = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : null);
+  const netLong = asNum(s[barField === "exc_ann_ret" ? "long_exc_ann_ret" : "long_ann_ret"]);
+  const costBps = asNum(s["transaction_cost_bps"]);
+  const drag = isNum(grossLong) && isNum(netLong) ? grossLong - netLong : null;
   return (
     <Space direction="vertical" size={16} style={{ width: "100%" }}>
-      <Card size="small" title="核心指标">
-        <MetricCards detail={detail} />
-      </Card>
-      <Card size="small" title="分组累计收益">
-        {c ? (
-          <>
-            <CumulativeChart {...c} />
-            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-              {detail.notes.join("；")}
-            </Typography.Text>
-          </>
-        ) : (
-          <Empty description="该 run 缺少原始数据（clean_factor_data），无法绘制收益曲线" />
-        )}
+      <KeyMetrics detail={detail} />
+      <Row gutter={[16, 16]}>
+        <Col xs={24} xl={14}>
+          <Card
+            size="small"
+            title={
+              <span>
+                分组累计收益
+                <Typography.Text type="secondary" style={{ fontSize: 12, fontWeight: 400, marginInlineStart: 6 }}>
+                  未扣费
+                </Typography.Text>
+              </span>
+            }
+            style={{ height: "100%" }}
+          >
+            {c ? (
+              <>
+                <CumulativeChart dates={c.dates} groups={c.groups} />
+                <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                  {detail.notes.filter((n) => !isDecayNote(n)).join("；")}
+                </Typography.Text>
+              </>
+            ) : (
+              <Empty description="该 run 缺少原始数据（clean_factor_data），无法绘制收益曲线" />
+            )}
+          </Card>
+        </Col>
+        <Col xs={24} xl={10}>
+          <Card
+            size="small"
+            title={
+              <span>
+                分层收益
+                <Typography.Text type="secondary" style={{ fontSize: 12, fontWeight: 400, marginInlineStart: 6 }}>
+                  未扣费
+                </Typography.Text>
+              </span>
+            }
+            style={{ height: "100%" }}
+            extra={
+              <Segmented
+                size="small"
+                value={barField}
+                onChange={(v) => setBarField(v as "exc_ann_ret" | "ann_ret")}
+                options={[
+                  { value: "exc_ann_ret", label: "超额年化" },
+                  { value: "ann_ret", label: "年化收益" },
+                ]}
+              />
+            }
+          >
+            {detail.group_table ? (
+              <>
+                <GroupBars rows={detail.group_table} field={barField} height={380} />
+                {longGroup && isNum(netLong) && (
+                  <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                    多头（组{longGroup}）扣费后{barField === "exc_ann_ret" ? "超额" : "年化"}{" "}
+                    <span className="num" style={{ color: signColor(netLong) }}>
+                      {withSign(pct(netLong), netLong)}
+                    </span>
+                    {drag != null && (
+                      <>
+                        ，交易成本拖累约 <span className="num">{pct(drag, 1)}</span> / 年
+                        {costBps != null && `（单边 ${costBps} bp × 换手）`}
+                      </>
+                    )}
+                  </Typography.Text>
+                )}
+              </>
+            ) : (
+              <Empty description="无分组收益数据" />
+            )}
+          </Card>
+        </Col>
+      </Row>
+      <IcCharts detail={detail} />
+      <Card size="small" title="更多指标">
+        <MetricCards detail={detail} headline={false} />
       </Card>
       {detail.group_table && (
-        <Card size="small" title="分组收益">
-          <GroupTable
-            rows={detail.group_table}
-            longGroup={q(s["long_quantile"])}
-            shortGroup={q(s["short_quantile"])}
-          />
+        <Card size="small" title="分组收益明细">
+          <GroupTable rows={detail.group_table} longGroup={longGroup} shortGroup={q(s["short_quantile"])} />
         </Card>
       )}
-      <IcCharts detail={detail} />
       <Card size="small" title="最新因子值">
-        <LatestValues name={name} runId={runId} />
+        <LatestValues name={name} runId={runId} reverse={detail.direction === -1} />
       </Card>
     </Space>
   );
@@ -147,10 +184,11 @@ function CompareToggle({ name }: { name: string }) {
 }
 
 /**
- * One factor version's evaluation: run / period pickers, actions and all result panels.
- * `run` and `period` live in the URL query.
+ * One factor version's evaluation: always its latest standard run (the one the board, matrix
+ * and curves use; older or non-standard runs are deliberately not selectable). `period` lives
+ * in the URL query.
  */
-export function VersionDetail({ name, extra }: { name: string; extra?: React.ReactNode }) {
+export function VersionDetail({ name }: { name: string }) {
   const [params, setParams] = useSearchParams();
   const info = useQuery({ queryKey: ["factor", name], queryFn: () => fetchFactor(name) });
   const evaluate = useEvaluate();
@@ -161,19 +199,12 @@ export function VersionDetail({ name, extra }: { name: string; extra?: React.Rea
   });
 
   const runs = info.data?.runs ?? [];
-  const wantedRun = params.get("run");
-  const runId =
-    (wantedRun && runs.some((r) => r.run_id === wantedRun) ? wantedRun : null) ??
-    info.data?.default_run ??
-    undefined;
-  const run = runs.find((r) => r.run_id === runId);
+  // default_run is the latest standard run when there is one; never fall back to others.
+  const run = runs.find((r) => r.run_id === info.data?.default_run && r.standard);
+  const runId = run?.run_id;
   const wanted = params.get("period");
   const period =
-    wanted && run?.periods.includes(wanted)
-      ? wanted
-      : run?.periods.includes("1D")
-        ? "1D"
-        : run?.periods[0];
+    wanted && run?.periods.includes(wanted) ? wanted : run?.periods.includes("1D") ? "1D" : run?.periods[0];
 
   const detail = useQuery({
     queryKey: ["detail", name, runId, period],
@@ -182,10 +213,19 @@ export function VersionDetail({ name, extra }: { name: string; extra?: React.Rea
     staleTime: Infinity,
   });
 
-  const setQuery = (key: string, value: string) => {
+  // Opening an uncached version derives its chart cache: refresh overlays that listed it missing.
+  const qc = useQueryClient();
+  useEffect(() => {
+    if (!detail.isSuccess) return;
+    const stale = qc
+      .getQueriesData<BaseCurves>({ queryKey: ["baseCurves"] })
+      .some(([, d]) => d?.missing.includes(name));
+    if (stale) qc.invalidateQueries({ queryKey: ["baseCurves"] });
+  }, [detail.isSuccess, name, qc]);
+
+  const setPeriod = (value: string) => {
     const next = new URLSearchParams(params);
-    next.set(key, value);
-    if (key === "run") next.delete("period");
+    next.set("period", value);
     setParams(next, { replace: true });
   };
 
@@ -194,7 +234,6 @@ export function VersionDetail({ name, extra }: { name: string; extra?: React.Rea
 
   const actions = (
     <Space size={8} wrap>
-      {extra}
       <Button
         size="small"
         onClick={() =>
@@ -214,7 +253,7 @@ export function VersionDetail({ name, extra }: { name: string; extra?: React.Rea
           )
         }
       >
-        {runs.length ? "重新评估此版本" : "评估此版本"}
+        {run ? "重新评估此版本" : "评估此版本"}
       </Button>
       <CompareToggle name={name} />
     </Space>
@@ -225,24 +264,18 @@ export function VersionDetail({ name, extra }: { name: string; extra?: React.Rea
       <Card size="small">
         <div className="zf-run-bar" style={{ borderTop: 0, paddingTop: 0 }}>
           <FactorChips name={name} link={false} copyable />
-          {runs.length > 0 && (
-            <Select
-              style={{ width: 260, maxWidth: "100%" }}
-              value={runId}
-              onChange={(v) => setQuery("run", v)}
-              options={runs.map((r) => ({
-                value: r.run_id,
-                label: (
-                  <span title={runLabel(r)}>
-                    {r.standard && <Tag color="green">标准</Tag>}
-                    {r.run_id}
-                  </span>
-                ),
-              }))}
-            />
+          {run && (
+            <span title={runLabel(run)}>
+              <Tag color="green" bordered={false}>
+                统一口径
+              </Tag>
+              <Typography.Text type="secondary" className="num">
+                评估 {run.run_id}
+              </Typography.Text>
+            </span>
           )}
           {run && run.periods.length > 1 && (
-            <Segmented options={run.periods} value={period} onChange={(v) => setQuery("period", String(v))} />
+            <Segmented options={run.periods} value={period} onChange={(v) => setPeriod(String(v))} />
           )}
           {run && <ParamsSummary run={run} />}
           <div style={{ marginInlineStart: "auto" }}>{actions}</div>
@@ -253,9 +286,9 @@ export function VersionDetail({ name, extra }: { name: string; extra?: React.Rea
         <Card>
           <Skeleton active />
         </Card>
-      ) : runs.length === 0 ? (
+      ) : !run ? (
         <Card>
-          <Empty description="这个版本还没有任何评估结果" />
+          <Empty description="这个版本还没有统一口径的评估结果" />
         </Card>
       ) : detail.isLoading ? (
         <Card>

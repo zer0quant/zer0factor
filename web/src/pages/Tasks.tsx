@@ -210,7 +210,7 @@ function TaskDetail({ id }: { id: string }) {
                 </Button>
               )}
               {t.kind === "evaluate" && t.status === "succeeded" && firstFactor && t.run_id && (
-                <Link to={factorHref(firstFactor, { run: t.run_id })}>
+                <Link to={factorHref(firstFactor)}>
                   <Button type="primary">查看结果</Button>
                 </Link>
               )}

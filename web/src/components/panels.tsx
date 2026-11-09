@@ -41,7 +41,41 @@ const intText = (v: Num | undefined) => (isNum(v) ? Math.round(v).toLocaleString
 
 type Item = { label: string; text: string; v?: Num; colored?: boolean; tip?: string };
 
-export function MetricCards({ detail }: { detail: Detail }) {
+/** The five headline numbers of one version, in one row. */
+export function KeyMetrics({ detail }: { detail: Detail }) {
+  const { token } = theme.useToken();
+  const s = detail.summary as Record<string, Num>;
+  const ic = s["IC Mean"];
+  const dir = detail.direction;
+  const icAdj = isNum(ic) && isNum(dir) && dir !== 0 ? ic * dir : null;
+  const items: Item[] = [
+    { label: "ICIR（方向调整）", text: num(s["adjusted_ICIR"], 3), v: s["adjusted_ICIR"], colored: true },
+    { label: "方向调整 IC", text: num(icAdj, 4), v: icAdj, colored: true, tip: "Rank IC 均值 × 因子方向" },
+    { label: "多头年化（扣费后）", text: pctText(s["long_ann_ret"]), v: s["long_ann_ret"], colored: true },
+    {
+      label: "多头超额（扣费后）",
+      text: pctText(s["long_exc_ann_ret"]),
+      v: s["long_exc_ann_ret"],
+      colored: true,
+      tip: "多头相对全市场等权的年化超额，已扣交易成本",
+    },
+    { label: "单调性", text: num(s["monotonicity"], 2) },
+  ];
+  return (
+    <div className="zf-kpis zf-kpis-5">
+      {items.map((h) => (
+        <div key={h.label} className="zf-kpi" style={{ borderColor: token.colorBorderSecondary }} title={h.tip}>
+          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+            {h.label}
+          </Typography.Text>
+          <div style={{ fontSize: 24, fontWeight: 600, lineHeight: 1.3 }}>{cell(h.text, h.v ?? null, !!h.colored)}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export function MetricCards({ detail, headline: showHeadline = true }: { detail: Detail; headline?: boolean }) {
   const { token } = theme.useToken();
   const s = detail.summary as Record<string, Num>;
   const dir = detail.direction;
@@ -115,21 +149,23 @@ export function MetricCards({ detail }: { detail: Detail }) {
 
   return (
     <Space direction="vertical" size={12} style={{ width: "100%" }}>
-      <div className="zf-kpis">
-        {headline.map((h) => (
-          <div key={h.label} className="zf-kpi" style={{ borderColor: token.colorBorderSecondary }}>
-            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-              {h.label}
-            </Typography.Text>
-            <div style={{ fontSize: 24, fontWeight: 600, lineHeight: 1.3 }}>
-              {cell(h.text, h.v ?? null, !!h.colored)}
+      {showHeadline && (
+        <div className="zf-kpis">
+          {headline.map((h) => (
+            <div key={h.label} className="zf-kpi" style={{ borderColor: token.colorBorderSecondary }}>
+              <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                {h.label}
+              </Typography.Text>
+              <div style={{ fontSize: 24, fontWeight: 600, lineHeight: 1.3 }}>
+                {cell(h.text, h.v ?? null, !!h.colored)}
+              </div>
+              <Typography.Text type="secondary" className="num" style={{ fontSize: 12 }}>
+                {h.sub}
+              </Typography.Text>
             </div>
-            <Typography.Text type="secondary" className="num" style={{ fontSize: 12 }}>
-              {h.sub}
-            </Typography.Text>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
       <div className="zf-metric-groups">
         {groups.map(([title, items]) => (
           <div key={title}>
@@ -183,7 +219,13 @@ export function GroupTable({
   const p = (v: Num) => cell(pct(v), v, true);
   const groupRows = rows.filter((r) => r.group !== "多空");
   const maxAbs = (k: "ann_ret" | "exc_ann_ret") =>
-    Math.max(0, ...groupRows.map((r) => r[k]).filter(isNum).map((v) => Math.abs(v)));
+    Math.max(
+      0,
+      ...groupRows
+        .map((r) => r[k])
+        .filter(isNum)
+        .map((v) => Math.abs(v)),
+    );
   const maxRet = maxAbs("ann_ret");
   const maxExc = maxAbs("exc_ann_ret");
   return (
@@ -238,12 +280,13 @@ export function GroupTable({
   );
 }
 
-export function LatestValues({ name, runId }: { name: string; runId: string }) {
+/** Latest cross-section, long group first: highest value first, lowest first for a reverse factor. */
+export function LatestValues({ name, runId, reverse = false }: { name: string; runId: string; reverse?: boolean }) {
   const [page, setPage] = useState(1);
   const size = 10;
   const q = useQuery({
-    queryKey: ["latest", name, runId, page],
-    queryFn: () => fetchLatest(name, runId, page, size),
+    queryKey: ["latest", name, runId, page, reverse],
+    queryFn: () => fetchLatest(name, runId, page, size, reverse),
   });
   return (
     <Table
@@ -251,7 +294,11 @@ export function LatestValues({ name, runId }: { name: string; runId: string }) {
       size="small"
       loading={q.isLoading}
       dataSource={q.data?.items ?? []}
-      title={() => (q.data?.date ? `日期：${q.data.date}（按因子值从高到低）` : undefined)}
+      title={() =>
+        q.data?.date
+          ? `日期：${q.data.date}（按因子值${reverse ? "从低到高，反向因子多头在前" : "从高到低"}）`
+          : undefined
+      }
       pagination={{
         current: page,
         pageSize: size,
@@ -265,7 +312,12 @@ export function LatestValues({ name, runId }: { name: string; runId: string }) {
         ...((q.data?.items ?? []).some((it) => it.name)
           ? [{ title: "名称", dataIndex: "name", render: (v: string | null) => v ?? "—" }]
           : []),
-        { title: "因子值", dataIndex: "value", align: "right", render: (v: Num) => <span className="num">{num(v)}</span> },
+        {
+          title: "因子值",
+          dataIndex: "value",
+          align: "right",
+          render: (v: Num) => <span className="num">{num(v)}</span>,
+        },
         { title: "所在分组", dataIndex: "quantile", align: "right" },
       ]}
     />
