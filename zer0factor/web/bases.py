@@ -186,5 +186,8 @@ def base_versions(rows: list[dict], base: str, board: BoardSetting) -> dict | No
         "base": base,
         "primary_prep": primary,
         "default_prep": default,
-        "versions": [{k: v[k] for k in keys} for v in versions],
+        "versions": [
+            {**{k: v[k] for k in keys}, "metrics": {k: v[k] for k in METRIC_KEYS}}
+            for v in versions
+        ],
     }

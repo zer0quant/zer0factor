@@ -188,3 +188,53 @@ def test_base_versions_endpoint(client):
 
 def test_base_versions_unknown_404(client):
     assert client.get("/api/bases/nope").status_code == 404
+
+
+def _warm(client, name="fa"):
+    assert client.get(f"/api/factors/{name}/runs/20260101_000000", params={"period": "1D"}).status_code == 200
+
+
+def test_base_curves_by_prep(client):
+    _warm(client)
+    body = client.get("/api/bases/fa/curves", params={"prep": "raw"}).json()
+    assert body["kind"] == "long_excess"
+    assert body["missing"] == []
+    assert list(body["series"]) == ["fa"]
+    assert len(body["series"]["fa"]) == len(body["dates"]) > 0
+
+
+def test_base_curves_by_window_none(client):
+    _warm(client)
+    body = client.get("/api/bases/fa/curves", params={"win": "none", "kind": "ls"}).json()
+    assert body["kind"] == "ls"
+    assert list(body["series"]) == ["fa"]
+
+
+def test_base_curves_long_is_cumulative_long_return(client):
+    _warm(client)
+    long = client.get("/api/bases/fa/curves", params={"prep": "raw", "kind": "long"}).json()
+    excess = client.get("/api/bases/fa/curves", params={"prep": "raw"}).json()
+    assert long["kind"] == "long"
+    assert long["dates"] == excess["dates"]
+    assert len(long["series"]["fa"]) == len(long["dates"]) > 0
+    assert long["series"]["fa"] != excess["series"]["fa"]
+
+
+def test_base_curves_rejects_unknown_kind(client):
+    assert client.get("/api/bases/fa/curves", params={"prep": "raw", "kind": "x"}).status_code == 400
+
+
+def test_base_curves_missing_when_uncached(client):
+    body = client.get("/api/bases/fa/curves", params={"prep": "raw"}).json()
+    assert body["missing"] == ["fa"] and body["series"] == {}
+    body = client.get("/api/bases/fc/curves", params={"prep": "raw"})
+    assert body.status_code == 200
+    assert body.json()["missing"] == ["fc"]
+
+
+def test_base_curves_bad_args(client):
+    assert client.get("/api/bases/fa/curves", params={"prep": "raw", "win": "5"}).status_code == 400
+    assert client.get("/api/bases/fa/curves").status_code == 400
+    assert client.get("/api/bases/fa/curves", params={"prep": "raw", "kind": "foo"}).status_code == 400
+    assert client.get("/api/bases/fa/curves", params={"win": "abc"}).status_code == 400
+    assert client.get("/api/bases/nope/curves", params={"prep": "raw"}).status_code == 404

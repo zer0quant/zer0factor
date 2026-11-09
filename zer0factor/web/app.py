@@ -24,6 +24,7 @@ from zer0factor.web.charts import (
     latest_values,
     load_stock_names,
     ls_sparkline,
+    version_curve,
 )
 from zer0factor.web.correlation import _cached as _correlation_cache
 from zer0factor.web.correlation import factor_correlation
@@ -217,6 +218,54 @@ def create_app(
             raise HTTPException(404, f"unknown base factor: {base}")
         return _json(body)
 
+    @app.get("/api/bases/{base}/curves")
+    def base_curves(
+        base: str, prep: str | None = None, win: str | None = None, kind: str = "long_excess"
+    ):
+        """Overlay curves: one prep across its windows, or one window across preps."""
+        if (prep is None) == (win is None):
+            raise HTTPException(400, "give exactly one of prep / win")
+        if kind not in ("long_excess", "long", "ls"):
+            raise HTTPException(400, f"unknown curve kind: {kind}")
+        window: int | None = None
+        if win is not None and win != "none":
+            try:
+                window = int(win)
+            except ValueError:
+                raise HTTPException(400, f"bad window: {win}") from None
+        c = catalog()
+        body = base_versions(c.board_rows(), base, cfg.web.board)
+        if body is None:
+            raise HTTPException(404, f"unknown base factor: {base}")
+        chosen = [
+            v["name"]
+            for v in body["versions"]
+            if (v["prep"] == prep if prep is not None else v["window"] == window)
+        ]
+        hits = c.standard_rows()
+        curves: dict[str, pd.Series] = {}
+        missing = []
+        for name in chosen:
+            hit = hits.get(name)
+            curve = (
+                version_curve(hit[0], name, c.standard.period, cfg.web.cache_dir, kind)
+                if hit
+                else None
+            )
+            if curve is None or curve.empty:
+                missing.append(name)
+            else:
+                curves[name] = curve
+        index = sorted(set().union(*(s.index for s in curves.values()))) if curves else []
+        return _json(
+            {
+                "kind": kind,
+                "dates": [pd.Timestamp(d).strftime("%Y-%m-%d") for d in index],
+                "series": {n: s.reindex(index).ffill().tolist() for n, s in curves.items()},
+                "missing": missing,
+            }
+        )
+
     @app.get("/api/board/curves")
     def board_curves(points: int = Query(60, ge=10, le=250)):
         """Per standard-evaluated factor: is the detail page cached, and its LS sparkline.
@@ -269,9 +318,12 @@ def create_app(
         run_id: str,
         page: int = Query(1, ge=1),
         size: int = Query(20, ge=1, le=200),
+        ascending: bool = False,
     ):
         run = require_run(name, run_id)
-        return _json(latest_values(run, name, stock_names(), page, size, cfg.web.cache_dir))
+        return _json(
+            latest_values(run, name, stock_names(), page, size, cfg.web.cache_dir, ascending=ascending)
+        )
 
     def parse_factors(f: str) -> list[str]:
         names = [x for x in (s.strip() for s in f.split(",")) if x]

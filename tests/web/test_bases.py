@@ -146,7 +146,9 @@ def test_base_versions_default_prep():
         ("z", 5),
         ("z", 10),
     ]
-    assert set(b["versions"][0]) == {"name", "prep", "window", "evaluated", "icir", "direction", "run_id"}
+    assert set(b["versions"][0]) == {
+        "name", "prep", "window", "evaluated", "icir", "direction", "run_id", "metrics"
+    }
     assert base_versions(rows, "nope", BOARD) is None
 
 
@@ -189,3 +191,12 @@ def test_metrics_empty_without_number():
         b = one(rows, "a")
         assert all(v is None for v in b["metrics"].values())
         assert (b["start_date"], b["end_date"], b["run_ids"]) == (None, None, [])
+
+
+def test_base_versions_carry_metrics():
+    from zer0factor.web.bases import METRIC_KEYS
+
+    (v,) = base_versions([row("z_a_ma5", 0.5, 1)], "a", BOARD)["versions"]
+    assert set(v["metrics"]) == set(METRIC_KEYS)
+    assert v["metrics"]["icir"] == 0.5
+    assert v["metrics"]["long_ann_ret"] is None

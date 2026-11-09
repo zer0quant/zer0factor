@@ -84,6 +84,35 @@ def detail_cached(run: RunInfo, factor: str, cache_dir: Path) -> bool:
     return has_series and (target / "ic_decay.json").exists()
 
 
+def version_curve(
+    run: RunInfo, factor: str, period: str, cache_dir: Path, kind: str
+) -> pd.Series | None:
+    """Cumulative long-minus-benchmark (``long_excess``), long (``long``) or long-short (``ls``) return.
+
+    Cache only: never derives, so an uncached version returns None.
+    """
+    series = cached_series(run, factor, cache_dir)
+    if series is None:
+        return None
+    port = series["portfolio_daily_returns"]
+    if kind == "ls":
+        column = f"{period}:ls"
+        if column not in port:
+            return None
+        daily = port[column]
+    elif kind == "long":
+        column = f"{period}:long"
+        if column not in port:
+            return None
+        daily = port[column]
+    else:
+        long_col, bench_col = f"{period}:long", f"{period}:benchmark"
+        if long_col not in port or bench_col not in port:
+            return None
+        daily = port[long_col] - port[bench_col].fillna(0)
+    return (1 + daily.fillna(0)).cumprod() - 1
+
+
 def ls_sparkline(
     run: RunInfo, factor: str, period: str, cache_dir: Path, points: int = 60
 ) -> list[float | None] | None:
@@ -274,11 +303,7 @@ def detail_payload(
 ) -> dict:
     rows = summary[(summary["factor_name"] == factor) & (summary["period"] == period)]
     row = rows.iloc[0].to_dict() if not rows.empty else {}
-    cost = row.get("transaction_cost_bps", run.transaction_cost_bps) or 0
-    notes = [
-        "分组曲线为等权毛收益（未扣费）",
-        f"多头/空头/多空为扣费后组合收益（单边 {float(cost):g}bps）",
-    ]
+    notes = ["分组曲线为各组等权毛收益（未扣费）"]
 
     rank_ic = None
     ic_path = run.factor_dir(factor) / "daily_ic.parquet"
@@ -334,7 +359,10 @@ def latest_values(
     page: int,
     size: int,
     cache_dir: Path,
+    ascending: bool = False,
 ) -> dict:
+    """Latest cross-section, highest value first (``ascending``: lowest first, i.e. the long
+    group of a reverse factor on page 1)."""
     target = _cache_path(cache_dir, run, factor) / "latest.parquet"
     if target.exists():
         latest = pd.read_parquet(target)
@@ -354,6 +382,8 @@ def latest_values(
             os.replace(tmp, target)
         finally:
             tmp.unlink(missing_ok=True)
+    if ascending:  # the cache is stored highest first
+        latest = latest.iloc[::-1]
     start = max(page - 1, 0) * size
     chunk = latest.iloc[start : start + size]
     return {

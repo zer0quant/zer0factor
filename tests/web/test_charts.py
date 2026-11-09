@@ -77,7 +77,7 @@ def test_cumulative_ls_matches_portfolio(run_fa, tmp_path):
     assert payload["cumulative"]["ls"][-1] == pytest.approx((1 + port).prod() - 1)
     assert set(payload["cumulative"]["groups"]) == {"1", "2", "3", "4", "5"}
     assert any("等权毛收益" in n for n in payload["notes"])
-    assert any("10bps" in n for n in payload["notes"])
+    assert not any("多空" in n for n in payload["notes"])  # the group chart draws groups only
 
 
 def test_group_table_has_ls_row_and_negative_max_dd():
@@ -133,6 +133,16 @@ def test_detail_payload_without_clean_data_still_has_summary(make_run, evaluatio
     assert payload["summary"]["factor_name"] == "fa"
     assert payload["cumulative"] is None
     assert payload["rank_ic"]["series"]["values"]
+
+
+def test_latest_values_ascending_starts_from_lowest(run_fa, tmp_path):
+    run, _ = run_fa
+    desc = latest_values(run, "fa", {}, 1, 40, tmp_path / "cache")
+    asc = latest_values(run, "fa", {}, 1, 10, tmp_path / "cache", ascending=True)
+    values = [i["value"] for i in asc["items"]]
+    assert values == sorted(values)
+    assert values[0] == min(i["value"] for i in desc["items"])
+    assert asc["total"] == desc["total"]
 
 
 def test_latest_values_sorted_and_paged(run_fa, tmp_path):
