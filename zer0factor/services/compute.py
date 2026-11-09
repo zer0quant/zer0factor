@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 
 import pandas as pd
 
@@ -135,3 +135,22 @@ def trading_days_before(pro, date: str, n: int, *, exchange: str = "SSE") -> str
     if not days:
         return start
     return days[-n] if len(days) >= n else days[0]
+
+
+def incremental_write_start(
+    storage: FactorStorage, names: Iterable[str], *, rebuild_tail: int = 1
+) -> str | None:
+    """First date an incremental build should (re)write for ``names``.
+
+    Takes the output whose last partition is oldest and re-writes its last
+    ``rebuild_tail`` dates (covers a partition cut short by a crash and data
+    revisions at the source); ``rebuild_tail=0`` starts the day after it.
+    Returns None when any output was never built: that needs a full build.
+    """
+    all_dates = [storage.dates(name) for name in names]
+    if not all_dates or any(not dates for dates in all_dates):
+        return None
+    dates = min(all_dates, key=lambda d: d[-1])
+    if rebuild_tail <= 0:
+        return (pd.Timestamp(dates[-1]) + pd.Timedelta(days=1)).strftime("%Y%m%d")
+    return dates[-min(rebuild_tail, len(dates))]

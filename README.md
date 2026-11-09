@@ -138,9 +138,10 @@ uv run python main.py web-warm --run <run_id> --workers 12
 | `status` | 查看当前存储里有哪些已计算因子 |
 | `factor-list` | 对比注册表和本地存储里的因子状态 |
 | `factor-info <name>` | 查看单个因子的注册信息和存储状态 |
-| `compute-returns` | 计算内置收益率因子并写入本地存储 |
-| `compute-market-cap` | 计算内置市值因子并写入本地存储 |
-| `build-factors --family <name>` | 按因子族批量计算并写入本地存储 |
+| `check-freshness` | 检查行情、股票池、因子、评估的截止日是否一致（不一致时退出码为 1，`--notify` 发飞书） |
+| `compute-returns` | 计算内置收益率因子并写入本地存储（`--incremental` 只补新日期） |
+| `compute-market-cap` | 计算内置市值因子并写入本地存储（`--incremental` 只补新日期） |
+| `build-factors --family <name>` | 按因子族批量计算并写入本地存储（`--incremental` 只补新日期） |
 | `standardize-factor <name>` | 对已存因子做截面去极值、填充和标准化 |
 | `neutralize-factor <name>` | 对已标准化因子做行业 / 市值中性化 |
 | `evaluate-factor <name>` | 评估单个已存因子 |
@@ -154,6 +155,21 @@ uv run python main.py web-warm --run <run_id> --workers 12
 | `show-summary` | 查看最近一次评估的完整 summary |
 
 所有命令通过 `uv run python main.py <命令>` 执行，加 `--help` 查看完整参数。
+
+### 日常增量更新
+
+行情更新后按以下顺序执行，每一步都只补新交易日：
+
+```bash
+uv run python main.py check-freshness            # 截止日不一致时先处理（股票池落后要在 zer0share 运行 build-universe）
+uv run python main.py compute-returns --incremental
+uv run python main.py compute-market-cap --incremental
+uv run python main.py build-factors --family rolling_return --incremental
+```
+
+- `--incremental` 从各输出中截止日最早的那个开始续算，默认重算已有的最后 1 个日期（`--rebuild-tail N`）。任何输出从未构建过时，退回全量构建。
+- 直接读行情的因子族（`uses_data_provider = True`）按 `FactorFamily.lookback` 往前多读若干交易日；没有声明时重读全部历史，结果正确但较慢。使用 qfq 价格的族不支持增量。
+- 增量评估尚未实现，见 `docs/superpowers/specs/2026-11-09-incremental-update-design.md`。
 
 ## 标准因子长什么样
 

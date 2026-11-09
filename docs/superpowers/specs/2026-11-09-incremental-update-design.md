@@ -315,3 +315,14 @@ compute-market-cap ┼─> build-factors raw ─> build-factors preprocess
 - `FactorStorage.dates()`、`last_date()`，以及模块函数 `partition_dates()`、`last_partition_date()`。这几个函数只列目录、不读数据，`factor_stats()` 也改为调用它们。
 
 **待办：** 用修复后的代码重建 zer0alpha 中直接读行情的族 20260516 之后的数据（如果这次补数据时用 `--start-date` 构建过它们）。
+
+### 2026-11-09：第 3、4 步完成
+
+- `incremental_write_start()`（`services/compute.py`）：在各输出中找截止日最早的那个，从它的倒数第 `rebuild_tail` 个日期开始重写；`rebuild_tail=0` 时从它的下一天开始。只要有一个输出从未构建过，就返回 None，退回全量构建。
+- 增量起点没有像 §3.2 那样直接取 `last_date()`：以“截止日最早的输出”为准，任何一个输出落后，都会从它的日期开始补齐整组。
+- `compute-returns`、`compute-market-cap` 新增 `--start-date / --end-date / --incremental / --rebuild-tail`。回看期：收益率 1 个交易日，市值 0（`factors/builtin.py`）。
+- `build-factors` 新增 `--incremental / --rebuild-tail`。按 stage 选输出：raw 阶段看 raw 输出，preprocess 阶段看处理后的输出，all 看两者。使用 qfq 的族会被拒绝。
+- 测试覆盖：收益率、市值（含 z 分数）、rolling_return 派生族，三者“先构建到前一天，再增量补齐”的结果都与全量构建逐行一致（`tests/test_incremental.py`）。
+- 第 2 步的 `FactorStorage.last_date()` 已实现；`FactorSpec.lookback` 没有加，回看期在族（`FactorFamily.lookback`）和内置因子组上声明就够了。
+- `docs/factor-contract.md` 需要补充：直接读行情的族要声明 `lookback`，递归指标保持 `None`。这一条留给 zer0alpha 给各族声明 lookback 时一起做。
+
