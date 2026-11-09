@@ -16,6 +16,8 @@
 
 > 项目还在早期阶段，适合作为研究工作台使用，还不是成熟的生产平台。
 
+![因子主页：版本表格与各周期多头超额曲线](docs/images/base-home.png)
+
 ## 能做什么
 
 - **标准因子接口**：`FactorSpec + FactorFrame + compute()`，输出统一为 `trade_date, ts_code, value`
@@ -83,6 +85,18 @@ uv run python main.py serve                       # 打开 http://127.0.0.1:8600
 ```
 
 看板、因子主页的数字都来自 `[web.standard]` 定义的统一口径、并且评估到最新的那一次评估。页面说明、配置项和后台任务的用法见 [docs/web-workbench.md](docs/web-workbench.md)。
+
+**因子看板**：一行一个原始因子，指标取主版本各周期的中位数。
+
+![因子看板](docs/images/board.png)
+
+**版本详情**：核心指标、分组累计收益、分层收益、Rank IC 序列与衰减。
+
+![版本详情](docs/images/version-detail.png)
+
+**因子对比**：指标并排比较，多空累计收益曲线叠加。
+
+![因子对比](docs/images/compare.png)
 
 ## 常用命令
 
