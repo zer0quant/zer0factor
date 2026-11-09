@@ -165,3 +165,24 @@ def test_init_db_false_never_touches_duckdb(tmp_path):
 
     assert worker_storage.read("worker_factor")["value"].tolist() == [2.0]
     assert not db_path.exists()
+
+
+def test_dates_and_last_date(tmp_path):
+    storage = FactorStorage(tmp_path / "factors", tmp_path / "meta.duckdb")
+    assert storage.dates("missing") == []
+    assert storage.last_date("missing") is None
+
+    storage.write("f", pd.DataFrame({
+        "trade_date": ["20240103", "20240102", "20240103"],
+        "ts_code": ["A", "A", "B"],
+        "value": [1.0, 2.0, 3.0],
+    }))
+    assert storage.dates("f") == ["20240102", "20240103"]
+    assert storage.last_date("f") == "20240103"
+
+
+def test_last_date_ignores_empty_partition_dirs(tmp_path):
+    storage = FactorStorage(tmp_path / "factors", tmp_path / "meta.duckdb")
+    storage.write("f", pd.DataFrame({"trade_date": ["20240102"], "ts_code": ["A"], "value": [1.0]}))
+    (tmp_path / "factors" / "f" / "date=20240105").mkdir()
+    assert storage.last_date("f") == "20240102"

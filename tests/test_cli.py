@@ -1020,11 +1020,14 @@ ma_bias = "fake_external_factors:MA_BIAS_FAMILY"
             calls["provider"] = provider
             calls["storage"] = storage
 
-        def compute_and_store(self, factors, *, start_date, end_date, universe):
+        def compute_and_store(
+            self, factors, *, start_date, end_date, universe, load_start_date=None
+        ):
             calls["factors"] = factors
             calls["start_date"] = start_date
             calls["end_date"] = end_date
             calls["universe"] = universe
+            calls["load_start_date"] = load_start_date
             return {"ma_bias_5d": 3}
 
     monkeypatch.setattr("zer0factor.cli.compute_cmds.AppContext", FakeAppContext)
@@ -1050,6 +1053,44 @@ ma_bias = "fake_external_factors:MA_BIAS_FAMILY"
     assert calls["end_date"] is None
     assert calls["universe"] == "all"
     assert "ma_bias_5d: 3" in result.output
+    assert calls["load_start_date"] == "20240101"
+
+    # --start-date on a family without declared lookback reloads full history
+    # but still writes only from the requested start date.
+    result = CliRunner().invoke(
+        cli,
+        [
+            "--config", str(config_path),
+            "build-factors", "--family", "ma_bias", "--stage", "raw",
+            "--start-date", "20240301",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert calls["start_date"] == "20240301"
+    assert calls["load_start_date"] == "20240101"
+
+    # A declared lookback loads only that many trading days before the start.
+    module.MA_BIAS_FAMILY.lookback = 5
+    seen = []
+
+    def fake_trading_days_before(pro, date, n):
+        seen.append((date, n))
+        return "20240222"
+
+    monkeypatch.setattr(
+        "zer0factor.cli.compute_cmds.trading_days_before", fake_trading_days_before
+    )
+    result = CliRunner().invoke(
+        cli,
+        [
+            "--config", str(config_path),
+            "build-factors", "--family", "ma_bias", "--stage", "raw",
+            "--start-date", "20240301",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert seen == [("20240301", 5)]
+    assert calls["load_start_date"] == "20240222"
 
 
 def _write_eval_settings(tmp_path):

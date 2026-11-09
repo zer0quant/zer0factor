@@ -56,16 +56,28 @@ class FactorComputeService:
         universe: str,
         progress: ProgressFn | None = None,
         postprocess: PostProcessFn | None = None,
+        load_start_date: str | None = None,
     ) -> dict[str, int]:
+        """Compute ``factors`` and write dates ``>= start_date``.
+
+        ``load_start_date`` (default: ``start_date``) is where market data loading
+        begins; rolling factors need it earlier than ``start_date`` so the first
+        written dates see a full window. Only dates ``>= start_date`` are written,
+        so partitions before it are left untouched.
+        """
+        load_start = load_start_date or start_date
         fields = sorted({field for factor in factors for field in factor.spec.inputs})
         adjust_values = {factor.spec.adjust for factor in factors}
         if len(adjust_values) != 1:
             raise ValueError("factors with mixed adjust settings cannot share one data load")
 
-        self._log(f"market_data_load_started fields={','.join(fields)}")
+        self._log(
+            f"market_data_load_started fields={','.join(fields)} "
+            f"load_start={load_start} write_start={start_date}"
+        )
         data = self._provider.history(
             fields=fields,
-            start_date=start_date,
+            start_date=load_start,
             end_date=end_date,
             universe=universe,
             adjust=adjust_values.pop(),
@@ -78,9 +90,48 @@ class FactorComputeService:
         for factor in factors:
             name = factor.spec.name
             self._log(f"factor_write_started factor={name}")
-            result = run_factor(factor, data, storage=self._storage)
+            result = run_factor(factor, data)
+            if load_start < start_date:
+                result = result[result["trade_date"] >= start_date].reset_index(drop=True)
+            self._storage.write(name, result)
             row_counts[name] = len(result)
             self._log(f"factor_write_finished factor={name} rows={len(result)}")
             if postprocess is not None:
                 row_counts.update(postprocess(name, result))
         return row_counts
+
+
+def resolve_load_start(
+    lookback: int | None,
+    *,
+    write_start: str,
+    history_start: str,
+    trading_days_before: Callable[[str, int], str],
+) -> str:
+    """Where to start loading data so values from ``write_start`` on are exact.
+
+    ``lookback`` is the number of trading days before ``write_start`` a factor
+    family needs; ``None`` means unknown or unbounded (recursive indicators), so
+    the whole history from ``history_start`` is loaded.
+    """
+    if write_start <= history_start:
+        return write_start
+    if lookback is None:
+        return history_start
+    if lookback <= 0:
+        return write_start
+    return max(trading_days_before(write_start, lookback), history_start)
+
+
+def trading_days_before(pro, date: str, n: int, *, exchange: str = "SSE") -> str:
+    """The open trading day ``n`` trading days before ``date`` (``date`` excluded)."""
+    if n <= 0:
+        return date
+    # 2x calendar days + a month covers any holiday cluster on the A-share calendar.
+    span_days = n * 2 + 30
+    start = (pd.Timestamp(date) - pd.Timedelta(days=span_days)).strftime("%Y%m%d")
+    cal = pro.trade_cal(exchange=exchange, start_date=start, end_date=date, is_open=1)
+    days = sorted(d for d in cal["cal_date"].astype(str) if d < date)
+    if not days:
+        return start
+    return days[-n] if len(days) >= n else days[0]

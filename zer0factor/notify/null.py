@@ -18,3 +18,6 @@ class NullNotifier:
 
     def notify_error(self, stage: str, exc: Exception) -> None:
         pass
+
+    def notify_warning(self, stage: str, issues: list[str]) -> None:
+        pass

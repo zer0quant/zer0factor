@@ -297,3 +297,21 @@ compute-market-cap ┼─> build-factors raw ─> build-factors preprocess
 
 - `universe = "all"` 只取当前在市股票，全量重建时会抹掉已退市股的历史因子值，存在幸存者偏差。
 - idiosyncratic_vol 依赖的 ff3 `common_returns` 文件同样需要增量续建（zer0alpha）。
+
+## 8. 实施进度
+
+### 2026-11-09：第 1、2 步完成
+
+- **`check-freshness` 命令**（`zer0factor/freshness.py`、`zer0factor/cli/freshness_cmds.py`）
+  - 比较行情（daily_kline、daily_basic、adj_factor）、股票池（`process_universe` 和标准口径的股票池）、各因子族、最新标准评估的截止日。只列出 `date=*` 目录，在真实数据上约 9 秒，大部分时间花在加载因子族上。
+  - 股票池落后时报警，目标截止日截到股票池的截止日（决定 1）。
+  - 有问题时退出码为 1；`--notify` 发飞书卡片（`notify_warning`）；`--json` 给定时任务读取。
+  - 评估的截止日本来就比因子晚几天：最后几天还算不出前向收益。允许的差距为 `max(period)`，`open_t1` 再加 1 天。1D、open_t1 的标准口径允许晚 2 个交易日，不算落后。
+  - 当前 venv 里 import 不了 zer0alpha，它的因子族会被跳过，并在 stderr 提示。工作台用的是 `[web.tasks] python` 指定的解释器，那个环境里能 import。
+- **直接读行情的族的回看修复**（`services/compute.py`、`cli/compute_cmds.py`）
+  - `compute_and_store` 增加 `load_start_date`：先从更早的日期读行情，计算完只写 `>= start_date` 的分区。
+  - 回看期由 `FactorFamily.lookback` 声明，单位为交易日，用 zer0share 的 `trade_cal` 换算成日期。
+  - **与 §3.3 不同的地方**：`lookback` 的默认值改为 `None`，即重读全部历史，而不是取 `min_window`。原因是 zer0alpha 的族还没有声明回看期，其中 ema_atr_bias 是递归计算，按窗口长度回看会悄悄算错。默认全量能保证结果正确，只是慢；各族在 zer0alpha 里显式写上 `lookback` 以后才会提速（ema_atr_bias 保持 `None`）。
+- `FactorStorage.dates()`、`last_date()`，以及模块函数 `partition_dates()`、`last_partition_date()`。这几个函数只列目录、不读数据，`factor_stats()` 也改为调用它们。
+
+**待办：** 用修复后的代码重建 zer0alpha 中直接读行情的族 20260516 之后的数据（如果这次补数据时用 `--start-date` 构建过它们）。

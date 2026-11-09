@@ -18,7 +18,12 @@ from zer0factor.pipeline import (
     run_build_stage,
     update_factor_registry,
 )
-from zer0factor.services.compute import FactorComputeService, ZScorePostProcess
+from zer0factor.services.compute import (
+    FactorComputeService,
+    ZScorePostProcess,
+    resolve_load_start,
+    trading_days_before,
+)
 
 
 @cli.command("compute-returns")
@@ -148,6 +153,7 @@ def build_factors_command(
             process_universe=cfg.process_universe,
             workers=workers,
             notifier=notifier,
+            history_start=cfg.start_date,
         )
     elif family_name in FAMILIES:
         rows = run_build_stage(
@@ -199,11 +205,24 @@ def _run_data_provider_family(
     process_universe,
     workers,
     notifier,
+    history_start,
 ):
     if stage not in {"raw", "preprocess", "all"}:
         raise ValueError(f"unknown build stage: {stage}")
     rows: dict[str, int] = {}
     if stage in {"raw", "all"}:
+        load_start = resolve_load_start(
+            getattr(family, "lookback", None),
+            write_start=start_date,
+            history_start=history_start,
+            trading_days_before=lambda date, n: trading_days_before(app.pro, date, n),
+        )
+        logger.info(
+            "data_provider_family_load_range family={} load_start={} write_start={}",
+            family.name,
+            load_start,
+            start_date,
+        )
         notifier.notify_start("raw", details={"family": family.name})
         t0 = time.monotonic()
         try:
@@ -214,6 +233,7 @@ def _run_data_provider_family(
                     start_date=start_date,
                     end_date=end_date,
                     universe=universe,
+                    load_start_date=load_start,
                 )
             )
         except Exception as exc:
