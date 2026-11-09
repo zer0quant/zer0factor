@@ -354,3 +354,16 @@ compute-market-cap ┼─> build-factors raw ─> build-factors preprocess
   - 增量单因子约 100 秒，全量约 136 秒，再加上共享数据的 45 秒。
 - **实测结论**：提速以后，增量相比全量省得不多。剩下的时间主要花在汇总指标上（alphalens 组合构造），每次都要全量重算。要再明显提速，需要优化 alphalens 组合收益部分的实现，可以作为下一项。
 
+### 2026-11-10：第 7 步完成（日更命令）
+
+- `update-daily`（`zer0factor/cli/daily_cmds.py`，步骤编排在 `zer0factor/daily.py`）：
+  1. 检查截止日；
+  2. `compute-returns`、`compute-market-cap`、`build-factors <族>`，都带 `--incremental --end-date <目标截止日>`；
+  3. 对最新标准 run 的全部因子执行 `evaluate-factors --incremental`，评估设定取 `[web.standard]`；
+  4. 再检查一次截止日，发飞书：成功发绿卡；有失败或截止日问题发红卡。
+- 任一步失败即停止，后续步骤标为“未执行”，退出码为 1。股票池落后只报警，不算失败（决定 1）。
+- `--full-eval` 把评估改为全量，用于每月对账（决定 4）；`--skip-eval`、`--dry-run`、`--family`（可重复）、`--workers`、`--rebuild-tail`、`--notify`。
+- 在真实数据上 dry-run 正常：目标截止日 20261106，评估基准自动选到 20261109_154727。
+- 注意：现有的标准 run 是旧的单文件布局，第一次增量评估无法硬链接，会把所有年份完整写一遍（约 19GB）；之后的增量 run 才只新写当年。
+- 定时任务（crontab 等）还没有配置，需要用户决定运行时间和运行环境。
+

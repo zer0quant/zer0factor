@@ -28,13 +28,8 @@ def _factor_groups(cfg) -> tuple[dict[str, list[str]], list[str]]:
     return groups, errors
 
 
-@cli.command("check-freshness")
-@click.option("--json", "as_json", is_flag=True, default=False, help="以 JSON 输出")
-@click.option("--notify", is_flag=True, default=False, help="有问题时发飞书提醒")
-@click.pass_context
-def check_freshness_command(ctx, as_json, notify):
-    """检查行情、股票池、因子、评估四方的截止日是否一致；不一致时退出码为 1。"""
-    cfg = load_config(ctx.obj["config_path"])
+def collect_report(cfg):
+    """Freshness report for ``cfg`` plus families that failed to load."""
     groups, family_errors = _factor_groups(cfg)
     report = check_freshness(
         zer0share_data_dir=cfg.zer0share_data_dir,
@@ -43,6 +38,17 @@ def check_freshness_command(ctx, as_json, notify):
         factor_groups=groups,
         evaluation=latest_standard_evaluation(cfg.web.evaluations_dir, cfg.web.standard),
     )
+    return report, family_errors
+
+
+@cli.command("check-freshness")
+@click.option("--json", "as_json", is_flag=True, default=False, help="以 JSON 输出")
+@click.option("--notify", is_flag=True, default=False, help="有问题时发飞书提醒")
+@click.pass_context
+def check_freshness_command(ctx, as_json, notify):
+    """检查行情、股票池、因子、评估四方的截止日是否一致；不一致时退出码为 1。"""
+    cfg = load_config(ctx.obj["config_path"])
+    report, family_errors = collect_report(cfg)
     click.echo(report.to_json() if as_json else format_report(report))
     for err in family_errors:
         logger.warning("freshness_family_skipped {}", err)

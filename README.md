@@ -138,6 +138,7 @@ uv run python main.py web-warm --run <run_id> --workers 12
 | `status` | 查看当前存储里有哪些已计算因子 |
 | `factor-list` | 对比注册表和本地存储里的因子状态 |
 | `factor-info <name>` | 查看单个因子的注册信息和存储状态 |
+| `update-daily` | 日更：截止日检查 → 增量构建 → 增量评估 → 飞书摘要（`--dry-run` 只列步骤） |
 | `check-freshness` | 检查行情、股票池、因子、评估的截止日是否一致（不一致时退出码为 1，`--notify` 发飞书） |
 | `compute-returns` | 计算内置收益率因子并写入本地存储（`--incremental` 只补新日期） |
 | `compute-market-cap` | 计算内置市值因子并写入本地存储（`--incremental` 只补新日期） |
@@ -158,7 +159,19 @@ uv run python main.py web-warm --run <run_id> --workers 12
 
 ### 日常增量更新
 
-行情更新后按以下顺序执行，每一步都只补新交易日：
+一条命令完成日更（适合放进定时任务）：
+
+```bash
+uv run python main.py update-daily --notify            # 每个交易日
+uv run python main.py update-daily --full-eval --notify # 每月一次：评估改为全量对账
+```
+
+- 先检查截止日，目标截止日取行情和股票池中较早的一个。股票池落后时照常更新到股票池的截止日，并发飞书提醒。
+- 依次执行 `compute-returns`、`compute-market-cap`、各因子族的 `build-factors`（默认 `rolling_return`，可以用 `--family` 多次指定），都带 `--incremental`；最后对最新标准 run 的全部因子做增量评估。
+- 任一步失败即停止，退出码为 1。`--skip-eval` 只构建，`--dry-run` 只列出计划。
+- zer0alpha 的因子族要在能 import zer0alpha 的环境里运行。
+
+也可以分步执行：
 
 ```bash
 uv run python main.py check-freshness            # 截止日不一致时先处理（股票池落后要在 zer0share 运行 build-universe）

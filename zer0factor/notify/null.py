@@ -21,3 +21,6 @@ class NullNotifier:
 
     def notify_warning(self, stage: str, issues: list[str]) -> None:
         pass
+
+    def notify_success(self, stage: str, lines: list[str]) -> None:
+        pass
