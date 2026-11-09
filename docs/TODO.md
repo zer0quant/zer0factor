@@ -1,5 +1,19 @@
 # 待办
 
+## 数据流水线
+
+### 因子增量更新 + 增量评估
+
+- **需求**：因子增量更新，只追加新交易日的因子值；评估增量更新，只补算新日期，合并进已有 run，或生成新的统一口径 run。
+- **动机**：2026-11-09 发现工作台的评估数据停在 20260515，行情已经到 20261106。现在只能全量补：build-universe → compute-returns / compute-market-cap 全量 → build-factors → evaluate-factors 全量 129 个因子，约 3 小时。其中评估约 1 小时 40 分钟，每次都从 20160101 起算。
+- **现状问题**：
+  - 股票池停在 20260624，因子停在 20260515，评估一直没有重跑，三者的截止日没有任何检查。zer0share 的 `build-universe` 不在定时任务里，股票池断了，下游跟着全部卡住。
+  - `compute-returns` 和 `compute-market-cap` 没有 `--start-date`，每次都从 2016 年全量重算。
+  - `build-factors --start-date` 对直接读行情的因子族（`uses_data_provider=True`，如 zer0alpha 的 amount_stats、ma_bias、ema_atr_bias）不回看：行情只从 start_date 开始读，滚动窗口在起点附近只有半截数据，算出的值是错的。基于已存因子派生的族（rolling_return 等）读全部历史，结果正确。
+  - 评估没有增量模式，也没有“截止日”的概念，补一天也要全量重跑。
+- **设计方案**：见 [docs/superpowers/specs/2026-11-09-incremental-update-design.md](superpowers/specs/2026-11-09-incremental-update-design.md)，待确认后实现。
+- 记录于 2026-11-09。
+
 ## Web 工作台
 
 ### 看板按股票池切换评估口径（等数据）
