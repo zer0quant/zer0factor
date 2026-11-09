@@ -2,7 +2,13 @@ import os
 import time
 
 from zer0factor.config import StandardSetting
-from zer0factor.web.runs import SummaryCache, is_standard, scan_runs, standard_rows
+from zer0factor.web.runs import (
+    SummaryCache,
+    is_standard,
+    latest_data_end,
+    scan_runs,
+    standard_rows,
+)
 
 STD = StandardSetting(quantiles=5)
 
@@ -87,3 +93,33 @@ def test_scan_runs_skips_cancelled_and_excluded(make_run, evaluations_dir):
     make_run("r3", ["fa"])
     (evaluations_dir / "r2" / ".cancelled").write_text("x")
     assert [r.run_id for r in scan_runs(evaluations_dir, exclude={"r3"})] == ["r1"]
+
+
+def test_is_standard_true_when_end_date_is_latest_data_date(make_run, evaluations_dir):
+    make_run("20260101_000000", ["fa"])
+    latest = latest_data_end(scan_runs(evaluations_dir), SummaryCache())
+    assert latest is not None and len(latest) == 8
+    make_run("20260201_000000", ["fa"], metadata={"end_date": latest})
+    runs = scan_runs(evaluations_dir)
+    newer = next(r for r in runs if r.run_id == "20260201_000000")
+    assert is_standard(newer, STD, latest)
+    rows = standard_rows(runs, STD, SummaryCache())
+    assert rows["fa"][0].run_id == "20260201_000000"
+
+
+def test_is_standard_false_when_end_date_before_latest(make_run, evaluations_dir):
+    make_run("20260101_000000", ["fa"])
+    make_run("20260201_000000", ["fa"], metadata={"end_date": "20200101"})
+    runs = scan_runs(evaluations_dir)
+    latest = latest_data_end(runs, SummaryCache())
+    older_end = next(r for r in runs if r.run_id == "20260201_000000")
+    assert not is_standard(older_end, STD, latest)
+    assert standard_rows(runs, STD, SummaryCache())["fa"][0].run_id == "20260101_000000"
+
+
+def test_latest_data_end_none_without_summaries(make_run, evaluations_dir):
+    make_run("20260101_000000", ["fa"], write_summary=False, metadata={"end_date": "20250101"})
+    runs = scan_runs(evaluations_dir)
+    latest = latest_data_end(runs, SummaryCache())
+    assert latest is None
+    assert not is_standard(runs[0], STD, latest)

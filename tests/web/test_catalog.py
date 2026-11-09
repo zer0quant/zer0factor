@@ -61,3 +61,17 @@ def test_runs_for_and_lookup(stored, make_run, make_config):
     assert [r.run_id for r in catalog.runs_for("fa")] == ["20260102_000000", "20260101_000000"]
     assert catalog.has_factor("fc") and not catalog.has_factor("../etc")
     assert catalog.get_run("nope") is None
+
+
+def test_latest_data_end_computed_once_per_catalog(stored, make_run, make_config):
+    make_run("20260101_000000", ["fa"])
+    make_run("20260201_000000", ["fb"])
+    catalog = build_catalog(make_config(REGISTRY))
+    calls = []
+    real_get = catalog.summary_cache.get
+    catalog.summary_cache.get = lambda run: calls.append(run.run_id) or real_get(run)
+    for _ in range(3):
+        for run in catalog.runs:
+            catalog.is_standard(run)
+    assert catalog.latest_end is not None
+    assert len(calls) <= len(catalog.runs)

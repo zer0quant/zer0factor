@@ -90,10 +90,13 @@ def scan_runs(evaluations_dir: Path, exclude: frozenset[str] | set[str] = frozen
     return runs
 
 
-def is_standard(run: RunInfo, std: StandardSetting) -> bool:
+def is_standard(run: RunInfo, std: StandardSetting, latest_end: str | None = None) -> bool:
+    """Matches ``[web.standard]`` and runs to the latest data: no end date, or an end date
+    on or after ``latest_end`` (the latest data date any evaluation has reached)."""
+    to_latest = run.end_date is None or (latest_end is not None and run.end_date >= latest_end)
     return (
         run.start_date == std.start_date
-        and run.end_date is None
+        and to_latest
         and run.quantiles == std.quantiles
         and run.return_type == std.return_type
         and run.universe == std.universe
@@ -139,12 +142,40 @@ def summary_row(
     return rows.iloc[0].to_dict()
 
 
+def _yyyymmdd(value) -> str | None:
+    try:
+        ts = pd.Timestamp(str(value))
+    except (TypeError, ValueError):
+        return None
+    return None if pd.isna(ts) else ts.strftime("%Y%m%d")
+
+
+def latest_data_end(runs: list[RunInfo], cache: SummaryCache) -> str | None:
+    """Latest ``end_date`` in any run's summary (``YYYYMMDD``), i.e. the latest data date."""
+    ends = []
+    for run in runs:
+        if not run.has_summary:
+            continue
+        summary = cache.get(run)
+        if summary is None or "end_date" not in summary:
+            continue
+        ends += [d for d in map(_yyyymmdd, summary["end_date"].dropna().unique()) if d]
+    return max(ends) if ends else None
+
+
+_UNSET = object()
+
+
 def standard_rows(
-    runs: list[RunInfo], std: StandardSetting, cache: SummaryCache
+    runs: list[RunInfo], std: StandardSetting, cache: SummaryCache, latest_end=_UNSET
 ) -> dict[str, tuple[RunInfo, dict]]:
+    """Latest standard run's summary row per factor. ``latest_end`` defaults to
+    ``latest_data_end(runs, cache)``; pass a precomputed value to skip that scan."""
     result: dict[str, tuple[RunInfo, dict]] = {}
+    if latest_end is _UNSET:
+        latest_end = latest_data_end(runs, cache)
     for run in sorted(runs, key=lambda r: r.run_id, reverse=True):
-        if not run.has_summary or not is_standard(run, std):
+        if not run.has_summary or not is_standard(run, std, latest_end):
             continue
         summary = cache.get(run)
         if summary is None:

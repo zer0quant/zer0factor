@@ -31,7 +31,7 @@ from zer0factor.web.families import DiscoveryError, FamilyCatalog
 from zer0factor.web.jsonsafe import to_jsonable
 from zer0factor.jobs.scheduler import Scheduler
 from zer0factor.jobs.store import TaskStore
-from zer0factor.web.runs import RunInfo, is_standard, summary_row
+from zer0factor.web.runs import RunInfo, summary_row
 from zer0factor.web.tasks_api import TaskContext, active_run_ids, register_task_routes
 
 MIN_COMPARE, MAX_COMPARE = 2, 8
@@ -54,7 +54,7 @@ def _run_summary(run: RunInfo, catalog: Catalog) -> dict:
         "transaction_cost_bps": run.transaction_cost_bps,
         "n_factors": len(run.factor_names),
         "has_summary": run.has_summary,
-        "standard": is_standard(run, catalog.standard),
+        "standard": catalog.is_standard(run),
     }
 
 

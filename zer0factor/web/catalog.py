@@ -4,12 +4,20 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime
+from functools import cached_property
 
 from loguru import logger
 
 from zer0factor.config import Config, StandardSetting
 from zer0factor.registry import FactorMeta, FactorRegistry
-from zer0factor.web.runs import RunInfo, SummaryCache, scan_runs, standard_rows
+from zer0factor.web.runs import (
+    RunInfo,
+    SummaryCache,
+    is_standard,
+    latest_data_end,
+    scan_runs,
+    standard_rows,
+)
 
 # summary column -> board field
 BOARD_COLUMNS: dict[str, str] = {
@@ -72,8 +80,16 @@ class Catalog:
             reverse=True,
         )
 
+    @cached_property
+    def latest_end(self) -> str | None:
+        """Latest data date any run reached; fixed per catalog (rebuilt on rescan)."""
+        return latest_data_end(self.runs, self.summary_cache)
+
+    def is_standard(self, run: RunInfo) -> bool:
+        return is_standard(run, self.standard, self.latest_end)
+
     def standard_rows(self) -> dict[str, tuple[RunInfo, dict]]:
-        return standard_rows(self.runs, self.standard, self.summary_cache)
+        return standard_rows(self.runs, self.standard, self.summary_cache, self.latest_end)
 
     def meta(self, name: str) -> dict:
         m = self.registry.get(name)
