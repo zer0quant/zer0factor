@@ -105,6 +105,10 @@ class EvaluationRequest:
     report_thresholds: ReportThresholds = field(default_factory=ReportThresholds)
     generate_report: bool = True
     analysis_family: str | None = None
+    # Incremental evaluation: extend this base run (a run directory), or with
+    # ``incremental`` pick the newest compatible run in ``output_dir``.
+    base_run_dir: Path | None = None
+    incremental: bool = False
 
     def __post_init__(self) -> None:
         if isinstance(self.factor_names, (str, bytes)):
@@ -121,6 +125,8 @@ class EvaluationRequest:
         )
         object.__setattr__(self, "registry_path", Path(self.registry_path))
         object.__setattr__(self, "output_dir", Path(self.output_dir))
+        if self.base_run_dir is not None:
+            object.__setattr__(self, "base_run_dir", Path(self.base_run_dir))
 
 
 @dataclass(frozen=True)
@@ -130,9 +136,22 @@ class EvaluationRun:
     config: EvaluationRunConfig
     started_at: datetime = field(default_factory=datetime.now)
     finished_at: datetime | None = None
+    base_run_dir: Path | None = None  # set for incremental runs
+    load_start_date: str | None = None  # shared prices/universe load from here
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "run_dir", Path(self.run_dir))
+        if self.base_run_dir is not None:
+            object.__setattr__(self, "base_run_dir", Path(self.base_run_dir))
+
+    @property
+    def data_start_date(self) -> str:
+        return self.load_start_date or self.config.start_date
+
+    def base_factor_dir(self, factor_name: str) -> Path | None:
+        if self.base_run_dir is None:
+            return None
+        return self.base_run_dir / "factors" / factor_name
 
     @property
     def summary_csv(self) -> Path:
@@ -168,6 +187,8 @@ class EvaluationRun:
             config=self.config,
             started_at=self.started_at,
             finished_at=datetime.now(),
+            base_run_dir=self.base_run_dir,
+            load_start_date=self.load_start_date,
         )
 
 

@@ -54,6 +54,7 @@ def build_summary(
     index_returns: "pd.Series | None" = None,
     transaction_cost_bps: float = 0.0,
     period_sample_counts: dict[str, int] | None = None,
+    portfolio_sink: dict | None = None,
 ) -> pd.DataFrame:
     lowest_quantile = quantile_returns.index.min()
     highest_quantile = quantile_returns.index.max()
@@ -95,6 +96,7 @@ def build_summary(
             index_returns=index_returns,
             transaction_cost_bps=transaction_cost_bps,
             clean_factor_data=clean_factor_data,
+            portfolio_sink=portfolio_sink,
         )
         for period in daily_ic.columns
     ]
@@ -124,6 +126,7 @@ def _build_period_summary(
     index_returns: pd.Series | None,
     transaction_cost_bps: float,
     clean_factor_data: pd.DataFrame | None = None,
+    portfolio_sink: dict | None = None,
 ) -> dict[str, object]:
     ic_mean = ic_values.mean()
     ic_std = ic_values.std()
@@ -189,6 +192,7 @@ def _build_period_summary(
                 short_quantile=int(short_quantile),
                 index_returns=index_returns,
                 transaction_cost_bps=transaction_cost_bps,
+                portfolio_sink=portfolio_sink,
             )
         )
 

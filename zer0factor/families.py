@@ -38,6 +38,10 @@ class FactorFamily(ABC):
     windows: tuple[int, ...]
     profiles: tuple[PreprocessProfile, ...] = PROFILES
     uses_data_provider: bool = False
+    # Trading days of market data a ``uses_data_provider`` family needs before the
+    # first date it writes. ``None`` = unknown or unbounded (EMA/ATR-style recursive
+    # indicators): building from a start date then reloads the whole history.
+    lookback: int | None = None
 
     @abstractmethod
     def raw_name(self, base_factor: str, window: int) -> str: ...

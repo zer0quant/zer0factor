@@ -50,6 +50,8 @@ def _run_evaluation_command(
     benchmark_index: str | None = None,
     workers: int = 1,
     run_id: str | None = None,
+    incremental: bool = False,
+    base_run_dir: Path | None = None,
 ) -> None:
     result = _run_evaluation_job(
         ctx,
@@ -66,6 +68,8 @@ def _run_evaluation_command(
         benchmark_index=benchmark_index,
         workers=workers,
         run_id=run_id,
+        incremental=incremental,
+        base_run_dir=base_run_dir,
     )
     click.echo(f"Evaluation run {_result_run_id(result)} written to {_result_output_dir(result)}")
 
@@ -86,6 +90,8 @@ def _run_evaluation_job(
     benchmark_index: str | None = None,
     workers: int = 1,
     run_id: str | None = None,
+    incremental: bool = False,
+    base_run_dir: Path | None = None,
 ):
     request = EvaluationRequest(
         factor_names=factor_names,
@@ -100,6 +106,8 @@ def _run_evaluation_job(
         benchmark_index=benchmark_index,
         transaction_cost_bps=transaction_cost_bps,
         workers=workers,
+        incremental=incremental,
+        base_run_dir=base_run_dir,
     )
     return _run_evaluation_request(ctx, request, run_id=run_id)
 
@@ -231,6 +239,13 @@ def evaluate_factor_command(
 )
 @click.option("--workers", default=1, show_default=True, type=int, help="并行评估进程数")
 @click.option("--run-id", default=None, help="指定 run 目录名（默认按当前时间生成）")
+@click.option(
+    "--incremental",
+    is_flag=True,
+    default=False,
+    help="增量评估：以 output-dir 下最新的同口径 run 为底，只补算新日期（找不到时全量）",
+)
+@click.option("--base-run", default=None, help="增量评估的基准 run id（在 output-dir 下）")
 @click.pass_context
 def evaluate_factors_command(
     ctx,
@@ -247,8 +262,12 @@ def evaluate_factors_command(
     benchmark_index,
     workers,
     run_id,
+    incremental,
+    base_run,
 ):
     """Evaluate one or more stored factors."""
+    if base_run is not None and not (Path(output_dir) / base_run).is_dir():
+        raise click.BadParameter(f"run not found in {output_dir}: {base_run}", param_hint="--base-run")
     _run_evaluation_command(
         ctx,
         factor_names=factor_names,
@@ -264,6 +283,8 @@ def evaluate_factors_command(
         benchmark_index=benchmark_index,
         workers=workers,
         run_id=run_id,
+        incremental=incremental,
+        base_run_dir=Path(output_dir) / base_run if base_run else None,
     )
 
 

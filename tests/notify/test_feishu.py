@@ -123,3 +123,14 @@ def test_notify_error_sends_red_card():
     )
     assert "ValueError" in fields_content
     assert "bad data" in fields_content
+
+
+def test_notify_warning_sends_red_card_with_issues():
+    n = _make_notifier()
+    with patch.object(n, "_send") as send:
+        n.notify_warning("check-freshness", ["股票池落后", "评估落后"])
+    card = send.call_args[0][0]
+    assert card["card"]["header"]["template"] == "red"
+    assert "check-freshness" in card["card"]["header"]["title"]["content"]
+    contents = [f["text"]["content"] for f in card["card"]["elements"][0]["fields"]]
+    assert "股票池落后" in contents[0] and "评估落后" in contents[1]

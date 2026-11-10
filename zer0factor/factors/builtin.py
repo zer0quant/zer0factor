@@ -19,6 +19,10 @@ MARKET_CAP_FACTORS = (
     LogCirculatingMarketCap(),
 )
 
+# Trading days of market data needed before the first written date.
+RETURN_FACTORS_LOOKBACK = 1  # x / x.shift(1)
+MARKET_CAP_FACTORS_LOOKBACK = 0  # same-day values; z-scores are cross-sectional
+
 FACTOR_GROUPS = {
     "returns": RETURN_FACTORS,
     "market_cap": MARKET_CAP_FACTORS,

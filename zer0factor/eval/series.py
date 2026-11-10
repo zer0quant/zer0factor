@@ -15,7 +15,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from zer0factor.eval.metrics.returns import build_portfolio_daily_returns
+from zer0factor.eval.metrics.returns import build_portfolio_daily_returns, portfolio_key
 
 SERIES_FILES = (
     "quantile_daily_returns.parquet",
@@ -53,16 +53,37 @@ def pearson_daily_ic(clean_factor_data: pd.DataFrame) -> pd.DataFrame:
     return ic
 
 
-def portfolio_daily_returns(clean_factor_data: pd.DataFrame, summary_row: Mapping) -> pd.DataFrame:
-    series = build_portfolio_daily_returns(
-        clean_factor_data,
+def portfolio_daily_returns(
+    clean_factor_data: pd.DataFrame,
+    summary_row: Mapping,
+    precomputed: Mapping | None = None,
+) -> pd.DataFrame:
+    """Long/short/ls/benchmark daily returns for one summary row.
+
+    ``precomputed`` holds series the summary already built (see
+    ``build_pyfolio_return_metrics(portfolio_sink=...)``); a match by
+    period, direction, quantiles and cost is reused as is.
+    """
+    params = dict(
         direction=int(summary_row["factor_direction"]),
         period=str(summary_row["period"]),
         long_quantile=int(summary_row["long_quantile"]),
         short_quantile=int(summary_row["short_quantile"]),
         transaction_cost_bps=float(summary_row.get("transaction_cost_bps") or 0.0),
-        include_full=False,
     )
+    series = None
+    if precomputed:
+        series = precomputed.get(
+            portfolio_key(
+                params["period"],
+                params["direction"],
+                params["long_quantile"],
+                params["short_quantile"],
+                params["transaction_cost_bps"],
+            )
+        )
+    if series is None:
+        series = build_portfolio_daily_returns(clean_factor_data, **params, include_full=False)
     frame = pd.DataFrame({"long": series.long, "short": series.short, "ls": series.ls})
     frame["benchmark"] = (
         series.benchmark.reindex(frame.index) if series.benchmark is not None else np.nan
@@ -71,7 +92,9 @@ def portfolio_daily_returns(clean_factor_data: pd.DataFrame, summary_row: Mappin
 
 
 def build_chart_series(
-    clean_factor_data: pd.DataFrame, summary: pd.DataFrame
+    clean_factor_data: pd.DataFrame,
+    summary: pd.DataFrame,
+    portfolio: Mapping | None = None,
 ) -> dict[str, pd.DataFrame]:
     quantile_parts = []
     portfolio_parts = []
@@ -83,7 +106,7 @@ def build_chart_series(
         q.columns = [f"{period}:{c}" for c in q.columns]
         quantile_parts.append(q)
         try:
-            p = portfolio_daily_returns(clean_factor_data, row)
+            p = portfolio_daily_returns(clean_factor_data, row, portfolio)
         except Exception:
             p = pd.DataFrame(index=q.index, columns=PORTFOLIO_COLUMNS, dtype=float)
         p.columns = [f"{period}:{c}" for c in p.columns]

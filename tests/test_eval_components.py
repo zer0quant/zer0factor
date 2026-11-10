@@ -88,3 +88,47 @@ def test_metrics_calculator_suppresses_metric_stdout(monkeypatch, capsys):
 
     pd.testing.assert_frame_equal(result, expected)
     assert capsys.readouterr().out == ""
+
+
+def test_period_sample_counts_single_period_reuses_clean_data(monkeypatch):
+    def must_not_clean(*args, **kwargs):
+        raise AssertionError("single-period counts must reuse clean_factor_data")
+
+    monkeypatch.setattr(
+        "zer0factor.eval.calculator.get_clean_factor_and_forward_returns", must_not_clean
+    )
+    counts = MetricsCalculator().calculate_period_sample_counts(
+        pd.Series(dtype=float),
+        pd.DataFrame(),
+        quantiles=2,
+        periods=(1,),
+        max_loss=0.35,
+        clean_factor_data=pd.DataFrame({"1D": [0.1, None, 0.2], "factor": [1.0, 2.0, 3.0]}),
+    )
+    assert counts == {"1D": 2}
+
+
+def test_period_sample_counts_single_period_equals_recomputed():
+    import numpy as np
+
+    rng = np.random.default_rng(0)
+    dates = pd.bdate_range("2024-01-01", periods=60)
+    assets = [f"A{i}" for i in range(25)]
+    prices = pd.DataFrame(
+        100 * np.exp(np.cumsum(rng.normal(0, 0.02, size=(60, 25)), axis=0)),
+        index=dates, columns=assets,
+    )
+    index = pd.MultiIndex.from_product([dates[:-5], assets], names=["date", "asset"])
+    factor = pd.Series(rng.normal(size=len(index)), index=index, name="factor")
+    calc = MetricsCalculator()
+    for periods in ((1,), (5,)):
+        clean = calc.clean_factor_and_forward_returns(
+            factor, prices, quantiles=5, periods=periods, max_loss=0.35
+        )
+        reused = calc.calculate_period_sample_counts(
+            factor, prices, quantiles=5, periods=periods, max_loss=0.35, clean_factor_data=clean
+        )
+        recomputed = calc.calculate_period_sample_counts(
+            factor, prices, quantiles=5, periods=periods, max_loss=0.35
+        )
+        assert reused == recomputed

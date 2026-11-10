@@ -1020,11 +1020,14 @@ ma_bias = "fake_external_factors:MA_BIAS_FAMILY"
             calls["provider"] = provider
             calls["storage"] = storage
 
-        def compute_and_store(self, factors, *, start_date, end_date, universe):
+        def compute_and_store(
+            self, factors, *, start_date, end_date, universe, load_start_date=None
+        ):
             calls["factors"] = factors
             calls["start_date"] = start_date
             calls["end_date"] = end_date
             calls["universe"] = universe
+            calls["load_start_date"] = load_start_date
             return {"ma_bias_5d": 3}
 
     monkeypatch.setattr("zer0factor.cli.compute_cmds.AppContext", FakeAppContext)
@@ -1050,6 +1053,44 @@ ma_bias = "fake_external_factors:MA_BIAS_FAMILY"
     assert calls["end_date"] is None
     assert calls["universe"] == "all"
     assert "ma_bias_5d: 3" in result.output
+    assert calls["load_start_date"] == "20240101"
+
+    # --start-date on a family without declared lookback reloads full history
+    # but still writes only from the requested start date.
+    result = CliRunner().invoke(
+        cli,
+        [
+            "--config", str(config_path),
+            "build-factors", "--family", "ma_bias", "--stage", "raw",
+            "--start-date", "20240301",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert calls["start_date"] == "20240301"
+    assert calls["load_start_date"] == "20240101"
+
+    # A declared lookback loads only that many trading days before the start.
+    module.MA_BIAS_FAMILY.lookback = 5
+    seen = []
+
+    def fake_trading_days_before(pro, date, n):
+        seen.append((date, n))
+        return "20240222"
+
+    monkeypatch.setattr(
+        "zer0factor.cli.compute_cmds.trading_days_before", fake_trading_days_before
+    )
+    result = CliRunner().invoke(
+        cli,
+        [
+            "--config", str(config_path),
+            "build-factors", "--family", "ma_bias", "--stage", "raw",
+            "--start-date", "20240301",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert seen == [("20240301", 5)]
+    assert calls["load_start_date"] == "20240222"
 
 
 def _write_eval_settings(tmp_path):
@@ -1137,3 +1178,56 @@ def test_evaluate_factors_passes_run_id(monkeypatch, tmp_path):
     )
     assert result.exit_code == 0, result.output
     assert calls["kwargs"] == {"run_id": "r1"}
+
+
+def test_evaluate_factors_passes_incremental_and_base_run(monkeypatch, tmp_path):
+    from zer0factor.notify import NullNotifier
+
+    requests = []
+
+    class FakeAppContext:
+        storage = object()
+        pro = object()
+
+        def __init__(self, cfg):
+            pass
+
+        def configure_logging(self):
+            pass
+
+    class FakeService:
+        @classmethod
+        def from_dependencies(cls, **kwargs):
+            return cls()
+
+        def run(self, request, **kwargs):
+            requests.append(request)
+            return types.SimpleNamespace(
+                run=types.SimpleNamespace(run_id="r1", run_dir=tmp_path / "r1"),
+                factor_results=(),
+                report=None,
+            )
+
+    monkeypatch.setattr(
+        "zer0factor.cli.evaluate_cmds.load_config",
+        lambda path: types.SimpleNamespace(start_date="20160101", end_date=""),
+    )
+    monkeypatch.setattr("zer0factor.cli.evaluate_cmds.AppContext", FakeAppContext)
+    monkeypatch.setattr("zer0factor.cli.evaluate_cmds.EvaluationService", FakeService)
+    monkeypatch.setattr("zer0factor.cli.evaluate_cmds.load_notifier", lambda cfg: NullNotifier())
+    out = tmp_path / "evaluations"
+    (out / "20261109_154727").mkdir(parents=True)
+    base = ["--config", str(tmp_path / "s.toml"), "evaluate-factors", "fa", "--output-dir", str(out)]
+
+    result = CliRunner().invoke(cli, [*base, "--incremental"])
+    assert result.exit_code == 0, result.output
+    assert requests[-1].incremental is True
+    assert requests[-1].base_run_dir is None
+
+    result = CliRunner().invoke(cli, [*base, "--base-run", "20261109_154727"])
+    assert result.exit_code == 0, result.output
+    assert requests[-1].base_run_dir == out / "20261109_154727"
+
+    result = CliRunner().invoke(cli, [*base, "--base-run", "missing"])
+    assert result.exit_code == 2
+    assert "missing" in result.output

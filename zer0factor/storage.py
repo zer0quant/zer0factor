@@ -104,14 +104,22 @@ class FactorStorage:
             ).fetchall()
         return [r[0] for r in rows]
 
+    def dates(self, factor_name: str) -> list[str]:
+        """Partition dates (YYYYMMDD, ascending) holding data. Lists dirs only."""
+        return partition_dates(self._factor_dir / factor_name)
+
+    def last_date(self, factor_name: str) -> str | None:
+        """Latest partition date holding data, or None. Lists dirs only."""
+        dates = self.dates(factor_name)
+        return dates[-1] if dates else None
+
     def factor_stats(self, factor_name: str) -> FactorStats | None:
         factor_path = self._factor_dir / factor_name
         if not factor_path.exists():
             return None
-        partitions = sorted(factor_path.glob("date=*/*.parquet"))
-        if not partitions:
+        dates = self.dates(factor_name)
+        if not dates:
             return None
-        dates = sorted({p.parent.name.split("=")[1] for p in partitions})
         start_date = dates[0]
         end_date = dates[-1]
         pattern = str(factor_path / "date=*" / "*.parquet")
@@ -122,3 +130,18 @@ class FactorStorage:
         if row is None or row[0] == 0:
             return None
         return FactorStats(rows=int(row[0]), start_date=start_date, end_date=end_date)
+
+
+def partition_dates(table_dir: Path) -> list[str]:
+    """Sorted ``date=YYYYMMDD`` partitions under ``table_dir`` that contain parquet files."""
+    table_dir = Path(table_dir)
+    if not table_dir.is_dir():
+        return []
+    return sorted(
+        {p.parent.name.split("=", 1)[1] for p in table_dir.glob("date=*/*.parquet")}
+    )
+
+
+def last_partition_date(table_dir: Path) -> str | None:
+    dates = partition_dates(table_dir)
+    return dates[-1] if dates else None

@@ -54,7 +54,18 @@ class MetricsCalculator:
         quantiles: int,
         periods: Sequence[int],
         max_loss: float,
+        clean_factor_data: pd.DataFrame | None = None,
     ) -> dict[str, int]:
+        """Per-period sample counts, each cleaned with that period alone.
+
+        With a single period that clean is exactly ``clean_factor_data`` (same
+        inputs, same call), so it is reused instead of being recomputed.
+        """
+        periods = tuple(periods)
+        if clean_factor_data is not None and len(periods) == 1:
+            label = f"{periods[0]}D"
+            count = clean_factor_data[label].count() if label in clean_factor_data else 0
+            return {label: int(count)}
         counts = {}
         for period in periods:
             period_label = f"{period}D"

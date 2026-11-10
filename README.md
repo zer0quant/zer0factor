@@ -50,32 +50,23 @@ uv run python main.py show-summary                        # 查看评估结果
 
 ## 更新到最新数据
 
-按下面的顺序执行。前两步在 `zer0share` 目录下，后面的在本项目目录下。
+先在 `zer0share` 目录下同步行情并续建股票池（股票池不会随行情自动更新）：
 
 ```bash
-# 1. 同步行情，再续建股票池（股票池不会随行情自动更新）
 uv run python main.py sync --stock
 uv run python main.py build-universe
-
-# 2. 检查数据：缺失的交易日，以及行数异常的分区（例如单日只有 5000 行，可能是接口分页截断）
-uv run python main.py quality check --market stock --mode full --start-date <起始日> --end-date <截止日>
-
-# 3. 重算基础因子（目前只支持全量重算，约 3 分钟一组）
-uv run python main.py compute-returns
-uv run python main.py compute-market-cap
-
-# 4. 派生因子：从已有因子的下一个交易日开始增量构建
-uv run python main.py build-factors --family rolling_return --start-date <已有因子截止日的下一天> --workers 16
-
-# 5. 按统一口径评估（参数和 [web.standard] 保持一致，不传 --end-date 表示评估到最新）
-uv run python main.py evaluate-factors <因子名...> --start-date 20160101 --periods 1 \
-  --quantiles 10 --return-type open_t1 --universe univ_trade_base --workers 8
 ```
 
-注意事项：
+再回到本项目，一条命令完成日更（适合放进定时任务）：
 
-- 不要用 `--start-date` 增量构建直接读取行情的因子族（`uses_data_provider=True`），这类因子族开头会缺少回看窗口，结果是错的。详见 [增量更新方案](docs/superpowers/specs/2026-11-09-incremental-update-design.md)。
-- 评估 129 个因子，8 个 worker 大约需要 2 小时。
+```bash
+uv run python main.py update-daily --notify             # 每个交易日：截止日检查 → 增量构建 → 增量评估 → 飞书摘要
+uv run python main.py update-daily --full-eval --notify # 每月一次：评估改为全量对账
+```
+
+- 目标截止日取行情和股票池中较早的一个；股票池落后时照常更新到股票池的截止日，并发飞书提醒。
+- 任一步失败即停止，退出码为 1。`--dry-run` 只列出计划，`--skip-eval` 只构建不评估。
+- 也可以分步执行 `check-freshness`、`compute-returns --incremental`、`build-factors --incremental`、`evaluate-factors --incremental`，用法和增量评估与全量的差别见 [docs/incremental-update.md](docs/incremental-update.md)。
 
 ## Web 工作台
 
@@ -105,9 +96,10 @@ uv run python main.py serve                       # 打开 http://127.0.0.1:8600
 | 分类 | 命令 |
 |---|---|
 | 查看 | `status`、`factor-list`、`factor-info <name>`、`families` |
-| 计算 | `compute-returns`、`compute-market-cap`、`build-factors --family <name>` |
+| 日更 | `update-daily`、`check-freshness` |
+| 计算 | `compute-returns`、`compute-market-cap`、`build-factors --family <name>`（均支持 `--incremental`） |
 | 预处理 | `standardize-factor <name>`、`neutralize-factor <name>` |
-| 评估 | `evaluate-factor <name>`、`evaluate-factors <name...>`、`evaluate-batch --file <file>` |
+| 评估 | `evaluate-factor <name>`、`evaluate-factors <name...>`（支持 `--incremental`）、`evaluate-batch --file <file>` |
 | 结果 | `show-summary`、`evaluate-summary`、`analyze-evaluation` |
 | 工作台 | `serve`、`web-warm --run <run_id>` |
 
@@ -128,6 +120,7 @@ class Ret20(Factor):
 - [因子契约](docs/factor-contract.md)：字段、输出格式、存储布局
 - [因子评估](docs/evaluation.md)：注册表、评估命令、产物和指标口径
 - [Web 工作台](docs/web-workbench.md)：页面说明、统一口径、后台任务、因子族
+- [增量更新](docs/incremental-update.md)：日更命令、增量构建与增量评估
 - [factor-research skill](docs/skills/factor-research/)：从研报到因子的完整流程
 - [TODO](docs/TODO.md) · [开发笔记](docs/devlog.md) · [贡献指南](CONTRIBUTING.md)
 
@@ -135,7 +128,7 @@ class Ret20(Factor):
 
 - 只支持本地 A 股数据和 `zer0share`。
 - `FactorFrame` 还没有提供 ST、停牌、上市天数、精确涨停等字段。
-- 基础因子只能全量重算，评估也只能全量跑，增量方案见 TODO。
+- 使用 qfq 价格的因子族不支持增量构建；增量评估只支持单一持有期。
 - API 还在实验阶段。
 
 ## 交流

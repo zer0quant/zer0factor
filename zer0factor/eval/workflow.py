@@ -23,6 +23,7 @@ from zer0factor.eval.execution import (
     SerialEvaluationExecutor,
 )
 from zer0factor.eval.figures import FactorFigureWriter
+from zer0factor.eval.incremental import check_base_run, find_base_run, shared_load_start
 from zer0factor.eval.reporting import (
     EvaluationReporter,
     MarkdownReportRenderer,
@@ -39,6 +40,9 @@ class EvaluationRunFactory:
         self,
         config: EvaluationRunConfig,
         run_id: str | None = None,
+        *,
+        base_run_dir=None,
+        load_start_date: str | None = None,
     ) -> EvaluationRun:
         if run_id is None:
             run_id = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -46,6 +50,8 @@ class EvaluationRunFactory:
             run_id=run_id,
             run_dir=config.output_dir / run_id,
             config=config,
+            base_run_dir=base_run_dir,
+            load_start_date=load_start_date,
         )
         run.run_dir.mkdir(parents=True, exist_ok=False)
         return run
@@ -137,7 +143,22 @@ class EvaluationWorkflow:
         )
         if _requires_process_pool(config):
             self._ensure_process_pool_supported()
-        run = self.run_factory.create(config, run_id=run_id)
+        base_run_dir = self._resolve_base_run(request, config)
+        if base_run_dir is None:
+            run = self.run_factory.create(config, run_id=run_id)
+        else:
+            load_start = shared_load_start(base_run_dir, config)
+            run = self.run_factory.create(
+                config,
+                run_id=run_id,
+                base_run_dir=base_run_dir,
+                load_start_date=load_start,
+            )
+            _log(
+                self.log_info,
+                f"evaluation_incremental_run base_run={base_run_dir.name} "
+                f"data_start_date={load_start}",
+            )
 
         self.notifier.notify_start(
             "evaluate",
@@ -210,6 +231,18 @@ class EvaluationWorkflow:
             report=report,
             analysis=analysis,
         )
+
+    def _resolve_base_run(self, request: EvaluationRequest, config: EvaluationRunConfig):
+        base_run_dir = request.base_run_dir
+        if base_run_dir is None and request.incremental:
+            base_run_dir = find_base_run(config.output_dir, config)
+            if base_run_dir is None:
+                _log(self.log_info, "evaluation_incremental_no_base_run mode=full")
+                return None
+        if base_run_dir is None:
+            return None
+        check_base_run(base_run_dir, config)
+        return base_run_dir
 
     def _build_executor(
         self,

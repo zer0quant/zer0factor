@@ -63,6 +63,20 @@ class FeishuNotifier:
             ],
         ))
 
+    def notify_warning(self, stage: str, issues: list[str]) -> None:
+        self._send(self._build_card(
+            title=f"[{self._app}] `{stage}` 需要处理 ⚠️",
+            color="red",
+            fields=[(f"问题 {i}", text) for i, text in enumerate(issues, 1)],
+        ))
+
+    def notify_success(self, stage: str, lines: list[str]) -> None:
+        self._send(self._build_card(
+            title=f"[{self._app}] `{stage}` 完成 ✅",
+            color="green",
+            fields=[(f"步骤 {i}", text) for i, text in enumerate(lines, 1)],
+        ))
+
     # --- 私有方法 ---
 
     def _build_card(
