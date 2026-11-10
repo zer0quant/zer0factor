@@ -5,6 +5,7 @@ import type {
   BoardRow,
   CurveKind,
   Compare,
+  CompareCurveKind,
   Correlation,
   Detail,
   EvalOptions,
@@ -55,7 +56,8 @@ export const fetchLatest = (name: string, runId: string, page: number, size: num
   request<LatestValues>(
     `/api/factors/${enc(name)}/runs/${enc(runId)}/latest?page=${page}&size=${size}${ascending ? "&ascending=true" : ""}`,
   );
-export const fetchCompare = (fs: string[]) => request<Compare>(`/api/compare?f=${enc(fs.join(","))}`);
+export const fetchCompare = (fs: string[], kind: CompareCurveKind = "long") =>
+  request<Compare>(`/api/compare?f=${enc(fs.join(","))}&kind=${kind}`);
 export const fetchCorrelation = (fs: string[]) =>
   request<Correlation>(`/api/compare/correlation?f=${enc(fs.join(","))}`);
 

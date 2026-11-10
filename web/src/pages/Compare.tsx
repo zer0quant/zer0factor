@@ -1,4 +1,18 @@
-import { Alert, Button, Card, Empty, Grid, List, Select, Skeleton, Space, Table, Tag, Typography } from "antd";
+import {
+  Alert,
+  Button,
+  Card,
+  Empty,
+  Grid,
+  List,
+  Segmented,
+  Select,
+  Skeleton,
+  Space,
+  Table,
+  Tag,
+  Typography,
+} from "antd";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { fetchCompare, fetchCorrelation, fetchFactors } from "../api";
@@ -7,7 +21,7 @@ import { shortName } from "../factorName";
 import { FactorChips } from "../components/FactorName";
 import { boardHref } from "../boardState";
 import { fmtDate, isNum, num, pct, signColor, withSign } from "../format";
-import type { BoardRow, Num } from "../types";
+import type { BoardRow, CompareCurveKind, Num } from "../types";
 import { CompareCurves, CorrHeatmap, factorTag } from "../components/charts";
 import { ErrorState, SlowLoading } from "../components/states";
 
@@ -33,6 +47,11 @@ const METRICS: Metric[] = [
   { key: "turnover_long", label: "多头日均换手", fmt: (v) => pct(v, 1), better: "low" },
 ];
 
+const CURVE_KINDS: { value: CompareCurveKind; label: string }[] = [
+  { value: "long", label: "多头" },
+  { value: "long_excess", label: "多头超额" },
+];
+
 function bestIndex(values: Num[], better: "high" | "low"): number {
   let best = -1;
   values.forEach((v, i) => {
@@ -49,6 +68,14 @@ export default function Compare() {
   const basket = useBasket();
   const fs = (params.get("f") ?? "").split(",").filter(Boolean);
   const valid = fs.length >= 2 && fs.length <= MAX_COMPARE;
+  // Long is the default; `kind=long_excess` is the only alternative kept in the URL.
+  const kind: CompareCurveKind = params.get("kind") === "long_excess" ? "long_excess" : "long";
+  const setKind = (v: CompareCurveKind) => {
+    const next = new URLSearchParams(params);
+    if (v === "long") next.delete("kind");
+    else next.set("kind", v);
+    setParams(next, { replace: true });
+  };
   const all = useQuery({ queryKey: ["factors"], queryFn: fetchFactors });
   const setFactors = (names: string[]) => {
     const next = new URLSearchParams(params);
@@ -101,7 +128,13 @@ export default function Compare() {
   const screens = Grid.useBreakpoint();
   const compact = screens.md === false;
 
-  const cmp = useQuery({ queryKey: ["compare", fs], queryFn: () => fetchCompare(fs), enabled: valid });
+  const cmp = useQuery({
+    queryKey: ["compare", fs, kind],
+    queryFn: () => fetchCompare(fs, kind),
+    enabled: valid,
+    // Switching curve kind keeps the metrics table (kind-independent) instead of a skeleton.
+    placeholderData: (prev) => (prev && prev.factors.join(",") === fs.join(",") ? prev : undefined),
+  });
   const corr = useQuery({
     queryKey: ["corr", fs],
     queryFn: () => fetchCorrelation(fs),
@@ -200,8 +233,19 @@ export default function Compare() {
         )}
       </Card>
 
-      <Card size="small" title="多空累计收益（扣费后）">
-        {cmp.isLoading ? (
+      <Card
+        size="small"
+        title={`${CURVE_KINDS.find((k) => k.value === kind)!.label}累计收益（扣费后）`}
+        extra={
+          <Segmented
+            size="small"
+            value={kind}
+            onChange={(v) => setKind(v as CompareCurveKind)}
+            options={CURVE_KINDS}
+          />
+        }
+      >
+        {cmp.isLoading || cmp.isPlaceholderData ? (
           <Skeleton active />
         ) : data && Object.keys(data.curves.series).length ? (
           <>

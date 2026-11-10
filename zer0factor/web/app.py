@@ -18,7 +18,6 @@ from zer0factor.config import Config
 from zer0factor.web.bases import base_versions, summarize_bases
 from zer0factor.web.catalog import Catalog, build_catalog
 from zer0factor.web.charts import (
-    cached_series,
     detail_cached,
     detail_payload,
     latest_values,
@@ -334,7 +333,10 @@ def create_app(
         return names
 
     @app.get("/api/compare")
-    def compare(f: str):
+    def compare(f: str, kind: str = "long"):
+        """Metrics plus overlaid cumulative long (default) or long-excess curves."""
+        if kind not in ("long", "long_excess"):
+            raise HTTPException(400, f"unknown curve kind: {kind}")
         names = parse_factors(f)
         c = catalog()
         rows, inconsistent, unevaluated, missing_curve = [], [], [], []
@@ -351,17 +353,16 @@ def create_app(
             rows.append(c.board_row(n, (run, row) if row else None))
             # Read caches only: deriving here would take ~1 min per factor and one bad
             # clean_factor_data would fail the whole comparison.
-            series = cached_series(run, n, cfg.web.cache_dir)
-            column = f"{period}:ls"
-            if series is not None and column in series["portfolio_daily_returns"]:
-                ls = series["portfolio_daily_returns"][column]
-                curves[n] = (1 + ls.fillna(0)).cumprod() - 1
-            else:
+            curve = version_curve(run, n, period, cfg.web.cache_dir, kind)
+            if curve is None or curve.empty:
                 missing_curve.append(n)
+            else:
+                curves[n] = curve
         index = sorted(set().union(*(s.index for s in curves.values()))) if curves else []
         return _json(
             {
                 "factors": names,
+                "kind": kind,
                 "rows": rows,
                 "inconsistent": inconsistent,
                 "unevaluated": unevaluated,

@@ -94,7 +94,7 @@ uv run python main.py serve                       # 打开 http://127.0.0.1:8600
 
 ![版本详情](docs/images/version-detail.png)
 
-**因子对比**：指标并排比较，多空累计收益曲线叠加。
+**因子对比**：指标并排比较，多头累计收益曲线叠加（可切换多头超额）。
 
 ![因子对比](docs/images/compare.png)
 

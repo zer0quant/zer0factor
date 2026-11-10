@@ -101,6 +101,9 @@ export interface BaseVersion extends BaseWindow {
 
 export type CurveKind = "long_excess" | "long" | "ls";
 
+/** Curve kinds offered on the compare page (long-side only). */
+export type CompareCurveKind = "long" | "long_excess";
+
 /** Overlay curves of several versions of one base factor (cache only). */
 export interface BaseCurves {
   kind: CurveKind;
@@ -165,6 +168,7 @@ export interface LatestValues {
 
 export interface Compare {
   factors: string[];
+  kind: CompareCurveKind;
   rows: BoardRow[];
   inconsistent: string[];
   unevaluated: string[];

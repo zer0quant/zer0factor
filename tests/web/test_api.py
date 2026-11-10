@@ -238,3 +238,30 @@ def test_base_curves_bad_args(client):
     assert client.get("/api/bases/fa/curves", params={"prep": "raw", "kind": "foo"}).status_code == 400
     assert client.get("/api/bases/fa/curves", params={"win": "abc"}).status_code == 400
     assert client.get("/api/bases/nope/curves", params={"prep": "raw"}).status_code == 404
+
+
+def test_compare_curves_default_to_long_and_match_base_long(stored, make_run, make_config):
+    make_run("20260101_000000", ["fa", "fb"])
+    client = TestClient(create_app(make_config(None)))
+    client.get("/api/factors/fa/runs/20260101_000000")  # derives fa's cache
+    body = client.get("/api/compare", params={"f": "fa,fb"}).json()
+    assert body["kind"] == "long"
+    base = client.get("/api/bases/fa/curves", params={"prep": "raw", "kind": "long"}).json()
+    assert body["curves"]["dates"] == base["dates"]
+    assert body["curves"]["series"]["fa"] == base["series"]["fa"]
+
+
+def test_compare_curves_long_excess(stored, make_run, make_config):
+    make_run("20260101_000000", ["fa", "fb"])
+    client = TestClient(create_app(make_config(None)))
+    client.get("/api/factors/fa/runs/20260101_000000")
+    body = client.get("/api/compare", params={"f": "fa,fb", "kind": "long_excess"}).json()
+    assert body["kind"] == "long_excess"
+    base = client.get("/api/bases/fa/curves", params={"prep": "raw"}).json()
+    assert body["curves"]["series"]["fa"] == base["series"]["fa"]
+
+
+def test_compare_rejects_ls_and_unknown_kind(client):
+    for kind in ("ls", "foo"):
+        r = client.get("/api/compare", params={"f": "fa,fb", "kind": kind})
+        assert r.status_code == 400, kind
