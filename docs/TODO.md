@@ -11,7 +11,10 @@
   - `compute-returns` 和 `compute-market-cap` 没有 `--start-date`，每次都从 2016 年全量重算。
   - `build-factors --start-date` 对直接读行情的因子族（`uses_data_provider=True`，如 zer0alpha 的 amount_stats、ma_bias、ema_atr_bias）不回看：行情只从 start_date 开始读，滚动窗口在起点附近只有半截数据，算出的值是错的。基于已存因子派生的族（rolling_return 等）读全部历史，结果正确。
   - 评估没有增量模式，也没有“截止日”的概念，补一天也要全量重跑。
-- **设计方案**：见 [docs/superpowers/specs/2026-11-09-incremental-update-design.md](superpowers/specs/2026-11-09-incremental-update-design.md)，待确认后实现。
+- **设计方案**：见 [docs/superpowers/specs/2026-11-09-incremental-update-design.md](superpowers/specs/2026-11-09-incremental-update-design.md)。
+- **状态（2026-11-10）**：已实现 `update-daily`、`check-freshness`、各计算命令的 `--incremental` 和增量评估，用法见 [docs/incremental-update.md](incremental-update.md)。剩余：
+  - zer0alpha 中直接读行情的族声明 `lookback`（未声明时增量构建会重读全部历史，结果正确但慢），并在 [docs/factor-contract.md](factor-contract.md) 写明。
+  - 评估汇总阶段 alphalens `create_pyfolio_input` 约 90 秒，后续再优化。
 - 记录于 2026-11-09。
 
 ## Web 工作台

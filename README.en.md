@@ -6,215 +6,139 @@
 
 [简体中文](README.md) | English
 
-AI-assisted factor research workbench for local A-share data. `zer0factor` turns research reports and factor ideas into reviewable, executable, persisted factor code:
+A factor research workbench for local A-share data: turn research reports and factor ideas into standard factor code, then compute, preprocess and evaluate them, and review the results in a web UI.
 
 ```text
-report / idea -> FactorSpec -> Python compute() -> Parquet factor values
+report / idea -> FactorSpec -> compute() -> Parquet factor values -> evaluation -> web workbench
 ```
 
-It is built to work with [zer0share](https://github.com/zer0quant/zer0share):
+Data comes from the companion project [zer0share](https://github.com/zer0quant/zer0share), which syncs and queries A-share data.
 
-- `zer0share`: local A-share data collection, sync, and query
-- `zer0factor`: factor specification, generation, preprocessing, evaluation, and storage
+> The project is still early. Treat it as a research workbench, not a production platform.
 
-> The project is still early. Treat it as a research workbench, not a production factor platform.
+![Base factor home: version table and long-excess curves across windows](docs/images/base-home.png)
 
 ## Features
 
-- Standard factor contract: `FactorSpec + FactorFrame + compute()` with a unified `trade_date, ts_code, value` output
-- `zer0share` provider that maps local market data into wide factor panels
-- Parquet factor storage with a DuckDB registry
-- Factor registry: `config/factors.toml` tracks candidate factors, tags, and default evaluation parameters
-- Preprocessing: cross-sectional winsorization, standardization, and industry / market-cap neutralization
-- Factor evaluation: IC, quantile returns, turnover, monotonicity, and portfolio metrics via Alphalens / Pyfolio
-- `factor-research` skill for report-to-factor workflows, with one completed momentum-report example
+- **Standard factor contract**: `FactorSpec + FactorFrame + compute()`, unified `trade_date, ts_code, value` output
+- **Storage**: Parquet partitioned by date, DuckDB registry
+- **Preprocessing**: cross-sectional winsorization, standardization, industry / market-cap neutralization
+- **Evaluation**: IC, quantile returns, turnover, monotonicity, portfolio metrics
+- **Incremental updates**: one daily command for freshness checks, incremental builds and incremental evaluation
+- **Web workbench**: board, base factor home, compare, factor families, background tasks
+- **factor-research skill**: extract factors from reports, review, generate code and archive
 
 ## Install
 
-Prerequisites:
-
-- Python 3.11+ and [uv](https://docs.astral.sh/uv/)
-- Local A-share data synced with `zer0share`
-
-By default, `zer0factor` expects `zer0share` next to this repo:
-
-```text
-work/
-├── zer0factor/
-└── zer0share/
-```
-
-If your `zer0share` checkout lives elsewhere, change the path in `pyproject.toml` first:
-
-```toml
-[tool.uv.sources]
-zer0share = { path = "../zer0share" }
-```
-
-Then:
+Requires Python 3.11+, [uv](https://docs.astral.sh/uv/), and local data synced with `zer0share`. By default `zer0share` sits next to this repo; if not, change `[tool.uv.sources]` in `pyproject.toml`.
 
 ```bash
 git clone https://github.com/zer0quant/zer0factor.git
 cd zer0factor
 uv sync
-```
-
-## Configure
-
-```bash
-cp config/settings.example.toml config/settings.toml
-```
-
-```toml
-[zer0share]
-data_dir = "../zer0share/data"
-
-[paths]
-factor_dir = "data/factors"
-db_path    = "db/factor_meta.duckdb"
-log_path   = "logs/factor.log"
-
-[factor]
-universe   = "all"
-start_date = "20160101"
-end_date   = ""
+cp config/settings.example.toml config/settings.toml   # adjust data paths and date range
 ```
 
 ## Quick Start
 
-A minimal compute-to-evaluate loop, using the built-in market-cap factor:
-
 ```bash
-# Check factor storage status
-uv run python main.py --config config/settings.toml status
-
-# Compute the built-in market-cap factors and write them to local storage
-uv run python main.py compute-market-cap
-
-# Evaluate a stored factor and inspect the results
+uv run python main.py compute-market-cap                  # built-in market-cap factors
 uv run python main.py evaluate-factor log_total_market_cap
-uv run python main.py show-summary
+uv run python main.py show-summary                        # inspect the results
 ```
 
-Evaluation artifacts are written to `data/evaluations/<run_id>/`. See [docs/evaluation.md](docs/evaluation.md) for metric definitions (Chinese).
+Evaluation artifacts go to `data/evaluations/<run_id>/`; metric definitions are in [docs/evaluation.md](docs/evaluation.md) (Chinese).
+
+## Keeping Data Up to Date
+
+First, in the `zer0share` directory, sync market data and extend the universe (the universe is not extended automatically):
+
+```bash
+uv run python main.py sync --stock
+uv run python main.py build-universe
+```
+
+Then, in this project, one command does the daily update (suitable for a scheduler):
+
+```bash
+uv run python main.py update-daily --notify             # every trading day: freshness check -> incremental build -> incremental evaluation -> Feishu summary
+uv run python main.py update-daily --full-eval --notify # once a month: full evaluation for reconciliation
+```
+
+- The target end date is the earlier of market data and universe; if the universe lags, everything is updated to the universe's end date and a Feishu alert is sent.
+- Stops at the first failing step with exit code 1. `--dry-run` only prints the plan, `--skip-eval` builds without evaluating.
+- The steps can also be run one by one (`check-freshness`, `compute-returns --incremental`, `build-factors --incremental`, `evaluate-factors --incremental`); see [docs/incremental-update.md](docs/incremental-update.md) (Chinese).
 
 ## Web Workbench
 
-A read-only browser UI with three pages: a **factor board** (sort, filter and select by standard-setting metrics), a **factor detail** page (quantile cumulative returns, key metrics, IC / Rank IC series, distribution, autocorrelation and decay, quantile return table, latest factor values) and a **compare** page (metrics side by side, long-short curves, cross-sectional correlation heatmap).
-
 ```bash
-# First time: build the frontend (Node 18+)
-cd web && npm install && npm run build && cd ..
-
-# Start (listens on 127.0.0.1:8600 by default)
-uv run python main.py serve
-
-# On a remote server, forward the port from your machine, then open http://localhost:8600
-ssh -L 8600:localhost:8600 <server>
-
-# Optional: precompute chart caches for every factor of one run (first open takes ~1-2 min each)
-uv run python main.py web-warm --run <run_id> --workers 12
+cd web && npm install && npm run build && cd ..   # first time: build the frontend (Node 18+)
+uv run python main.py serve                       # open http://127.0.0.1:8600
 ```
 
-- **Standard setting**: board metrics come from the latest run matching `[web.standard]` in `config/settings.toml` (start date, quantiles, period, return type, universe, evaluated to the latest date). Factors without one show as unevaluated.
-- **Cache**: daily series for the detail page are derived into `data/web_cache/`, safe to delete; new evaluations write them directly.
-- **Frontend dev**: run `serve`, then `npm run dev` in `web/` (Vite proxies `/api` to port 8600).
+Numbers on the board and base factor home come from the latest run that matches the standard setting in `[web.standard]` and is evaluated to the latest date. Pages, configuration and background tasks are described in [docs/web-workbench.md](docs/web-workbench.md) (Chinese).
 
-## CLI
+**Factor board**: one row per base factor; metrics are medians across the windows of its primary version.
 
-| Command | Description |
-|---|---|
-| `status` | List computed factors in the configured storage |
-| `factor-list` | Compare registry entries against local storage |
-| `factor-info <name>` | Show registry and storage status for one factor |
-| `compute-returns` | Compute built-in return factors and write them to local storage |
-| `compute-market-cap` | Compute built-in market-cap factors and write them to local storage |
-| `build-factors --family <name>` | Build a registered factor family |
-| `standardize-factor <name>` | Winsorize, impute, and standardize a stored factor cross-sectionally |
-| `neutralize-factor <name>` | Neutralize a standardized factor by industry / market cap |
-| `evaluate-factor <name>` | Evaluate a single stored factor |
-| `evaluate-factors <name...>` | Evaluate multiple stored factors |
-| `evaluate-batch --file <file>` | Batch-evaluate factors from a config file |
-| `evaluate-summary` | Summarize an evaluation run |
-| `analyze-evaluation` | Analyze an evaluation summary and write grouped diagnostics |
-| `serve` | Start the read-only web workbench |
-| `web-warm --run <run_id>` | Precompute web chart caches |
-| `show-summary` | Show the full summary of the latest evaluation run |
+![Factor board](docs/images/board.png)
+
+**Version detail**: key metrics, quantile cumulative returns, quantile returns, Rank IC series and decay.
+
+![Version detail](docs/images/version-detail.png)
+
+**Compare**: metrics side by side, overlaid long cumulative returns (switchable to long excess).
+
+![Compare](docs/images/compare.png)
+
+## Commands
 
 Run every command as `uv run python main.py <command>`; add `--help` for full options.
 
-## Factor Contract
+| Group | Commands |
+|---|---|
+| Inspect | `status`, `factor-list`, `factor-info <name>`, `families` |
+| Daily update | `update-daily`, `check-freshness` |
+| Compute | `compute-returns`, `compute-market-cap`, `build-factors --family <name>` (all support `--incremental`) |
+| Preprocess | `standardize-factor <name>`, `neutralize-factor <name>` |
+| Evaluate | `evaluate-factor <name>`, `evaluate-factors <name...>` (supports `--incremental`), `evaluate-batch --file <file>` |
+| Results | `show-summary`, `evaluate-summary`, `analyze-evaluation` |
+| Workbench | `serve`, `web-warm --run <run_id>` |
+
+## Writing a Factor
 
 ```python
-import pandas as pd
-
-from zer0factor.core import Factor, FactorFrame, FactorSpec, to_factor_output
-
-
-class Ret20_0(Factor):
-    spec = FactorSpec(
-        name="ret20_0",
-        inputs=["close"],
-        min_window=20,
-        frequency="1d",
-        adjust="hfq",
-    )
+class Ret20(Factor):
+    spec = FactorSpec(name="ret20", inputs=["close"], min_window=20, frequency="1d", adjust="hfq")
 
     def compute(self, data: FactorFrame) -> pd.DataFrame:
-        value = data.close / data.close.shift(20) - 1
-        return to_factor_output(value, self.spec.name)
+        return to_factor_output(data.close / data.close.shift(20) - 1, self.spec.name)
 ```
 
-Factor code should only read data from `FactorFrame`. It should not read files, query DuckDB, or call `zer0share` directly. See [docs/factor-contract.md](docs/factor-contract.md) for field mappings and storage layout (Chinese).
+Factor code only reads from `FactorFrame`; it should not read files, query DuckDB or call `zer0share` directly. See [docs/factor-contract.md](docs/factor-contract.md) (Chinese).
 
-## Layout
+## Documentation (Chinese)
 
-```text
-zer0factor/
-├── main.py                # CLI entry point
-├── zer0factor/
-│   ├── core/              # FactorSpec / FactorFrame / Factor contract
-│   ├── factors/           # built-in factors (returns, market cap, ...)
-│   ├── cli/               # CLI command implementations
-│   ├── preprocess/        # winsorization, standardization, neutralization
-│   ├── eval/              # factor evaluation, summary, and report
-│   ├── registry.py        # factor registry
-│   └── storage.py         # Parquet + DuckDB factor storage
-├── config/                # settings.example.toml, factors.toml
-├── docs/skills/factor-research/   # report-to-factor skill
-├── workspaces/            # research run artifacts
-├── notebooks/
-└── tests/
-```
-
-## Documentation
-
-- [Factor contract](docs/factor-contract.md): standard fields, output schema, and storage layout (Chinese)
-- [Factor evaluation](docs/evaluation.md): registry, evaluation commands, artifacts, and metric definitions (Chinese)
+- [Factor contract](docs/factor-contract.md): fields, output schema, storage layout
+- [Factor evaluation](docs/evaluation.md): registry, evaluation commands, artifacts, metric definitions
+- [Web workbench](docs/web-workbench.md): pages, standard setting, background tasks, factor families
+- [Incremental updates](docs/incremental-update.md): daily command, incremental build and evaluation
 - [factor-research skill](docs/skills/factor-research/): the full report-to-factor workflow
-- [Devlog](docs/devlog.md): index of articles documenting the design process (Chinese)
-- Example: `workspaces/factor-research-guosen-momentum/` contains one completed momentum-report run
+- [TODO](docs/TODO.md) · [Devlog](docs/devlog.md) · [Contributing](CONTRIBUTING.md)
 
 ## Limitations
 
 - Built around local A-share data and `zer0share`.
-- `FactorFrame` does not yet expose ST flags, suspension flags, listed-days masks, or exact limit-up metadata.
-- Announcement-date factors and benchmark-relative factors need additional provider contracts.
+- `FactorFrame` does not yet expose ST, suspension, listed-days or exact limit-up fields.
+- Families using qfq prices cannot be built incrementally; incremental evaluation supports a single holding period only.
 - APIs are experimental.
 
 ## Community
 
-The design process and lessons learned are documented (in Chinese) on Zhihu and the WeChat official account 极客投研笔记. See the [devlog](docs/devlog.md) for the full article index.
-
-## Contributing
-
-Contributions are welcome, especially around provider contracts, factor execution CLI, tests, and documentation.
-
-See [CONTRIBUTING.md](CONTRIBUTING.md).
+The design process is documented (in Chinese) on Zhihu and the WeChat official account 极客投研笔记; see the [devlog](docs/devlog.md).
 
 ## Disclaimer
 
-This project is for research and engineering experiments only. It does not provide investment advice. Any factor, example, or generated result should be independently verified before use.
+This project is for research and engineering experiments only and does not provide investment advice.
 
 ## License
 
